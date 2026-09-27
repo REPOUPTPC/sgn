@@ -1,0 +1,289 @@
+/* ==========================================================================
+   SISTEMA DE GESTIÓN DE NOTAS (SGN) - ESTILOS PRINCIPALES
+   Tema: Blanco brillante con detalles en Azul Real & Naval (Modern Web UI)
+   ========================================================================== */
+
+:root {
+  --primary-blue: #2563eb;
+  --primary-hover: #1d4ed8;
+  --dark-blue: #0f172a;
+  --navy-blue: #1e3a8a;
+  --light-blue-bg: #eff6ff;
+  --light-blue-border: #bfdbfe;
+  --accent-blue: #3b82f6;
+  
+  --bg-main: #f8fafc;
+  --card-bg: #ffffff;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  
+  --grade-excellent: #16a34a;
+  --grade-excellent-bg: #dcfce7;
+  --grade-good: #2563eb;
+  --grade-good-bg: #dbeafe;
+  --grade-regular: #d97706;
+  --grade-regular-bg: #fef3c7;
+  --grade-fail: #dc2626;
+  --grade-fail-bg: #fee2e2;
+
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 14px -1px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 10px 25px -3px rgba(15, 23, 42, 0.12);
+  --radius-lg: 1rem;
+  --radius-md: 0.625rem;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  min-height: 100vh;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==================== HEADER & NAVBAR ==================== */
+.sgn-navbar {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 2px solid var(--light-blue-border);
+  box-shadow: var(--shadow-sm);
+  padding: 0.75rem 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+}
+
+.brand-logo-img {
+  height: 48px;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.brand-logo-img:hover {
+  transform: scale(1.03);
+}
+
+.sgn-brand-title {
+  font-weight: 800;
+  color: var(--navy-blue);
+  letter-spacing: -0.5px;
+}
+
+.sgn-brand-subtitle {
+  font-size: 0.75rem;
+  color: var(--primary-blue);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ==================== CARDS & CONTAINERS ==================== */
+.card-custom {
+  background-color: var(--card-bg);
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  transition: all 0.25s ease;
+}
+
+.card-custom:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+.card-header-blue {
+  background: linear-gradient(135deg, var(--navy-blue), var(--primary-blue));
+  color: #ffffff;
+  border-top-left-radius: calc(var(--radius-lg) - 1px);
+  border-top-right-radius: calc(var(--radius-lg) - 1px);
+  padding: 1.25rem 1.5rem;
+}
+
+/* ==================== SEARCH BAR ==================== */
+.search-box-group {
+  position: relative;
+}
+
+.search-box-group i {
+  position: absolute;
+  left: 1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--primary-blue);
+  font-size: 1.1rem;
+}
+
+.search-box-input {
+  padding-left: 3rem !important;
+  border-radius: 50rem !important;
+  border: 2px solid var(--light-blue-border);
+  font-size: 1.05rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.search-box-input:focus {
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.2);
+}
+
+/* ==================== BADGES & CALIFICACIONES ==================== */
+.grade-badge {
+  font-weight: 700;
+  padding: 0.4rem 0.85rem;
+  border-radius: 50rem;
+  display: inline-block;
+  font-size: 0.95rem;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.grade-excellent {
+  background-color: var(--grade-excellent-bg);
+  color: var(--grade-excellent);
+  border: 1px solid #bbf7d0;
+}
+
+.grade-good {
+  background-color: var(--grade-good-bg);
+  color: var(--grade-good);
+  border: 1px solid #bfdbfe;
+}
+
+.grade-regular {
+  background-color: var(--grade-regular-bg);
+  color: var(--grade-regular);
+  border: 1px solid #fde68a;
+}
+
+.grade-fail {
+  background-color: var(--grade-fail-bg);
+  color: var(--grade-fail);
+  border: 1px solid #fecaca;
+}
+
+.role-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.375rem;
+}
+
+.role-super-admin {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+  border: 1px solid #e9d5ff;
+}
+
+.role-docente {
+  background-color: var(--light-blue-bg);
+  color: var(--navy-blue);
+  border: 1px solid var(--light-blue-border);
+}
+
+.role-vocero {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.role-estudiante {
+  background-color: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+/* ==================== TABLAS MODERNAS ==================== */
+.sgn-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.sgn-table th {
+  background-color: #f1f5f9;
+  color: var(--navy-blue);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1rem;
+  border-bottom: 2px solid var(--light-blue-border);
+}
+
+.sgn-table td {
+  padding: 0.9rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  transition: background-color 0.15s ease;
+}
+
+.sgn-table tbody tr:hover td {
+  background-color: var(--light-blue-bg);
+}
+
+/* ==================== MODALES MODERNOS ==================== */
+.modal-content {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--light-blue-border);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.modal-header-blue {
+  background: linear-gradient(135deg, var(--navy-blue), var(--primary-blue));
+  color: #ffffff;
+}
+
+.modal-header-blue .btn-close {
+  filter: brightness(0) invert(1);
+}
+
+/* ==================== BOTONES ==================== */
+.btn-primary-sgn {
+  background-color: var(--primary-blue);
+  border-color: var(--primary-blue);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.btn-primary-sgn:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.btn-outline-sgn {
+  color: var(--primary-blue);
+  border: 2px solid var(--primary-blue);
+  background-color: transparent;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+}
+
+.btn-outline-sgn:hover {
+  background-color: var(--primary-blue);
+  color: #ffffff;
+}
+
+/* ==================== FOOTER ==================== */
+.sgn-footer {
+  margin-top: auto;
+  background-color: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  padding: 1.5rem 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* Spinners */
+.spinner-blue {
+  color: var(--primary-blue);
+}

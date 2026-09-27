@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SGN - Sistema de Gestión de Notas | Portal Estudiantil</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Bootstrap 5.3 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- FontAwesome 6 (Free) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  
+  <!-- Estilos Personalizados (Blanco + Azul) -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ==================== HEADER & NAVBAR ==================== -->
+  <header class="sgn-navbar">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center gap-3">
+        <img src="img/cyt.png" alt="SGN Logo" class="brand-logo-img">
+        <div>
+          <span class="sgn-brand-title fs-4 d-block">SGN</span>
+          <span class="sgn-brand-subtitle">Sistema de Gestión de Notas</span>
+        </div>
+      </div>
+      <div>
+        <button type="button" class="btn btn-primary-sgn" data-bs-toggle="modal" data-bs-target="#sgnLoginModal">
+          <i class="fa-solid fa-right-to-bracket me-2"></i> Iniciar Sesión (Docentes / Admin)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== HERO & BUSCADOR ESTUDIANTIL ==================== -->
+  <main class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-10 text-center mb-4">
+        <h1 class="display-5 fw-extrabold text-navy mb-3">Consulta de Rendimiento Académico</h1>
+        <p class="lead text-muted">Ingrese su número de Cédula de Identidad para consultar sus calificaciones, desempeño acumulado por evaluación y datos del programa de formación.</p>
+      </div>
+
+      <!-- Buscador -->
+      <div class="col-lg-8">
+        <div class="card card-custom p-4 mb-5">
+          <form id="sgnStudentSearchForm">
+            <label for="sgnSearchCedulaInput" class="form-label fw-bold text-navy mb-2 fs-5">
+              <i class="fa-solid fa-id-card text-primary me-2"></i> Número de Cédula de Identidad
+            </label>
+            <div class="search-box-group mb-3">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="sgnSearchCedulaInput" class="form-control form-control-lg search-box-input" placeholder="Ej: V-15949430 o 15949430" required>
+            </div>
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+              <button type="submit" class="btn btn-primary-sgn btn-lg px-5">
+                <i class="fa-solid fa-search me-2"></i> Buscar Mis Calificaciones
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ÁREA DE RESULTADOS DEL ESTUDIANTE ==================== -->
+    <div id="sgnStudentResultArea" style="display: none;">
+      
+      <!-- Ficha de Datos del Estudiante -->
+      <div class="card card-custom mb-4">
+        <div class="card-header-blue d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <h4 class="mb-0 fw-bold" id="stNameDisplay">Nombre del Estudiante</h4>
+            <span class="opacity-75" id="stProgramaDisplay">Programa de Formación</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span id="stRolBadge"></span>
+            <button type="button" class="btn btn-light btn-sm text-navy fw-bold" onclick="openEditProfileModal()">
+              <i class="fa-solid fa-user-pen me-1"></i> Editar Mis Datos
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-4 bg-white">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <span class="text-muted d-block small">Cédula</span>
+              <strong class="text-navy fs-6" id="stCedulaDisplay">V-00000000</strong>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted d-block small">Correo Electrónico</span>
+              <strong class="text-navy fs-6" id="stCorreoDisplay">estudiante@uptpc.edu.ve</strong>
+            </div>
+            <div class="col-md-3">
+              <span class="text-muted d-block small">Teléfono</span>
+              <strong class="text-navy fs-6" id="stTelefonoDisplay">0414-0000000</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contenedor de Materias y Calificaciones -->
+      <h4 class="fw-bold text-navy mb-3"><i class="fa-solid fa-graduation-cap text-primary me-2"></i> Mis Unidades Curriculares</h4>
+      <div id="stNotasContainer">
+        <!-- Renderizado dinámico desde student.js -->
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== MODAL DE REGISTRO ESTUDIANTIL ==================== -->
+  <div class="modal fade" id="sgnRegisterModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-plus me-2"></i> Registro de Estudiante (Nuevo Registro)</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="sgnRegisterStudentForm">
+          <div class="modal-body p-4">
+            <div class="alert alert-info rounded-3 mb-4">
+              <i class="fa-solid fa-circle-info me-2"></i> Ingrese sus datos personales completos para registrarse en el sistema.
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label for="regCedula" class="form-label fw-bold">Cédula de Identidad *</label>
+                <input type="text" id="regCedula" class="form-control" placeholder="V-XXXXXXXX" required>
+              </div>
+              <div class="col-md-6">
+                <label for="regNombreCompleto" class="form-label fw-bold">Nombre Completo *</label>
+                <input type="text" id="regNombreCompleto" class="form-control" placeholder="EJ: JUAN PÉREZ" required>
+              </div>
+              <div class="col-md-6">
+                <label for="regCorreo" class="form-label fw-bold">Correo Electrónico</label>
+                <input type="email" id="regCorreo" class="form-control" placeholder="estudiante@correo.com">
+              </div>
+              <div class="col-md-6">
+                <label for="regTelefono" class="form-label fw-bold">Número de Teléfono</label>
+                <input type="text" id="regTelefono" class="form-control" placeholder="0414XXXXXXX">
+              </div>
+              <div class="col-md-8">
+                <label for="regIdPrograma" class="form-label fw-bold">Programa de Formación *</label>
+                <select id="regIdPrograma" class="form-select" required>
+                  <option value="">Cargando programas...</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="regSeccion" class="form-label fw-bold">Sección (3 Dígitos) *</label>
+                <input type="text" id="regSeccion" class="form-control" placeholder="Ej: 170 o 017" maxlength="3" required>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn px-4">Completar Registro</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE EDICIÓN DE PERFIL ==================== -->
+  <div class="modal fade" id="sgnEditProfileModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-pen me-2"></i> Editar Datos Personales</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="sgnEditProfileForm">
+          <input type="hidden" id="editStudentId">
+          <div class="modal-body p-4">
+            <div class="mb-3">
+              <label for="editStudentCedula" class="form-label fw-bold">Cédula</label>
+              <input type="text" id="editStudentCedula" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label for="editStudentNombre" class="form-label fw-bold">Nombre Completo</label>
+              <input type="text" id="editStudentNombre" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label for="editStudentCorreo" class="form-label fw-bold">Correo Electrónico</label>
+              <input type="email" id="editStudentCorreo" class="form-control">
+            </div>
+            <div class="mb-3">
+              <label for="editStudentTelefono" class="form-label fw-bold">Teléfono</label>
+              <input type="text" id="editStudentTelefono" class="form-control">
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">Guardar Cambios</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL ROSTER PARA VOCEROS ==================== -->
+  <div class="modal fade" id="sgnVoceroRosterModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="voceroRosterTitle"><i class="fa-solid fa-bullhorn me-2"></i> Historial Completo de Notas de la Sección</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="table-responsive">
+            <table class="sgn-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Cédula</th>
+                  <th>Estudiante</th>
+                  <th>Rol</th>
+                  <th>E1</th>
+                  <th>E2</th>
+                  <th>E3</th>
+                  <th>E4</th>
+                  <th>Total Acumulado</th>
+                </tr>
+              </thead>
+              <tbody id="voceroRosterTbody">
+                <!-- Se puebla desde student.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE LOGIN (ADMIN / DOCENTE) ==================== -->
+  <div class="modal fade" id="sgnLoginModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-lock me-2"></i> Acceso al Sistema</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="sgnLoginForm">
+          <div class="modal-body p-4">
+            <div class="text-center mb-4">
+              <img src="img/cyt.png" alt="SGN Logo" class="mb-2" style="max-height: 60px;">
+              <h5 class="fw-bold text-navy">Super Admin & Docentes</h5>
+            </div>
+            <div class="mb-3">
+              <label for="loginUserInput" class="form-label fw-bold">Usuario (Cédula o Correo)</label>
+              <input type="text" id="loginUserInput" class="form-control" placeholder="Ej: V-15949430 o sereinf@uptpc.edu.ve" required>
+            </div>
+            <div class="mb-3">
+              <label for="loginPassInput" class="form-label fw-bold">Contraseña o Secreto Admin</label>
+              <input type="password" id="loginPassInput" class="form-control" placeholder="Ingrese su clave o secreto" required>
+              <div class="form-text">Para Super Admin ingrese el Secreto de Implementación.</div>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn px-4">Ingresar al Dashboard</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="sgn-footer text-center">
+    <div class="container">
+      <p class="mb-0">&copy; 2026 Sistema de Gestión de Notas (SGN). Todos los derechos reservados.</p>
+    </div>
+  </footer>
+
+  <!-- JS SCRIPTS -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/bootstrap.bundle.min.js"></script>
+  
+  <!-- SGN Modulos -->
+  <script src="js/config.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/student.js"></script>
+  
+  <script>
+    // Evento Formulario Login
+    $('#sgnLoginForm').on('submit', function(e) {
+      e.preventDefault();
+      const user = $('#loginUserInput').val().trim();
+      const pass = $('#loginPassInput').val().trim();
+      
+      sgnAuth.login(user, pass).then(function(res) {
+        bootstrap.Modal.getInstance(document.getElementById('sgnLoginModal')).hide();
+        sgnShowModal({
+          title: "Acceso Concedido",
+          message: `Bienvenido(a), ${res.user.nombre}. Redirigiendo al panel de control...`,
+          type: "success",
+          onConfirm: function() {
+            window.location.href = "dashboard.html";
+          }
+        });
+      }).catch(function(err) {
+        sgnShowModal({
+          title: "Error de Autenticación",
+          message: err.message || "Usuario o clave/secreto incorrectos.",
+          type: "danger"
+        });
+      });
+    });
+  </script>
+</body>
+</html>

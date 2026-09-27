@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SGN - Panel de Control & Gestión</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Bootstrap 5.3 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- FontAwesome 6 (Free) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  
+  <!-- Estilos Personalizados (Blanco + Azul) -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ==================== HEADER DASHBOARD ==================== -->
+  <header class="sgn-navbar">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center gap-3">
+        <a href="dashboard.html" class="text-decoration-none">
+          <img src="img/cyt.png" alt="SGN Logo" class="brand-logo-img">
+        </a>
+        <div>
+          <span class="sgn-brand-title fs-4 d-block">SGN Dashboard</span>
+          <span class="sgn-brand-subtitle">Panel de Control Académico</span>
+        </div>
+      </div>
+      
+      <div class="d-flex align-items-center gap-3">
+        <div class="text-end d-none d-md-block">
+          <strong class="d-block text-navy" id="navUserName">Usuario</strong>
+          <span class="badge bg-primary" id="navUserRole">Rol</span>
+        </div>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="sgnAuth.logout()">
+          <i class="fa-solid fa-right-from-bracket me-1"></i> Cerrar Sesión
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== CONTENIDO PRINCIPAL DASHBOARD ==================== -->
+  <main class="container-fluid py-4 px-lg-5">
+    
+    <!-- PESTAÑAS DE NAVEGACIÓN -->
+    <ul class="nav nav-pills nav-fill bg-white p-2 rounded-3 border mb-4 shadow-sm" id="sgnDashboardTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active fw-bold" id="tab-estudiantes-btn" data-bs-toggle="tab" data-bs-target="#tab-estudiantes" type="button" role="tab">
+          <i class="fa-solid fa-user-graduate me-2"></i> Estudiantes
+        </button>
+      </li>
+      <li class="nav-item" role="presentation" id="tab-profesores-nav">
+        <button class="nav-link fw-bold" id="tab-profesores-btn" data-bs-toggle="tab" data-bs-target="#tab-profesores" type="button" role="tab">
+          <i class="fa-solid fa-chalkboard-user me-2"></i> Docentes
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="tab-unidades-btn" data-bs-toggle="tab" data-bs-target="#tab-unidades" type="button" role="tab">
+          <i class="fa-solid fa-book-open me-2"></i> Unidades Curriculares
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="tab-programas-btn" data-bs-toggle="tab" data-bs-target="#tab-programas" type="button" role="tab">
+          <i class="fa-solid fa-sitemap me-2"></i> Programas
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="tab-notas-btn" data-bs-toggle="tab" data-bs-target="#tab-notas" type="button" role="tab">
+          <i class="fa-solid fa-calculator me-2"></i> Calificaciones
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold" id="tab-perfil-btn" data-bs-toggle="tab" data-bs-target="#tab-perfil" type="button" role="tab">
+          <i class="fa-solid fa-key me-2"></i> Cambiar Clave
+        </button>
+      </li>
+    </ul>
+
+    <!-- CONTENIDO DE LAS PESTAÑAS -->
+    <div class="tab-content" id="sgnTabsContent">
+      
+      <!-- 1. PESTAÑA ESTUDIANTES -->
+      <div class="tab-pane fade show active" id="tab-estudiantes" role="tabpanel">
+        <div class="card card-custom">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+              <div class="search-box-group flex-grow-1 max-w-400">
+                <i class="fa-solid fa-search"></i>
+                <input type="text" id="searchEstudiantes" class="form-control search-box-input" placeholder="Buscar por Nombre o Cédula en tiempo real...">
+              </div>
+              <button class="btn btn-primary-sgn" onclick="openModalEstudiante()">
+                <i class="fa-solid fa-plus me-2"></i> Nuevo Estudiante
+              </button>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="sgn-table" id="tablaEstudiantes">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Cédula</th>
+                    <th>Nombre Completo</th>
+                    <th>Contacto</th>
+                    <th>Programa de Formación</th>
+                    <th>Rol Estudiantil</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Render dinámico js/dashboard.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. PESTAÑA PROFESORES (SUPER ADMIN ONLY) -->
+      <div class="tab-pane fade" id="tab-profesores" role="tabpanel">
+        <div class="card card-custom">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+              <div class="search-box-group flex-grow-1">
+                <i class="fa-solid fa-search"></i>
+                <input type="text" id="searchProfesores" class="form-control search-box-input" placeholder="Buscar Docente en tiempo real...">
+              </div>
+              <button class="btn btn-primary-sgn" onclick="openModalProfesor()">
+                <i class="fa-solid fa-user-plus me-2"></i> Nuevo Docente
+              </button>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="sgn-table" id="tablaProfesores">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nombre Profesor</th>
+                    <th>Cédula</th>
+                    <th>Teléfono</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Render dinámico js/dashboard.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. PESTAÑA UNIDADES CURRICULARES -->
+      <div class="tab-pane fade" id="tab-unidades" role="tabpanel">
+        <div class="card card-custom">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+              <div class="search-box-group flex-grow-1">
+                <i class="fa-solid fa-search"></i>
+                <input type="text" id="searchUnidades" class="form-control search-box-input" placeholder="Buscar Unidad Curricular o Sección...">
+              </div>
+              <button class="btn btn-primary-sgn" onclick="openModalUnidad()">
+                <i class="fa-solid fa-plus me-2"></i> Agregar Unidad Curricular
+              </button>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="sgn-table" id="tablaUnidades">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Unidad Curricular</th>
+                    <th>Sección</th>
+                    <th>Docente Asignado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Render dinámico js/dashboard.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. PESTAÑA PROGRAMAS DE FORMACIÓN -->
+      <div class="tab-pane fade" id="tab-programas" role="tabpanel">
+        <div class="card card-custom">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+              <div class="search-box-group flex-grow-1">
+                <i class="fa-solid fa-search"></i>
+                <input type="text" id="searchProgramas" class="form-control search-box-input" placeholder="Buscar Programa en tiempo real...">
+              </div>
+              <button class="btn btn-primary-sgn" onclick="openModalPrograma()">
+                <i class="fa-solid fa-plus me-2"></i> Nuevo Programa
+              </button>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="sgn-table" id="tablaProgramas">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Programa de Formación</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Render dinámico js/dashboard.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. PESTAÑA CALIFICACIONES -->
+      <div class="tab-pane fade" id="tab-notas" role="tabpanel">
+        <div class="card card-custom">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+              <div class="search-box-group flex-grow-1">
+                <i class="fa-solid fa-search"></i>
+                <input type="text" id="searchNotas" class="form-control search-box-input" placeholder="Buscar notas por estudiante o cédula...">
+              </div>
+              <button class="btn btn-primary-sgn" onclick="openModalNota()">
+                <i class="fa-solid fa-calculator me-2"></i> Asignar Calificación
+              </button>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="sgn-table" id="tablaNotas">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Estudiante</th>
+                    <th>Programa</th>
+                    <th>Sección</th>
+                    <th>Eval Config.</th>
+                    <th>E1</th>
+                    <th>E2</th>
+                    <th>E3</th>
+                    <th>E4</th>
+                    <th>Total Acumulado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Render dinámico js/dashboard.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. PESTAÑA CAMBIAR CLAVE DOCENTE -->
+      <div class="tab-pane fade" id="tab-perfil" role="tabpanel">
+        <div class="row justify-content-center">
+          <div class="col-md-6">
+            <div class="card card-custom">
+              <div class="card-header-blue">
+                <h5 class="fw-bold mb-0"><i class="fa-solid fa-key me-2"></i> Actualizar Contraseña Personal</h5>
+              </div>
+              <div class="card-body p-4">
+                <form id="changePassForm" onsubmit="event.preventDefault(); submitChangePassword();">
+                  <div class="mb-3">
+                    <label for="newPassInput" class="form-label fw-bold">Nueva Contraseña</label>
+                    <input type="password" id="newPassInput" class="form-control" placeholder="Ingrese nueva contraseña" minlength="4" required>
+                  </div>
+                  <div class="mb-4">
+                    <label for="confirmPassInput" class="form-label fw-bold">Confirmar Nueva Contraseña</label>
+                    <input type="password" id="confirmPassInput" class="form-control" placeholder="Repita la nueva contraseña" minlength="4" required>
+                  </div>
+                  <button type="submit" class="btn btn-primary-sgn w-100">
+                    <i class="fa-solid fa-shield-halved me-2"></i> Guardar Nueva Contraseña
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ==================== MODALES DASHBOARD ==================== -->
+
+  <!-- Modal Estudiante -->
+  <div class="modal fade" id="modalEstudiante" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="modalEstudianteTitle">Estudiante</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="modalEstudianteForm" onsubmit="event.preventDefault(); saveEstudianteSubmit();">
+          <input type="hidden" id="estudianteId">
+          <div class="modal-body p-4">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Cédula *</label>
+                <input type="text" id="estudianteCedula" class="form-control" required placeholder="V-XXXXXXXX">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Nombre Completo *</label>
+                <input type="text" id="estudianteNombre" class="form-control" required placeholder="Nombres y Apellidos">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Correo Electrónico</label>
+                <input type="email" id="estudianteCorreo" class="form-control">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Teléfono</label>
+                <input type="text" id="estudianteTelefono" class="form-control">
+              </div>
+              <div class="col-md-8">
+                <label class="form-label fw-bold">Programa de Formación *</label>
+                <select id="estudiantePrograma" class="form-select select-programa-opt" required></select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Rol *</label>
+                <select id="estudianteRol" class="form-select" required>
+                  <option value="ESTUDIANTE">ESTUDIANTE</option>
+                  <option value="VOCERO">VOCERO</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">Guardar Estudiante</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Profesor -->
+  <div class="modal fade" id="modalProfesor" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="modalProfesorTitle">Docente</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="modalProfesorForm" onsubmit="event.preventDefault(); saveProfesorSubmit();">
+          <input type="hidden" id="profesorId">
+          <div class="modal-body p-4">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Nombre del Docente *</label>
+              <input type="text" id="profesorNombre" class="form-control" required placeholder="JOSE HERRERA">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Cédula *</label>
+              <input type="text" id="profesorCedula" class="form-control" required placeholder="V-15949430">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Teléfono</label>
+              <input type="text" id="profesorTelefono" class="form-control" placeholder="584141448515">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Contraseña de Acceso</label>
+              <input type="password" id="profesorClave" class="form-control" placeholder="MYJ01012023">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Estado Activo *</label>
+              <select id="profesorActivo" class="form-select">
+                <option value="TRUE">ACTIVO</option>
+                <option value="FALSE">INACTIVO</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">Guardar Docente</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Unidad Curricular -->
+  <div class="modal fade" id="modalUnidad" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="modalUnidadTitle">Unidad Curricular</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="modalUnidadForm" onsubmit="event.preventDefault(); saveUnidadSubmit();">
+          <input type="hidden" id="unidadId">
+          <div class="modal-body p-4">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Nombre de la Unidad Curricular *</label>
+              <input type="text" id="unidadNombre" class="form-control" required placeholder="ALGORITMICA Y PROGRAMACION">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Docente Asignado *</label>
+              <select id="unidadProfesor" class="form-select select-profesor-opt" required></select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Sección (3 dígitos) *</label>
+              <input type="text" id="unidadSeccion" class="form-control" maxlength="3" required placeholder="170 o 017">
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">Guardar Unidad</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Programa -->
+  <div class="modal fade" id="modalPrograma" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="modalProgramaTitle">Programa de Formación</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="modalProgramaForm" onsubmit="event.preventDefault(); saveProgramaSubmit();">
+          <input type="hidden" id="programaId">
+          <div class="modal-body p-4">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Nombre del Programa *</label>
+              <input type="text" id="programaNombre" class="form-control" required placeholder="PNF en Informática">
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">Guardar Programa</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Nota -->
+  <div class="modal fade" id="modalNota" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="modalNotaTitle">Calificación</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="modalNotaForm" onsubmit="event.preventDefault(); saveNotaSubmit();">
+          <input type="hidden" id="notaId">
+          <div class="modal-body p-4">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Estudiante *</label>
+                <select id="notaEstudiante" class="form-select select-estudiante-opt" required></select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Programa de Formación *</label>
+                <select id="notaPrograma" class="form-select select-programa-opt" required></select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Sección *</label>
+                <input type="text" id="notaSeccion" class="form-control" maxlength="3" required placeholder="170">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Cantidad de Evaluaciones Activas (1 a 5) *</label>
+                <input type="number" id="notaCantEval" class="form-control" min="1" max="5" value="4" required>
+              </div>
+              <hr>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Evaluación 1 (E1)</label>
+                <input type="number" step="0.1" id="notaE1" class="form-control" min="0" max="20" value="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Evaluación 2 (E2)</label>
+                <input type="number" step="0.1" id="notaE2" class="form-control" min="0" max="20" value="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Evaluación 3 (E3)</label>
+                <input type="number" step="0.1" id="notaE3" class="form-control" min="0" max="20" value="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Evaluación 4 (E4)</label>
+                <input type="number" step="0.1" id="notaE4" class="form-control" min="0" max="20" value="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Evaluación 5 (E5)</label>
+                <input type="number" step="0.1" id="notaE5" class="form-control" min="0" max="20" value="0">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">Guardar Notas y Calcular Promedio</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Fechas de Evaluación -->
+  <div class="modal fade" id="modalFechasNota" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold"><i class="fa-regular fa-calendar-days me-2"></i> Fechas y Descripciones de Evaluación</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="modalFechasForm" onsubmit="event.preventDefault(); saveFechasSubmit();">
+          <input type="hidden" id="fechaIdRelacion">
+          <div class="modal-body p-4">
+            
+            <!-- E1 -->
+            <div class="row g-2 mb-3 align-items-center">
+              <div class="col-md-2 fw-bold text-navy">Evaluación 1</div>
+              <div class="col-md-4">
+                <input type="date" id="fechaE1" class="form-control" placeholder="Fecha">
+              </div>
+              <div class="col-md-6">
+                <input type="text" id="descE1" class="form-control" placeholder="Descripción ej. Examen Parcial I">
+              </div>
+            </div>
+
+            <!-- E2 -->
+            <div class="row g-2 mb-3 align-items-center">
+              <div class="col-md-2 fw-bold text-navy">Evaluación 2</div>
+              <div class="col-md-4">
+                <input type="date" id="fechaE2" class="form-control" placeholder="Fecha">
+              </div>
+              <div class="col-md-6">
+                <input type="text" id="descE2" class="form-control" placeholder="Descripción ej. Proyecto Algorítmica">
+              </div>
+            </div>
+
+            <!-- E3 -->
+            <div class="row g-2 mb-3 align-items-center">
+              <div class="col-md-2 fw-bold text-navy">Evaluación 3</div>
+              <div class="col-md-4">
+                <input type="date" id="fechaE3" class="form-control" placeholder="Fecha">
+              </div>
+              <div class="col-md-6">
+                <input type="text" id="descE3" class="form-control" placeholder="Descripción ej. Taller Práctico">
+              </div>
+            </div>
+
+            <!-- E4 -->
+            <div class="row g-2 mb-3 align-items-center">
+              <div class="col-md-2 fw-bold text-navy">Evaluación 4</div>
+              <div class="col-md-4">
+                <input type="date" id="fechaE4" class="form-control" placeholder="Fecha">
+              </div>
+              <div class="col-md-6">
+                <input type="text" id="descE4" class="form-control" placeholder="Descripción ej. Exposición">
+              </div>
+            </div>
+
+            <!-- E5 -->
+            <div class="row g-2 mb-3 align-items-center">
+              <div class="col-md-2 fw-bold text-navy">Evaluación 5</div>
+              <div class="col-md-4">
+                <input type="date" id="fechaE5" class="form-control" placeholder="Fecha">
+              </div>
+              <div class="col-md-6">
+                <input type="text" id="descE5" class="form-control" placeholder="Descripción ej. Defensa Final">
+              </div>
+            </div>
+
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">Guardar Fechas</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="sgn-footer text-center">
+    <div class="container">
+      <p class="mb-0">&copy; 2026 Sistema de Gestión de Notas (SGN). Todos los derechos reservados.</p>
+    </div>
+  </footer>
+
+  <!-- JS SCRIPTS -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/bootstrap.bundle.min.js"></script>
+  
+  <!-- SGN Modulos -->
+  <script src="js/config.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
