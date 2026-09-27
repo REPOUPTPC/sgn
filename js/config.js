@@ -58,3 +58,21 @@ function getGradeBadgeHTML(score) {
 
   return `<span class="grade-badge ${colorClass}">${num.toFixed(2)} / 20</span>`;
 }
+
+// Inicialización Global de UI
+$(document).ready(function() {
+  // Toggle Mostrar/Ocultar Contraseña
+  $(document).on('click', '.toggle-password', function() {
+    const targetId = $(this).attr('data-target');
+    const $input = $('#' + targetId);
+    const $icon = $(this).find('i');
+    
+    if ($input.attr('type') === 'password') {
+      $input.attr('type', 'text');
+      $icon.removeClass('fa-eye').addClass('fa-eye-slash');
+    } else {
+      $input.attr('type', 'password');
+      $icon.removeClass('fa-eye-slash').addClass('fa-eye');
+    }
+  });
+});

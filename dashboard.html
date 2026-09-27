@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SGN - Panel de Control & Gestión</title>
+  <title>SGN - Panel de Control & Gestión - Unidad de Ciencia y Tecnología UPTPC</title>
   
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
@@ -33,7 +33,7 @@
         </a>
         <div>
           <span class="sgn-brand-title fs-4 d-block">SGN Dashboard</span>
-          <span class="sgn-brand-subtitle">Panel de Control Académico</span>
+          <span class="sgn-brand-subtitle">Panel de Control Académico - Unidad de Ciencia y Tecnología UPTPC</span>
         </div>
       </div>
       
@@ -64,12 +64,12 @@
           <i class="fa-solid fa-chalkboard-user me-2"></i> Docentes
         </button>
       </li>
-      <li class="nav-item" role="presentation">
+      <li class="nav-item" role="presentation" id="tab-unidades-nav">
         <button class="nav-link fw-bold" id="tab-unidades-btn" data-bs-toggle="tab" data-bs-target="#tab-unidades" type="button" role="tab">
           <i class="fa-solid fa-book-open me-2"></i> Unidades Curriculares
         </button>
       </li>
-      <li class="nav-item" role="presentation">
+      <li class="nav-item" role="presentation" id="tab-programas-nav">
         <button class="nav-link fw-bold" id="tab-programas-btn" data-bs-toggle="tab" data-bs-target="#tab-programas" type="button" role="tab">
           <i class="fa-solid fa-sitemap me-2"></i> Programas
         </button>
@@ -98,9 +98,14 @@
                 <i class="fa-solid fa-search"></i>
                 <input type="text" id="searchEstudiantes" class="form-control search-box-input" placeholder="Buscar por Nombre o Cédula en tiempo real...">
               </div>
-              <button class="btn btn-primary-sgn" onclick="openModalEstudiante()">
-                <i class="fa-solid fa-plus me-2"></i> Nuevo Estudiante
-              </button>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-success" onclick="openModalCSV()">
+                  <i class="fa-solid fa-file-csv me-2"></i> Carga Masiva
+                </button>
+                <button class="btn btn-primary-sgn" onclick="openModalEstudiante()">
+                  <i class="fa-solid fa-plus me-2"></i> Nuevo Estudiante
+                </button>
+              </div>
             </div>
             
             <div class="table-responsive">
@@ -112,6 +117,7 @@
                     <th>Nombre Completo</th>
                     <th>Contacto</th>
                     <th>Programa de Formación</th>
+                    <th>Sección</th>
                     <th>Rol Estudiantil</th>
                     <th>Acciones</th>
                   </tr>
@@ -232,37 +238,61 @@
         <div class="card card-custom">
           <div class="card-body p-4">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-              <div class="search-box-group flex-grow-1">
-                <i class="fa-solid fa-search"></i>
-                <input type="text" id="searchNotas" class="form-control search-box-input" placeholder="Buscar notas por estudiante o cédula...">
+              <div class="search-box-group flex-grow-1" style="max-width: 400px;">
+                <label class="fw-bold text-navy mb-1"><i class="fa-solid fa-book-open"></i> Seleccione Unidad Curricular a Gestionar</label>
+                <select id="selectUnidadGestion" class="form-select border-primary shadow-sm" onchange="renderNotasTable()">
+                  <option value="">-- Seleccione Unidad --</option>
+                </select>
               </div>
-              <button class="btn btn-primary-sgn" onclick="openModalNota()">
-                <i class="fa-solid fa-calculator me-2"></i> Asignar Calificación
-              </button>
+              <div class="d-flex gap-2 align-items-end flex-wrap mt-3 mt-md-0">
+                <div>
+                  <label class="fw-bold text-navy mb-1 small d-block"><i class="fa-solid fa-calculator me-1"></i> Plan Evaluaciones</label>
+                  <select id="selectCantEvalGestion" class="form-select form-select-sm border-primary" onchange="renderNotasTable()" style="width: 150px;">
+                    <option value="4" selected>4 Evaluaciones</option>
+                    <option value="5">5 Evaluaciones</option>
+                  </select>
+                </div>
+                <button class="btn btn-outline-info" onclick="openGlobalModalFechas()">
+                  <i class="fa-regular fa-calendar-days me-2"></i> Fechas de Evaluación
+                </button>
+                <button class="btn btn-danger" id="btnGenerarPDF" onclick="generarPDF()" style="display: none;">
+                  <i class="fa-solid fa-file-pdf me-2"></i> Generar Planilla PDF
+                </button>
+              </div>
             </div>
             
-            <div class="table-responsive">
-              <table class="sgn-table" id="tablaNotas">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Estudiante</th>
-                    <th>Programa</th>
-                    <th>Sección</th>
-                    <th>Eval Config.</th>
-                    <th>E1</th>
-                    <th>E2</th>
-                    <th>E3</th>
-                    <th>E4</th>
-                    <th>Total Acumulado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <!-- Render dinámico js/dashboard.js -->
-                </tbody>
-              </table>
+            <div class="table-responsive" id="containerTablaNotas" style="display: none;">
+              <form id="bulkNotasForm" onsubmit="event.preventDefault(); saveBulkNotasSubmit();">
+                <table class="sgn-table" id="tablaNotas">
+                  <thead>
+                    <tr>
+                      <th>Cédula</th>
+                      <th>Estudiante</th>
+                      <th width="80px">E1</th>
+                      <th width="80px">E2</th>
+                      <th width="80px">E3</th>
+                      <th width="80px">E4</th>
+                      <th width="80px">E5</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- Render dinámico js/dashboard.js -->
+                  </tbody>
+                </table>
+                <div class="mt-4 text-end">
+                  <button type="submit" class="btn btn-success btn-lg">
+                    <i class="fa-solid fa-save me-2"></i> Guardar Todas las Notas
+                  </button>
+                </div>
+              </form>
             </div>
+            
+            <div id="containerNoSeleccion" class="text-center py-5 text-muted">
+              <i class="fa-solid fa-arrow-pointer fa-3x mb-3 text-light-blue"></i>
+              <h5>Seleccione una Unidad Curricular arriba para cargar calificaciones.</h5>
+            </div>
+            
           </div>
         </div>
       </div>
@@ -279,11 +309,21 @@
                 <form id="changePassForm" onsubmit="event.preventDefault(); submitChangePassword();">
                   <div class="mb-3">
                     <label for="newPassInput" class="form-label fw-bold">Nueva Contraseña</label>
-                    <input type="password" id="newPassInput" class="form-control" placeholder="Ingrese nueva contraseña" minlength="4" required>
+                    <div class="input-group">
+                      <input type="password" id="newPassInput" class="form-control" placeholder="Ingrese nueva contraseña" minlength="4" required>
+                      <button class="btn btn-outline-secondary toggle-password" type="button" data-target="newPassInput">
+                        <i class="fa-solid fa-eye"></i>
+                      </button>
+                    </div>
                   </div>
                   <div class="mb-4">
                     <label for="confirmPassInput" class="form-label fw-bold">Confirmar Nueva Contraseña</label>
-                    <input type="password" id="confirmPassInput" class="form-control" placeholder="Repita la nueva contraseña" minlength="4" required>
+                    <div class="input-group">
+                      <input type="password" id="confirmPassInput" class="form-control" placeholder="Repita la nueva contraseña" minlength="4" required>
+                      <button class="btn btn-outline-secondary toggle-password" type="button" data-target="confirmPassInput">
+                        <i class="fa-solid fa-eye"></i>
+                      </button>
+                    </div>
                   </div>
                   <button type="submit" class="btn btn-primary-sgn w-100">
                     <i class="fa-solid fa-shield-halved me-2"></i> Guardar Nueva Contraseña
@@ -300,6 +340,74 @@
 
   <!-- ==================== MODALES DASHBOARD ==================== -->
 
+  <!-- Modal CSV Carga Masiva -->
+  <div class="modal fade" id="modalCSV" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold">Carga Masiva de Estudiantes (CSV)</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="alert alert-info d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+              <i class="fa-solid fa-circle-info me-2"></i>
+              El archivo CSV debe tener <strong>4 columnas</strong>: <code>cedula, nombre_completo, correo, telefono</code>.
+              <br><small>La primera fila (encabezados) será ignorada automáticamente.</small>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" onclick="downloadCSVTemplate()">
+              <i class="fa-solid fa-download me-1"></i> Descargar Plantilla
+            </button>
+          </div>
+          
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Programa de Formación para esta carga *</label>
+              <select id="csvProgramaId" class="form-select select-programa-opt" required></select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Sección *</label>
+              <input type="text" id="csvSeccion" class="form-control" placeholder="Ej: 170" required maxlength="3">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold">Seleccionar Archivo CSV *</label>
+            <input type="file" id="csvFileInput" class="form-control" accept=".csv" required>
+          </div>
+          
+          <!-- Vista Previa de Datos -->
+          <div id="csvPreviewContainer" class="d-none mt-4">
+            <h6 class="fw-bold text-navy">Vista Previa y Verificación (Primeros 10 registros)</h6>
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered mt-2" id="csvPreviewTable">
+                <thead class="table-light">
+                  <tr>
+                    <th>Cédula</th>
+                    <th>Nombre</th>
+                    <th>Correo</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Preview Data -->
+                </tbody>
+              </table>
+            </div>
+            <p id="csvTotalRows" class="text-muted small mt-1"></p>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-success" id="btnProcessCSV" disabled onclick="processCSVUpload()">
+            <i class="fa-solid fa-upload me-2"></i> Procesar Carga
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Estudiante -->
   <div class="modal fade" id="modalEstudiante" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -314,11 +422,17 @@
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label fw-bold">Cédula *</label>
-                <input type="text" id="estudianteCedula" class="form-control" required placeholder="V-XXXXXXXX">
+                <div class="input-group">
+                  <select id="estudianteNacionalidad" class="form-select" style="max-width: 95px;">
+                    <option value="V-" selected>V-</option>
+                    <option value="E-">E-</option>
+                  </select>
+                  <input type="text" id="estudianteCedula" class="form-control" required placeholder="12345678">
+                </div>
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Nombre Completo *</label>
-                <input type="text" id="estudianteNombre" class="form-control" required placeholder="Nombres y Apellidos">
+                <input type="text" id="estudianteNombre" class="form-control text-uppercase" required placeholder="NOMBRES Y APELLIDOS" style="text-transform: uppercase;">
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Correo Electrónico</label>
@@ -328,11 +442,15 @@
                 <label class="form-label fw-bold">Teléfono</label>
                 <input type="text" id="estudianteTelefono" class="form-control">
               </div>
-              <div class="col-md-8">
+              <div class="col-md-6">
                 <label class="form-label fw-bold">Programa de Formación *</label>
                 <select id="estudiantePrograma" class="form-select select-programa-opt" required></select>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
+                <label class="form-label fw-bold">Sección *</label>
+                <input type="text" id="estudianteSeccion" class="form-control" placeholder="Ej: 170" required maxlength="3">
+              </div>
+              <div class="col-md-3">
                 <label class="form-label fw-bold">Rol *</label>
                 <select id="estudianteRol" class="form-select" required>
                   <option value="ESTUDIANTE">ESTUDIANTE</option>
@@ -363,11 +481,17 @@
           <div class="modal-body p-4">
             <div class="mb-3">
               <label class="form-label fw-bold">Nombre del Docente *</label>
-              <input type="text" id="profesorNombre" class="form-control" required placeholder="JOSE HERRERA">
+              <input type="text" id="profesorNombre" class="form-control text-uppercase" required placeholder="JOSE HERRERA" style="text-transform: uppercase;">
             </div>
             <div class="mb-3">
               <label class="form-label fw-bold">Cédula *</label>
-              <input type="text" id="profesorCedula" class="form-control" required placeholder="V-15949430">
+              <div class="input-group">
+                <select id="profesorNacionalidad" class="form-select" style="max-width: 95px;">
+                  <option value="V-" selected>V-</option>
+                  <option value="E-">E-</option>
+                </select>
+                <input type="text" id="profesorCedula" class="form-control" required placeholder="12345678">
+              </div>
             </div>
             <div class="mb-3">
               <label class="form-label fw-bold">Teléfono</label>
@@ -375,7 +499,12 @@
             </div>
             <div class="mb-3">
               <label class="form-label fw-bold">Contraseña de Acceso</label>
-              <input type="password" id="profesorClave" class="form-control" placeholder="MYJ01012023">
+              <div class="input-group">
+                <input type="password" id="profesorClave" class="form-control" placeholder="MYJ01012023">
+                <button class="btn btn-outline-secondary toggle-password" type="button" data-target="profesorClave">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
             </div>
             <div class="mb-3">
               <label class="form-label fw-bold">Estado Activo *</label>
@@ -407,7 +536,11 @@
           <div class="modal-body p-4">
             <div class="mb-3">
               <label class="form-label fw-bold">Nombre de la Unidad Curricular *</label>
-              <input type="text" id="unidadNombre" class="form-control" required placeholder="ALGORITMICA Y PROGRAMACION">
+              <input type="text" id="unidadNombre" class="form-control text-uppercase" required placeholder="ALGORITMICA Y PROGRAMACION" style="text-transform: uppercase;">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Programa de Formación *</label>
+              <select id="unidadPrograma" class="form-select select-programa-opt" required></select>
             </div>
             <div class="mb-3">
               <label class="form-label fw-bold">Docente Asignado *</label>
@@ -440,8 +573,9 @@
           <div class="modal-body p-4">
             <div class="mb-3">
               <label class="form-label fw-bold">Nombre del Programa *</label>
-              <input type="text" id="programaNombre" class="form-control" required placeholder="PNF en Informática">
+              <input type="text" id="programaNombre" class="form-control text-uppercase" required placeholder="PNF EN INFORMÁTICA" style="text-transform: uppercase;">
             </div>
+          </div>
           </div>
           <div class="modal-footer bg-light">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -452,65 +586,7 @@
     </div>
   </div>
 
-  <!-- Modal Nota -->
-  <div class="modal fade" id="modalNota" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header modal-header-blue">
-          <h5 class="modal-title fw-bold" id="modalNotaTitle">Calificación</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-        </div>
-        <form id="modalNotaForm" onsubmit="event.preventDefault(); saveNotaSubmit();">
-          <input type="hidden" id="notaId">
-          <div class="modal-body p-4">
-            <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Estudiante *</label>
-                <select id="notaEstudiante" class="form-select select-estudiante-opt" required></select>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Programa de Formación *</label>
-                <select id="notaPrograma" class="form-select select-programa-opt" required></select>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Sección *</label>
-                <input type="text" id="notaSeccion" class="form-control" maxlength="3" required placeholder="170">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Cantidad de Evaluaciones Activas (1 a 5) *</label>
-                <input type="number" id="notaCantEval" class="form-control" min="1" max="5" value="4" required>
-              </div>
-              <hr>
-              <div class="col-md-4">
-                <label class="form-label fw-bold">Evaluación 1 (E1)</label>
-                <input type="number" step="0.1" id="notaE1" class="form-control" min="0" max="20" value="0">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label fw-bold">Evaluación 2 (E2)</label>
-                <input type="number" step="0.1" id="notaE2" class="form-control" min="0" max="20" value="0">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label fw-bold">Evaluación 3 (E3)</label>
-                <input type="number" step="0.1" id="notaE3" class="form-control" min="0" max="20" value="0">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label fw-bold">Evaluación 4 (E4)</label>
-                <input type="number" step="0.1" id="notaE4" class="form-control" min="0" max="20" value="0">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label fw-bold">Evaluación 5 (E5)</label>
-                <input type="number" step="0.1" id="notaE5" class="form-control" min="0" max="20" value="0">
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer bg-light">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-            <button type="submit" class="btn btn-primary-sgn">Guardar Notas y Calcular Promedio</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
+
 
   <!-- Modal Fechas de Evaluación -->
   <div class="modal fade" id="modalFechasNota" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -521,9 +597,15 @@
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <form id="modalFechasForm" onsubmit="event.preventDefault(); saveFechasSubmit();">
-          <input type="hidden" id="fechaIdRelacion">
           <div class="modal-body p-4">
+            <div class="row g-3 mb-4">
+              <div class="col-md-12">
+                <label class="form-label fw-bold">Unidad Curricular *</label>
+                <select id="fechaUnidadId" class="form-select select-unidad-opt" required></select>
+              </div>
+            </div>
             
+            <h6 class="fw-bold mb-3 border-bottom pb-2">Fechas por Evaluación</h6>
             <!-- E1 -->
             <div class="row g-2 mb-3 align-items-center">
               <div class="col-md-2 fw-bold text-navy">Evaluación 1</div>
@@ -569,7 +651,7 @@
             </div>
 
             <!-- E5 -->
-            <div class="row g-2 mb-3 align-items-center">
+            <div class="row g-2 mb-3 align-items-center" id="containerE5">
               <div class="col-md-2 fw-bold text-navy">Evaluación 5</div>
               <div class="col-md-4">
                 <input type="date" id="fechaE5" class="form-control" placeholder="Fecha">
@@ -598,7 +680,9 @@
 
   <!-- JS SCRIPTS -->
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
   
   <!-- SGN Modulos -->
   <script src="js/config.js"></script>

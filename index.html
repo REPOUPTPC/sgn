@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SGN - Sistema de Gestión de Notas | Portal Estudiantil</title>
+  <title>SGN - Sistema de Gestión de Notas Unidad de Ciencia y Tecnología UPTPC | Portal Estudiantil</title>
   
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
@@ -31,7 +31,7 @@
         <img src="img/cyt.png" alt="SGN Logo" class="brand-logo-img">
         <div>
           <span class="sgn-brand-title fs-4 d-block">SGN</span>
-          <span class="sgn-brand-subtitle">Sistema de Gestión de Notas</span>
+          <span class="sgn-brand-subtitle">Sistema de Gestión de Notas - Unidad de Ciencia y Tecnología UPTPC</span>
         </div>
       </div>
       <div>
@@ -59,7 +59,7 @@
             </label>
             <div class="search-box-group mb-3">
               <i class="fa-solid fa-magnifying-glass"></i>
-              <input type="text" id="sgnSearchCedulaInput" class="form-control form-control-lg search-box-input" placeholder="Ej: V-15949430 o 15949430" required>
+              <input type="text" id="sgnSearchCedulaInput" class="form-control form-control-lg search-box-input" placeholder="Ej: V-12345678 o 12345678" required>
             </div>
             <div class="d-grid gap-2 d-md-flex justify-content-md-end">
               <button type="submit" class="btn btn-primary-sgn btn-lg px-5">
@@ -114,6 +114,7 @@
     </div>
   </main>
 
+
   <!-- ==================== MODAL DE REGISTRO ESTUDIANTIL ==================== -->
   <div class="modal fade" id="sgnRegisterModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -130,11 +131,17 @@
             <div class="row g-3">
               <div class="col-md-6">
                 <label for="regCedula" class="form-label fw-bold">Cédula de Identidad *</label>
-                <input type="text" id="regCedula" class="form-control" placeholder="V-XXXXXXXX" required>
+                <div class="input-group">
+                  <select id="regNacionalidad" class="form-select" style="max-width: 95px;">
+                    <option value="V-" selected>V-</option>
+                    <option value="E-">E-</option>
+                  </select>
+                  <input type="text" id="regCedula" class="form-control" placeholder="12345678" required>
+                </div>
               </div>
               <div class="col-md-6">
                 <label for="regNombreCompleto" class="form-label fw-bold">Nombre Completo *</label>
-                <input type="text" id="regNombreCompleto" class="form-control" placeholder="EJ: JUAN PÉREZ" required>
+                <input type="text" id="regNombreCompleto" class="form-control text-uppercase" placeholder="EJ: JUAN PÉREZ" required style="text-transform: uppercase;">
               </div>
               <div class="col-md-6">
                 <label for="regCorreo" class="form-label fw-bold">Correo Electrónico</label>
@@ -144,15 +151,17 @@
                 <label for="regTelefono" class="form-label fw-bold">Número de Teléfono</label>
                 <input type="text" id="regTelefono" class="form-control" placeholder="0414XXXXXXX">
               </div>
-              <div class="col-md-8">
+              <div class="col-md-6">
                 <label for="regIdPrograma" class="form-label fw-bold">Programa de Formación *</label>
                 <select id="regIdPrograma" class="form-select" required>
                   <option value="">Cargando programas...</option>
                 </select>
               </div>
-              <div class="col-md-4">
-                <label for="regSeccion" class="form-label fw-bold">Sección (3 Dígitos) *</label>
-                <input type="text" id="regSeccion" class="form-control" placeholder="Ej: 170 o 017" maxlength="3" required>
+              <div class="col-md-6">
+                <label for="regUnidadSeccion" class="form-label fw-bold">Unidad Curricular y Sección *</label>
+                <select id="regUnidadSeccion" class="form-select" disabled required>
+                  <option value="">-- Seleccione primero un Programa --</option>
+                </select>
               </div>
             </div>
           </div>
@@ -255,11 +264,16 @@
             </div>
             <div class="mb-3">
               <label for="loginUserInput" class="form-label fw-bold">Usuario (Cédula o Correo)</label>
-              <input type="text" id="loginUserInput" class="form-control" placeholder="Ej: V-15949430 o sereinf@uptpc.edu.ve" required>
+              <input type="text" id="loginUserInput" class="form-control" placeholder="Ej: V-12345678 o correo@uptpc.edu.ve" required>
             </div>
             <div class="mb-3">
               <label for="loginPassInput" class="form-label fw-bold">Contraseña o Secreto Admin</label>
-              <input type="password" id="loginPassInput" class="form-control" placeholder="Ingrese su clave o secreto" required>
+              <div class="input-group">
+                <input type="password" id="loginPassInput" class="form-control" placeholder="Ingrese su clave o secreto" required>
+                <button class="btn btn-outline-secondary toggle-password" type="button" data-target="loginPassInput">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
               <div class="form-text">Para Super Admin ingrese el Secreto de Implementación.</div>
             </div>
           </div>
@@ -281,7 +295,7 @@
 
   <!-- JS SCRIPTS -->
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   
   <!-- SGN Modulos -->
   <script src="js/config.js"></script>

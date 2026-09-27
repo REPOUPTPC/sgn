@@ -27,10 +27,16 @@ $(document).ready(function () {
     performStudentSearch(cedulaInput);
   });
 
+
   // Evento del formulario de Auto-Registro de Estudiante
   $('#sgnRegisterStudentForm').on('submit', function (e) {
     e.preventDefault();
     submitStudentRegistration();
+  });
+
+  // Evento al cambiar el Programa de Formación en el modal de registro
+  $('#regIdPrograma').on('change', function () {
+    onProgramaChange();
   });
 
   // Evento del formulario de Edición de Perfil
@@ -53,14 +59,53 @@ function loadPublicData() {
   });
 }
 
+/**
+ * Poblar selects de programas de formación
+ */
 function populateProgramSelects() {
-  const $selectReg = $('#regIdPrograma');
-  $selectReg.empty().append('<option value="">Seleccione un Programa de Formación...</option>');
+  const $regIdPrograma = $('#regIdPrograma');
+  $regIdPrograma.empty();
+  $regIdPrograma.append('<option value="">Seleccione un programa...</option>');
   
-  sgnPublicData.programas.forEach(p => {
-    $selectReg.append(`<option value="${p.id}">${p.programa}</option>`);
-  });
+  if (sgnPublicData.programas && sgnPublicData.programas.length > 0) {
+    sgnPublicData.programas.forEach(p => {
+      $regIdPrograma.append(`<option value="${p.id}">${p.programa}</option>`);
+    });
+  }
 }
+
+/**
+ * Filtrar y poblar las Unidades Curriculares y Secciones según el Programa seleccionado
+ */
+function onProgramaChange() {
+  const progId = $('#regIdPrograma').val();
+  const $unitSelect = $('#regUnidadSeccion');
+  $unitSelect.empty();
+
+  if (!progId) {
+    $unitSelect.append('<option value="">Primero seleccione un Programa...</option>');
+    $unitSelect.prop('disabled', true);
+    return;
+  }
+
+  // Filtrar unidades según el id_programa_formacion
+  const availableUnits = (sgnPublicData.unidades || []).filter(u => String(u.id_programa_formacion) === String(progId));
+
+  if (availableUnits.length === 0) {
+    $unitSelect.append('<option value="">No hay Unidades Curriculares disponibles para este Programa</option>');
+    $unitSelect.prop('disabled', true);
+    return;
+  }
+
+  $unitSelect.append('<option value="">Seleccione Unidad Curricular y Sección...</option>');
+  availableUnits.forEach(u => {
+    const secClean = String(u.seccion || '').replace(/^'/, '');
+    const secFormatted = secClean.padStart(3, '0');
+    $unitSelect.append(`<option value="${secFormatted}">${u.unidad_curricular} (Sección: ${secFormatted})</option>`);
+  });
+  $unitSelect.prop('disabled', false);
+}
+
 
 /**
  * Buscar Estudiante por Cédula
@@ -71,14 +116,33 @@ function performStudentSearch(cedula) {
 
     if (!res.registered) {
       // Estudiante no registrado -> Mostrar Modal de Registro
-      $('#regCedula').val(cedula);
-      const bsRegisterModal = new bootstrap.Modal(document.getElementById('sgnRegisterModal'));
-      bsRegisterModal.show();
-      
+      let upperCed = cedula.toString().toUpperCase().trim();
+      let nac = 'V-';
+      let num = upperCed;
+      if (upperCed.startsWith('E-')) {
+        nac = 'E-';
+        num = upperCed.substring(2);
+      } else if (upperCed.startsWith('E')) {
+        nac = 'E-';
+        num = upperCed.substring(1);
+      } else if (upperCed.startsWith('V-')) {
+        nac = 'V-';
+        num = upperCed.substring(2);
+      } else if (upperCed.startsWith('V')) {
+        nac = 'V-';
+        num = upperCed.substring(1);
+      }
+      $('#regNacionalidad').val(nac);
+      $('#regCedula').val(num);
+
       sgnShowModal({
         title: "Usuario No Registrado",
-        message: "Su número de cédula no se encuentra en el sistema. Complete el siguiente formulario para registrarse.",
-        type: "info"
+        message: "Su número de cédula no se encuentra en el sistema. Por favor, Proceda a Registrarse.",
+        type: "info",
+        onConfirm: function() {
+          const bsRegisterModal = new bootstrap.Modal(document.getElementById('sgnRegisterModal'));
+          bsRegisterModal.show();
+        }
       });
       $('#sgnStudentResultArea').hide();
     } else {
@@ -161,7 +225,7 @@ function renderStudentAcademicProfile(res) {
         <div class="card card-custom mb-4">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center flex-wrap gap-2">
             <div>
-              <h5 class="fw-bold text-navy mb-1"><i class="fa-solid fa-book-bookmark text-primary me-2"></i> ${n.unidad_curricular}</h5>
+              <h5 class="fw-bold text-navy mb-1"><i class="fa-solid fa-book-bookmark text-primary me-2"></i> ${n.unidad_curricular || n['unidad curricular']}</h5>
               <span class="badge bg-primary me-2">Sección: ${n.seccion}</span>
               <span class="text-muted small"><i class="fa-solid fa-chalkboard-user me-1"></i> Prof. ${n.profesor}</span>
             </div>
@@ -184,17 +248,34 @@ function renderStudentAcademicProfile(res) {
   $('#sgnStudentResultArea').fadeIn(300);
 }
 
+
 /**
  * Registro de Nuevo Estudiante (Auto-registro)
  */
 function submitStudentRegistration() {
+  let nac = $('#regNacionalidad').val() || 'V-';
+  let numCed = $('#regCedula').val().trim().replace(/^[VEve]-?/, '');
+  let fullCedula = nac + numCed;
+  let nombreUpper = $('#regNombreCompleto').val().trim().toUpperCase();
+  let progId = $('#regIdPrograma').val();
+  let seccionVal = $('#regUnidadSeccion').val();
+
+  if (!progId || !seccionVal) {
+    sgnShowModal({
+      title: "Campos Requeridos",
+      message: "Por favor seleccione el Programa de Formación y la Unidad Curricular con Sección.",
+      type: "warning"
+    });
+    return;
+  }
+
   const formData = {
-    cedula: $('#regCedula').val().trim(),
-    nombre_completo: $('#regNombreCompleto').val().trim(),
+    cedula: fullCedula,
+    nombre_completo: nombreUpper,
     correo: $('#regCorreo').val().trim(),
     telefono: $('#regTelefono').val().trim(),
-    id_programa_formacion: $('#regIdPrograma').val(),
-    seccion: $('#regSeccion').val().trim() || "170"
+    id_programa_formacion: progId,
+    seccion: seccionVal
   };
 
   sgnApiCall("registerStudent", formData).then(function (res) {
