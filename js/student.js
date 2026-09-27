@@ -214,9 +214,13 @@ function renderStudentAcademicProfile(res) {
       // Botón para Vocero si aplica
       let voceroBtnHtml = '';
       if (student.rol === 'VOCERO') {
+        const cleanSec = String(n.seccion || '').replace(/^'/, '');
+        const cleanCed = String(student.cedula || '').replace(/'/g, "\\'");
+        const cleanProgId = String(student.id_programa_formacion || '');
+
         voceroBtnHtml = `
-          <button type="button" class="btn btn-outline-sgn btn-sm ms-auto" onclick="openVoceroRoster('${student.cedula}', '${n.seccion}', '${student.id_programa_formacion}')">
-            <i class="fa-solid fa-users me-1"></i> Ver Roster de Notas de Sección ${n.seccion}
+          <button type="button" class="btn btn-outline-sgn btn-sm ms-auto" onclick="openVoceroRoster('${cleanCed}', '${cleanSec}', '${cleanProgId}')">
+            <i class="fa-solid fa-users me-1"></i> Ver Roster de Notas de Sección ${cleanSec}
           </button>
         `;
       }
