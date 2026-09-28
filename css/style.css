@@ -105,7 +105,7 @@ body {
   position: relative;
 }
 
-.search-box-group i {
+.search-box-group > i {
   position: absolute;
   left: 1.25rem;
   top: 50%;
