@@ -273,9 +273,15 @@ function editEstudiante(id) {
 
 function saveEstudianteSubmit() {
   let nac = $('#estudianteNacionalidad').val() || 'V-';
-  let numCed = $('#estudianteCedula').val().trim().replace(/^[VEve]-?/, '');
-  let fullCedula = nac + numCed;
+  let rawCed = $('#estudianteCedula').val();
+  let cleaned = sgnCleanCedulaInput(rawCed, { defaultNac: nac });
+  let fullCedula = cleaned.nac + cleaned.number;
   let nombreUpper = $('#estudianteNombre').val().trim().toUpperCase();
+
+  if (!cleaned.number) {
+    sgnShowModal({ title: "Cédula Requerida", message: "Debe ingresar una cédula válida en formato numérico.", type: "warning" });
+    return;
+  }
 
   const formData = {
     id: $('#estudianteId').val(),
@@ -371,17 +377,8 @@ $(document).on('change', '#csvFileInput', function(e) {
       const cols = line.split(',');
       if (cols.length >= 4) {
         let rawCed = cols[0].trim();
-        let upperCed = rawCed.toUpperCase();
-        let formattedCed = upperCed;
-        if (!upperCed.startsWith('V-') && !upperCed.startsWith('E-') && !upperCed.startsWith('J-')) {
-          if (upperCed.startsWith('E')) {
-            formattedCed = 'E-' + upperCed.substring(1).replace(/^-/, '');
-          } else if (upperCed.startsWith('V')) {
-            formattedCed = 'V-' + upperCed.substring(1).replace(/^-/, '');
-          } else {
-            formattedCed = 'V-' + upperCed;
-          }
-        }
+        let cleaned = sgnCleanCedulaInput(rawCed);
+        let formattedCed = cleaned.full;
         const nombre = cols[1].trim().toUpperCase();
         const correo = cols[2].trim();
         const telefono = cols[3].trim();
@@ -579,9 +576,15 @@ function editProfesor(id) {
 
 function saveProfesorSubmit() {
   let nac = $('#profesorNacionalidad').val() || 'V-';
-  let numCed = $('#profesorCedula').val().trim().replace(/^[VEve]-?/, '');
-  let fullCedula = nac + numCed;
+  let rawCed = $('#profesorCedula').val();
+  let cleaned = sgnCleanCedulaInput(rawCed, { defaultNac: nac });
+  let fullCedula = cleaned.nac + cleaned.number;
   let nombreUpper = $('#profesorNombre').val().trim().toUpperCase();
+
+  if (!cleaned.number) {
+    sgnShowModal({ title: "Cédula Requerida", message: "Debe ingresar una cédula válida para el docente.", type: "warning" });
+    return;
+  }
 
   const formData = {
     id: $('#profesorId').val(),

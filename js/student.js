@@ -111,33 +111,27 @@ function onProgramaChange() {
  * Buscar Estudiante por Cédula
  */
 function performStudentSearch(cedula) {
-  sgnApiCall("getStudentByCedula", { cedula: cedula }).then(function (res) {
+  let cleaned = sgnCleanCedulaInput(cedula);
+  if (!cleaned.number) {
+    sgnShowModal({
+      title: "Cédula Requerida",
+      message: "Por favor ingrese su número de Cédula de Identidad.",
+      type: "warning"
+    });
+    return;
+  }
+
+  sgnApiCall("getStudentByCedula", { cedula: cleaned.full }).then(function (res) {
     if (!res) return;
 
     if (!res.registered) {
-      // Estudiante no registrado -> Mostrar Modal de Registro
-      let upperCed = cedula.toString().toUpperCase().trim();
-      let nac = 'V-';
-      let num = upperCed;
-      if (upperCed.startsWith('E-')) {
-        nac = 'E-';
-        num = upperCed.substring(2);
-      } else if (upperCed.startsWith('E')) {
-        nac = 'E-';
-        num = upperCed.substring(1);
-      } else if (upperCed.startsWith('V-')) {
-        nac = 'V-';
-        num = upperCed.substring(2);
-      } else if (upperCed.startsWith('V')) {
-        nac = 'V-';
-        num = upperCed.substring(1);
-      }
-      $('#regNacionalidad').val(nac);
-      $('#regCedula').val(num);
+      // Estudiante no registrado -> Mostrar Modal de Registro pre-poblado
+      $('#regNacionalidad').val(cleaned.nac);
+      $('#regCedula').val(cleaned.number);
 
       sgnShowModal({
         title: "Usuario No Registrado",
-        message: "Su número de cédula no se encuentra en el sistema. Por favor, Proceda a Registrarse.",
+        message: "Su número de cédula no se encuentra en el sistema. Por favor, proceda a registrarse.",
         type: "info",
         onConfirm: function() {
           const bsRegisterModal = new bootstrap.Modal(document.getElementById('sgnRegisterModal'));
@@ -258,11 +252,21 @@ function renderStudentAcademicProfile(res) {
  */
 function submitStudentRegistration() {
   let nac = $('#regNacionalidad').val() || 'V-';
-  let numCed = $('#regCedula').val().trim().replace(/^[VEve]-?/, '');
-  let fullCedula = nac + numCed;
+  let rawCed = $('#regCedula').val();
+  let cleaned = sgnCleanCedulaInput(rawCed, { defaultNac: nac });
+  let fullCedula = cleaned.nac + cleaned.number;
   let nombreUpper = $('#regNombreCompleto').val().trim().toUpperCase();
   let progId = $('#regIdPrograma').val();
   let seccionVal = $('#regUnidadSeccion').val();
+
+  if (!cleaned.number) {
+    sgnShowModal({
+      title: "Cédula Inválida",
+      message: "Por favor ingrese su número de cédula únicamente en dígitos numéricos (ejemplo: 12345678).",
+      type: "warning"
+    });
+    return;
+  }
 
   if (!progId || !seccionVal) {
     sgnShowModal({
@@ -323,10 +327,18 @@ function openEditProfileModal() {
  * Guardar Cambios de Perfil de Estudiante
  */
 function submitStudentProfileUpdate() {
+  let rawCed = $('#editStudentCedula').val();
+  let cleaned = sgnCleanCedulaInput(rawCed);
+
+  if (!cleaned.number) {
+    sgnShowModal({ title: "Cédula Requerida", message: "Ingrese un número de cédula válido.", type: "warning" });
+    return;
+  }
+
   const formData = {
     id: $('#editStudentId').val(),
-    cedula: $('#editStudentCedula').val().trim(),
-    nombre_completo: $('#editStudentNombre').val().trim(),
+    cedula: cleaned.full,
+    nombre_completo: $('#editStudentNombre').val().trim().toUpperCase(),
     correo: $('#editStudentCorreo').val().trim(),
     telefono: $('#editStudentTelefono').val().trim()
   };

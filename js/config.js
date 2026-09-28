@@ -59,7 +59,41 @@ function getGradeBadgeHTML(score) {
   return `<span class="grade-badge ${colorClass}">${num.toFixed(2)} / 20</span>`;
 }
 
-// Inicialización Global de UI
+/**
+ * Sanitizador Global de Cédula de Identidad (Remueve puntos, comas, espacios y caracteres no numéricos)
+ */
+function sgnCleanCedulaInput(rawVal, options = {}) {
+  if (!rawVal) return { nac: 'V-', number: '', full: '' };
+  let upper = rawVal.toString().trim().toUpperCase();
+
+  let nac = options.defaultNac || 'V-';
+  let cleanStr = upper;
+
+  if (upper.startsWith('E-')) {
+    nac = 'E-';
+    cleanStr = upper.substring(2);
+  } else if (upper.startsWith('E')) {
+    nac = 'E-';
+    cleanStr = upper.substring(1);
+  } else if (upper.startsWith('V-')) {
+    nac = 'V-';
+    cleanStr = upper.substring(2);
+  } else if (upper.startsWith('V')) {
+    nac = 'V-';
+    cleanStr = upper.substring(1);
+  }
+
+  // Extraer únicamente dígitos numéricos
+  let digits = cleanStr.replace(/\D/g, '');
+
+  return {
+    nac: nac,
+    number: digits,
+    full: digits ? nac + digits : ''
+  };
+}
+
+// Inicialización Global de UI y Eventos de Sanitización
 $(document).ready(function() {
   // Toggle Mostrar/Ocultar Contraseña
   $(document).on('click', '.toggle-password', function() {
@@ -74,5 +108,43 @@ $(document).ready(function() {
       $input.attr('type', 'password');
       $icon.removeClass('fa-eye-slash').addClass('fa-eye');
     }
+  });
+
+  // Sanitización en tiempo real para todos los campos de cédula (Buscador, Registro, Admin)
+  $(document).on('input paste keyup change', '#sgnSearchCedulaInput, #regCedula, #estudianteCedula, #profesorCedula, #editStudentCedula', function() {
+    const $this = $(this);
+    const isSearch = $this.attr('id') === 'sgnSearchCedulaInput';
+    
+    setTimeout(function() {
+      let val = $this.val();
+      if (!val) return;
+      
+      if (isSearch) {
+        let upper = val.toUpperCase();
+        let hasE = upper.startsWith('E-') || upper.startsWith('E');
+        let hasV = upper.startsWith('V-') || upper.startsWith('V');
+        
+        let digits = val.replace(/\D/g, '');
+        let prefix = hasE ? 'E-' : (hasV ? 'V-' : '');
+        $this.val(prefix + digits);
+      } else {
+        let upper = val.toUpperCase();
+        let cleaned = sgnCleanCedulaInput(val);
+        
+        const targetNacId = $this.attr('id') === 'regCedula' ? '#regNacionalidad' 
+                          : ($this.attr('id') === 'estudianteCedula' ? '#estudianteNacionalidad'
+                          : ($this.attr('id') === 'profesorCedula' ? '#profesorNacionalidad' : null));
+        
+        if (targetNacId) {
+          if (upper.startsWith('E-') || upper.startsWith('E')) {
+            $(targetNacId).val('E-');
+          } else if (upper.startsWith('V-') || upper.startsWith('V')) {
+            $(targetNacId).val('V-');
+          }
+        }
+
+        $this.val(cleaned.number);
+      }
+    }, 5);
   });
 });
