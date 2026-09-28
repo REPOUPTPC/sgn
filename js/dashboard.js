@@ -482,7 +482,7 @@ function deleteEstudiantePrompt(id) {
 }
 
 function downloadCSVTemplate() {
-  const csvContent = "data:text/csv;charset=utf-8,Cédula,Nombre Completo,Correo,Teléfono\n" +
+  const csvContent = "data:text/csv;charset=utf-8,Cédula,Nombre_Completo,Correo,Teléfono\n" +
                      "V-12345678,Juan Perez,juan@example.com,584121234567\n" +
                      "V-87654321,Maria Gomez,maria@example.com,584141234567\n";
   const encodedUri = encodeURI(csvContent);
