@@ -401,16 +401,14 @@ $(document).on('change', '#csvFileInput', function(e) {
           });
         }
         
-        if (i <= 10) {
-          previewHtml += `
-            <tr>
-              <td>${formattedCed}</td>
-              <td>${nombre}</td>
-              <td>${correo}</td>
-              <td>${estadoBadge}</td>
-            </tr>
-          `;
-        }
+        previewHtml += `
+          <tr>
+            <td>${formattedCed}</td>
+            <td>${nombre}</td>
+            <td>${correo}</td>
+            <td>${estadoBadge}</td>
+          </tr>
+        `;
       }
     }
 
