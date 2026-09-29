@@ -160,10 +160,30 @@ function renderStudentAcademicProfile(res) {
   $('#stTelefonoDisplay').text(student.telefono || "No registrado");
   $('#stProgramaDisplay').text(student.programa);
   
-  // Badge de Rol
+  // Badge y Acciones de Rol
   const $rolBadge = $('#stRolBadge');
+  const $voceroActions = $('#voceroActionsContainer');
+  $voceroActions.empty();
+
   if (student.rol === 'VOCERO') {
     $rolBadge.html('<span class="role-badge role-vocero"><i class="fa-solid fa-bullhorn me-1"></i> VOCERO</span>');
+    
+    let cleanSec = String(student.seccion || '').replace(/^'/, '');
+    if (!cleanSec && notas.length > 0) {
+      cleanSec = String(notas[0].seccion || '').replace(/^'/, '');
+    }
+    const cleanCed = String(student.cedula || '').replace(/'/g, "\\'");
+    const cleanProgId = String(student.id_programa_formacion || '');
+    const programaStr = String(student.programa || '').replace(/'/g, "\\'");
+
+    $voceroActions.html(`
+      <button type="button" class="btn btn-outline-light btn-sm fw-bold border-white" onclick="openVoceroRoster('${cleanCed}', '${cleanSec}', '${cleanProgId}')" title="Ver Roster de Notas de la Sección">
+        <i class="fa-solid fa-users me-1"></i> Roster
+      </button>
+      <button type="button" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="generarPDFNominaVocero('${cleanSec}', '${programaStr}', '', '', '${cleanCed}', '${cleanProgId}')" title="Imprimir Nómina de Asistencia">
+        <i class="fa-solid fa-file-pdf me-1"></i> Asistencia
+      </button>
+    `);
   } else {
     $rolBadge.html('<span class="role-badge role-estudiante"><i class="fa-solid fa-user me-1"></i> ESTUDIANTE</span>');
   }
@@ -205,28 +225,6 @@ function renderStudentAcademicProfile(res) {
         `;
       }
 
-      // Botón para Vocero si aplica
-      let voceroBtnHtml = '';
-      if (student.rol === 'VOCERO') {
-        const cleanSec = String(n.seccion || '').replace(/^'/, '');
-        const cleanCed = String(student.cedula || '').replace(/'/g, "\\'");
-        const cleanProgId = String(student.id_programa_formacion || '');
-        const unidadCurricularStr = String(n.unidad_curricular || n['unidad curricular'] || '').replace(/'/g, "\\'");
-        const profesorStr = String(n.profesor || '').replace(/'/g, "\\'");
-        const programaStr = String(student.programa || '').replace(/'/g, "\\'");
-
-        voceroBtnHtml = `
-          <div class="d-flex gap-2 ms-auto mt-2 mt-md-0">
-            <button type="button" class="btn btn-outline-sgn btn-sm" onclick="openVoceroRoster('${cleanCed}', '${cleanSec}', '${cleanProgId}')">
-              <i class="fa-solid fa-users me-1"></i> Ver Roster de Notas
-            </button>
-            <button type="button" class="btn btn-outline-danger btn-sm" onclick="generarPDFNominaVocero('${cleanSec}', '${programaStr}', '${unidadCurricularStr}', '${profesorStr}', '${cleanCed}', '${cleanProgId}')">
-              <i class="fa-solid fa-file-pdf me-1"></i> NOMINA ASISTENCIA
-            </button>
-          </div>
-        `;
-      }
-
       $notasContainer.append(`
         <div class="card card-custom mb-4">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center flex-wrap gap-2">
@@ -235,7 +233,6 @@ function renderStudentAcademicProfile(res) {
               <span class="badge bg-primary me-2">Sección: ${n.seccion}</span>
               <span class="text-muted small"><i class="fa-solid fa-chalkboard-user me-1"></i> Prof. ${n.profesor}</span>
             </div>
-            ${voceroBtnHtml}
           </div>
           <div class="card-body p-4">
             <div class="row">
