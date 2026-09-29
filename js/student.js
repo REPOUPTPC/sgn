@@ -211,11 +211,19 @@ function renderStudentAcademicProfile(res) {
         const cleanSec = String(n.seccion || '').replace(/^'/, '');
         const cleanCed = String(student.cedula || '').replace(/'/g, "\\'");
         const cleanProgId = String(student.id_programa_formacion || '');
+        const unidadCurricularStr = String(n.unidad_curricular || n['unidad curricular'] || '').replace(/'/g, "\\'");
+        const profesorStr = String(n.profesor || '').replace(/'/g, "\\'");
+        const programaStr = String(student.programa || '').replace(/'/g, "\\'");
 
         voceroBtnHtml = `
-          <button type="button" class="btn btn-outline-sgn btn-sm ms-auto" onclick="openVoceroRoster('${cleanCed}', '${cleanSec}', '${cleanProgId}')">
-            <i class="fa-solid fa-users me-1"></i> Ver Roster de Notas de Sección ${cleanSec}
-          </button>
+          <div class="d-flex gap-2 ms-auto mt-2 mt-md-0">
+            <button type="button" class="btn btn-outline-sgn btn-sm" onclick="openVoceroRoster('${cleanCed}', '${cleanSec}', '${cleanProgId}')">
+              <i class="fa-solid fa-users me-1"></i> Ver Roster de Notas
+            </button>
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="generarPDFNominaVocero('${cleanSec}', '${programaStr}', '${unidadCurricularStr}', '${profesorStr}', '${cleanCed}', '${cleanProgId}')">
+              <i class="fa-solid fa-file-pdf me-1"></i> NOMINA ASISTENCIA
+            </button>
+          </div>
         `;
       }
 
@@ -411,3 +419,155 @@ function openVoceroRoster(cedula, seccion, idPrograma) {
     }
   });
 }
+
+function loadLogoBase64() {
+  return new Promise((resolve) => {
+    const imgElement = document.querySelector('.brand-logo-img');
+    if (imgElement && imgElement.complete && imgElement.naturalWidth > 0) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = imgElement.naturalWidth;
+        canvas.height = imgElement.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imgElement, 0, 0);
+        const dataUrl = canvas.toDataURL('image/png');
+        if (dataUrl && dataUrl.length > 100) {
+          resolve(dataUrl);
+          return;
+        }
+      } catch (e) {}
+    }
+    fetch('img/cyt.png')
+      .then(res => res.blob())
+      .then(blob => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      })
+      .catch(() => resolve(null));
+  });
+}
+
+async function generarPDFNominaVocero(seccion, programa, materia, docente, cedulaVocero, idPrograma) {
+  sgnApiCall("getVoceroRoster", {
+    cedula: cedulaVocero,
+    seccion: seccion,
+    id_programa_formacion: idPrograma
+  }, { showLoading: true }).then(async function (res) {
+    if (res && res.success) {
+      const roster = res.roster || [];
+      if (roster.length === 0) {
+        sgnShowModal({
+          title: "Aviso",
+          message: "No hay estudiantes registrados en esta sección.",
+          type: "warning"
+        });
+        return;
+      }
+      
+      const logoDataUrl = await loadLogoBase64();
+      const doc = new window.jspdf.jsPDF();
+
+      if (logoDataUrl) {
+        try {
+          doc.addImage(logoDataUrl, 'PNG', 14, 6, 20, 20);
+        } catch(e) {
+          console.warn("Error agregando logo:", e);
+        }
+      }
+
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      doc.text("UNIVERSIDAD POLITÉCNICA TERRITORIAL", 110, 12, { align: 'center' });
+      
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 41, 59);
+      doc.text("SISTEMA DE GESTIÓN DE NOTAS (SGN)", 110, 17, { align: 'center' });
+      
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(71, 85, 105);
+      doc.text("UNIDAD DE CIENCIA Y TECNOLOGIA UPTPC", 110, 22, { align: 'center' });
+
+      doc.setLineWidth(0.5);
+      doc.setDrawColor(203, 213, 225);
+      doc.line(14, 26, 196, 26);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(51, 65, 85);
+      
+      doc.text("Docente:", 14, 31);
+      doc.setFont("helvetica", "normal");
+      doc.text(docente || 'N/A', 28, 31);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Sección:", 145, 31);
+      doc.setFont("helvetica", "normal");
+      doc.text(seccion, 160, 31);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Programa:", 14, 36);
+      doc.setFont("helvetica", "normal");
+      doc.text(programa || 'N/A', 30, 36);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Materia:", 145, 36);
+      doc.setFont("helvetica", "normal");
+      doc.text(materia || 'N/A', 160, 36);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Fecha:", 14, 41);
+      doc.setFont("helvetica", "normal");
+      doc.text("___________________________", 25, 41);
+
+      const tableHeaders = [['N°', 'Cédula', 'Nombre', 'Firma']];
+      const tableData = roster.map((est, index) => {
+        return [index + 1, est.cedula, est.nombre_completo, ''];
+      });
+
+      doc.autoTable({
+        startY: 45,
+        head: tableHeaders,
+        body: tableData,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
+        headStyles: { fillColor: [13, 110, 253], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9, halign: 'center' },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 15 },
+          1: { halign: 'center', cellWidth: 35 },
+          2: { halign: 'left' },
+          3: { halign: 'center', cellWidth: 50 },
+        },
+        alternateRowStyles: { fillColor: [248, 250, 252] }
+      });
+
+      const finalY = doc.lastAutoTable.finalY || 100;
+      let summaryY = finalY + 20;
+      const pageHeight = doc.internal.pageSize.height || 297;
+
+      if (summaryY + 20 > pageHeight) {
+        doc.addPage();
+        summaryY = 30;
+      }
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+      
+      doc.text("________________________________", 40, summaryY, { align: 'center' });
+      doc.text("Firma del Docente", 40, summaryY + 5, { align: 'center' });
+
+      doc.text("________________________________", 160, summaryY, { align: 'center' });
+      doc.text("Firma del Vocero", 160, summaryY + 5, { align: 'center' });
+
+      doc.save(`Nomina_Asistencia_Sec${seccion}_${new Date().getTime()}.pdf`);
+    } else {
+      sgnShowModal({ title: "Acceso Denegado", message: res.message || "No posee autorización de VOCERO.", type: "warning" });
+    }
+  });
+}
+

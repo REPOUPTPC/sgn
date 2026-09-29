@@ -805,6 +805,7 @@ function renderNotasTable() {
 
   $('#containerTablaNotas').show();
   $('#btnGenerarPDF').show();
+  $('#btnGenerarNomina').show();
   $('#containerNoSeleccion').hide();
 
   // Buscar si existen notas previas para tomar la cantidad de evaluaciones guardada
@@ -1177,6 +1178,153 @@ async function generarPDF() {
 
   // 7. Descargar PDF
   doc.save(`Planilla_Notas_Sec${cleanSec}_${new Date().getTime()}.pdf`);
+}
+
+async function generarPDFNominaAsistencia() {
+  const unidadId = $('#selectUnidadGestion').val();
+  if (!unidadId) return;
+  
+  const unidad = sgnDb.unidades.find(u => u.id == unidadId);
+  if (!unidad) return;
+  
+  const programa = sgnDb.programas.find(p => p.id == unidad.id_programa_formacion);
+  const profesor = sgnDb.profesores.find(p => p.id == unidad.id_prof);
+  
+  // Obtener logo en Base64
+  const logoDataUrl = await loadLogoBase64();
+
+  const doc = new window.jspdf.jsPDF();
+
+  // 1. Membrete y Logo al Inicio
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', 14, 6, 20, 20);
+    } catch(e) {
+      console.warn("Error agregando logo:", e);
+    }
+  }
+
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(15, 23, 42);
+  doc.text("UNIVERSIDAD POLITÉCNICA TERRITORIAL", 110, 12, { align: 'center' });
+  
+  doc.setFontSize(9.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 41, 59);
+  doc.text("SISTEMA DE GESTIÓN DE NOTAS (SGN)", 110, 17, { align: 'center' });
+  
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(71, 85, 105);
+  doc.text("UNIDAD DE CIENCIA Y TECNOLOGIA UPTPC", 110, 22, { align: 'center' });
+
+  // Línea divisora del membrete
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(203, 213, 225);
+  doc.line(14, 26, 196, 26);
+
+  // 2. Datos de Asignatura y Docente
+  const cleanSec = String(unidad.seccion || '').replace(/^'/, '');
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(51, 65, 85);
+  
+  doc.text("Docente:", 14, 31);
+  doc.setFont("helvetica", "normal");
+  doc.text(profesor ? profesor.nombre_profesor : 'N/A', 28, 31);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Sección:", 145, 31);
+  doc.setFont("helvetica", "normal");
+  doc.text(cleanSec, 160, 31);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Programa:", 14, 36);
+  doc.setFont("helvetica", "normal");
+  doc.text(programa ? programa.programa : 'N/A', 30, 36);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Materia:", 145, 36);
+  doc.setFont("helvetica", "normal");
+  doc.text(unidad.unidad_curricular || unidad['unidad curricular'] || 'N/A', 160, 36);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Fecha:", 14, 41);
+  doc.setFont("helvetica", "normal");
+  doc.text("___________________________", 25, 41);
+
+  // 3. Obtener Estudiantes de la Sección
+  let targetSec = (unidad.seccion || '').toString().trim();
+  if (targetSec.startsWith("'")) targetSec = targetSec.substring(1);
+
+  const targetStudents = sgnDb.estudiantes.filter(e => {
+    let eSec = (e.seccion || '').toString().trim();
+    if (eSec.startsWith("'")) eSec = eSec.substring(1);
+    return e.id_programa_formacion == unidad.id_programa_formacion && eSec === targetSec;
+  });
+
+  targetStudents.sort((a, b) => (a.nombre_completo || "").localeCompare(b.nombre_completo || ""));
+
+  // 4. Encabezados y Filas con Numeración (N°)
+  const tableHeaders = [['N°', 'Cédula', 'Nombre', 'Firma']];
+
+  const tableData = targetStudents.map((est, index) => {
+    return [index + 1, est.cedula, est.nombre_completo, ''];
+  });
+
+  // 5. Renderizar Tabla
+  doc.autoTable({
+    startY: 45,
+    head: tableHeaders,
+    body: tableData,
+    theme: 'grid',
+    styles: {
+      fontSize: 8,
+      cellPadding: 3,
+      valign: 'middle'
+    },
+    headStyles: {
+      fillColor: [13, 110, 253],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 9,
+      halign: 'center'
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 15 },  // N°
+      1: { halign: 'center', cellWidth: 35 },  // Cédula
+      2: { halign: 'left' },                   // Estudiante
+      3: { halign: 'center', cellWidth: 50 },  // Firma
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252]
+    }
+  });
+
+  // 6. Resumen de Firmas al Final
+  const finalY = doc.lastAutoTable.finalY || 100;
+  let summaryY = finalY + 20;
+  const pageHeight = doc.internal.pageSize.height || 297;
+
+  if (summaryY + 20 > pageHeight) {
+    doc.addPage();
+    summaryY = 30;
+  }
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(15, 23, 42);
+  
+  doc.text("________________________________", 40, summaryY, { align: 'center' });
+  doc.text("Firma del Docente", 40, summaryY + 5, { align: 'center' });
+
+  doc.text("________________________________", 160, summaryY, { align: 'center' });
+  doc.text("Firma del Vocero", 160, summaryY + 5, { align: 'center' });
+
+  // 7. Descargar PDF
+  doc.save(`Nomina_Asistencia_Sec${cleanSec}_${new Date().getTime()}.pdf`);
 }
 
 // Configurar Fechas y Descripciones por Evaluación
