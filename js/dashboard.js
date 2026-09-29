@@ -1281,15 +1281,15 @@ async function generarPDFNominaAsistencia() {
     body: tableData,
     theme: 'grid',
     styles: {
-      fontSize: 8,
-      cellPadding: 3,
+      fontSize: 7.5,
+      cellPadding: 1.5,
       valign: 'middle'
     },
     headStyles: {
       fillColor: [13, 110, 253],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 9,
+      fontSize: 8,
       halign: 'center'
     },
     columnStyles: {

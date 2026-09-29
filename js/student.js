@@ -534,8 +534,8 @@ async function generarPDFNominaVocero(seccion, programa, materia, docente, cedul
         head: tableHeaders,
         body: tableData,
         theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 3, valign: 'middle' },
-        headStyles: { fillColor: [13, 110, 253], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9, halign: 'center' },
+        styles: { fontSize: 7.5, cellPadding: 1.5, valign: 'middle' },
+        headStyles: { fillColor: [13, 110, 253], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8, halign: 'center' },
         columnStyles: {
           0: { halign: 'center', cellWidth: 15 },
           1: { halign: 'center', cellWidth: 35 },
