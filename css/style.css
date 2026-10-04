@@ -79,6 +79,37 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* ==================== NAV PILLS DISCRETAS Y OPTIMIZADAS ==================== */
+.sgn-nav-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  background-color: #ffffff;
+  padding: 0.35rem !important;
+}
+
+.sgn-nav-link {
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  padding: 0.45rem 0.9rem !important;
+  color: #475569 !important;
+  border-radius: var(--radius-md) !important;
+  transition: all 0.2s ease-in-out !important;
+  white-space: nowrap;
+  background: transparent;
+}
+
+.sgn-nav-link:hover {
+  color: var(--primary-blue) !important;
+  background-color: var(--light-blue-bg) !important;
+}
+
+.sgn-nav-link.active {
+  background-color: var(--primary-blue) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25) !important;
+}
+
 /* ==================== CARDS & CONTAINERS ==================== */
 .card-custom {
   background-color: var(--card-bg);
@@ -224,6 +255,22 @@ body {
   background-color: var(--light-blue-bg);
 }
 
+.empty-table-row {
+  text-align: center !important;
+  padding: 2.5rem 1rem !important;
+  color: var(--text-muted) !important;
+  font-weight: 500 !important;
+  background-color: #f8fafc !important;
+}
+
+.empty-table-row i {
+  color: var(--primary-blue);
+  opacity: 0.5;
+  display: block;
+  font-size: 2.2rem;
+  margin-bottom: 0.6rem;
+}
+
 /* ==================== MODALES MODERNOS ==================== */
 .modal-content {
   border-radius: var(--radius-lg);
@@ -286,4 +333,13 @@ body {
 /* Spinners */
 .spinner-blue {
   color: var(--primary-blue);
+}
+
+.bg-navy {
+  background-color: var(--navy-blue) !important;
+  color: #ffffff;
+}
+
+.max-w-400 {
+  max-width: 400px;
 }

@@ -44,6 +44,12 @@ $(document).ready(function () {
     e.preventDefault();
     submitStudentProfileUpdate();
   });
+
+  // Evento del formulario de Entrega de Actividad por parte del Estudiante
+  $('#sgnEntregaForm').on('submit', function (e) {
+    e.preventDefault();
+    submitEstudianteEntrega();
+  });
 });
 
 /**
@@ -148,6 +154,20 @@ function performStudentSearch(cedula) {
 }
 
 /**
+ * Convierte automáticamente enlaces URL en texto a etiquetas <a> clicables
+ */
+function sgnFormatTextWithLinks(text) {
+  if (!text) return "";
+  const urlRegex = /(https?:\/\/[^\s<]+)/g;
+  return text.replace(urlRegex, function (url) {
+    let cleanUrl = url.replace(/[.,;!?)]$/, '');
+    return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 my-1 fw-bold shadow-sm">
+      <i class="fa-solid fa-up-right-from-square me-1"></i> Abrir Enlace <small class="text-truncate" style="max-width: 180px;">(${cleanUrl})</small>
+    </a>`;
+  });
+}
+
+/**
  * Renderizar Resumen Académico del Estudiante
  */
 function renderStudentAcademicProfile(res) {
@@ -188,6 +208,80 @@ function renderStudentAcademicProfile(res) {
     $rolBadge.html('<span class="role-badge role-estudiante"><i class="fa-solid fa-user me-1"></i> ESTUDIANTE</span>');
   }
 
+  // 1. Recopilar TODAS las actividades asignadas en las materias del estudiante
+  let todasActividades = [];
+  notas.forEach(n => {
+    if (n.actividades && n.actividades.length > 0) {
+      n.actividades.forEach(act => {
+        todasActividades.push({
+          ...act,
+          unidad_curricular: n.unidad_curricular || n['unidad curricular'] || "Asignatura",
+          seccion: n.seccion,
+          profesor: n.profesor
+        });
+      });
+    }
+  });
+
+  const $actContainer = $('#stActividadesIndependienteContainer');
+  const $actList = $('#stActividadesList');
+  $actList.empty();
+
+  if (todasActividades.length > 0) {
+    let itemsHtml = '';
+    todasActividades.forEach(act => {
+      const evalUpper = (act.numero_evaluacion || 'e1').toUpperCase();
+      const hasEntrega = !!act.entrega;
+      
+      let estadoBadge = hasEntrega 
+        ? `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Entregado (${act.fecha_entrega || ''})</span>`
+        : `<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> Pendiente de Entrega</span>`;
+
+      let notaDisplay = '';
+      if (act.nota !== undefined && act.nota !== "") {
+        notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(act.nota)}</span>`;
+      }
+
+      let linkBtn = hasEntrega ? `
+        <a href="${act.entrega}" target="_blank" class="btn btn-sm btn-outline-primary me-2">
+          <i class="fa-solid fa-external-link me-1"></i> Ver Mi Entrega
+        </a>
+      ` : '';
+
+      const jsonActStr = JSON.stringify(act).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+      const descFormatted = sgnFormatTextWithLinks(act.descripcion);
+
+      itemsHtml += `
+        <div class="card border-0 shadow-sm mb-3 border-start border-4 border-primary">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+              <div>
+                <span class="badge bg-navy text-white me-2"><i class="fa-solid fa-bookmark me-1"></i> ${act.unidad_curricular} (${act.seccion})</span>
+                <span class="badge bg-secondary me-2">${evalUpper}</span>
+                <div class="fw-bold text-navy mt-2 fs-6">${descFormatted}</div>
+                <div class="text-muted small mt-2"><i class="fa-regular fa-calendar-check me-1"></i> Fecha de Asignación: <strong>${act.fecha_asignacion}</strong> | <i class="fa-solid fa-user-chalkboard me-1"></i> Prof. ${act.profesor}</div>
+              </div>
+              <div class="d-flex align-items-center flex-wrap gap-2">
+                ${estadoBadge}
+                ${notaDisplay}
+              </div>
+            </div>
+            <div class="d-flex justify-content-end align-items-center mt-3 pt-2 border-top">
+              ${linkBtn}
+              <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
+                <i class="fa-solid ${hasEntrega ? 'fa-pen' : 'fa-upload'} me-1"></i> ${hasEntrega ? 'Modificar Entrega' : 'Entregar Actividad'}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    $actList.html(itemsHtml);
+    $actContainer.show();
+  } else {
+    $actContainer.hide();
+  }
+
   // Contenedor de Calificaciones por Unidad Curricular
   const $notasContainer = $('#stNotasContainer');
   $notasContainer.empty();
@@ -225,6 +319,79 @@ function renderStudentAcademicProfile(res) {
         `;
       }
 
+      // Renderizar Actividades Asignadas para esta unidad curricular
+      let actividadesHtml = '';
+      if (n.actividades && n.actividades.length > 0) {
+        let itemsHtml = '';
+        n.actividades.forEach(act => {
+          const evalUpper = (act.numero_evaluacion || 'e1').toUpperCase();
+          const hasEntrega = !!act.entrega;
+          
+          let estadoBadge = hasEntrega 
+            ? `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Entregado (${act.fecha_entrega || ''})</span>`
+            : `<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> Pendiente de Entrega</span>`;
+
+          let notaDisplay = '';
+          if (act.nota !== undefined && act.nota !== "") {
+            notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(act.nota)}</span>`;
+          }
+
+          let linkBtn = hasEntrega ? `
+            <a href="${act.entrega}" target="_blank" class="btn btn-sm btn-outline-primary me-2">
+              <i class="fa-solid fa-external-link me-1"></i> Ver Entrega
+            </a>
+          ` : '';
+
+          const jsonActStr = JSON.stringify(act).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+          const descFormatted = sgnFormatTextWithLinks(act.descripcion);
+
+          itemsHtml += `
+            <div class="border rounded-3 p-3 bg-white mb-2 shadow-sm border-start border-4 border-primary">
+              <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                <div>
+                  <span class="badge bg-navy text-white me-2"><i class="fa-solid fa-clipboard-list me-1"></i> ${evalUpper}</span>
+                  <div class="fw-bold text-navy fs-6 mt-1">${descFormatted}</div>
+                  <div class="text-muted small mt-1"><i class="fa-regular fa-calendar-check me-1"></i> Fecha de Asignación: <strong>${act.fecha_asignacion}</strong></div>
+                </div>
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                  ${estadoBadge}
+                  ${notaDisplay}
+                </div>
+              </div>
+              <div class="d-flex justify-content-end align-items-center mt-2 pt-2 border-top">
+                ${linkBtn}
+                <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
+                  <i class="fa-solid ${hasEntrega ? 'fa-pen' : 'fa-upload'} me-1"></i> ${hasEntrega ? 'Modificar Entrega' : 'Entregar Actividad'}
+                </button>
+              </div>
+            </div>
+          `;
+        });
+
+        actividadesHtml = `
+          <div class="mt-4 pt-3 border-top">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <h6 class="fw-bold text-navy mb-0 fs-6">
+                <i class="fa-solid fa-tasks text-primary me-2"></i> ACTIVIDADES ASIGNADAS DE ESTA ASIGNATURA
+              </h6>
+              <span class="badge bg-light text-dark border"><i class="fa-solid fa-layer-group me-1"></i> ${n.actividades.length} Actividad(es)</span>
+            </div>
+            ${itemsHtml}
+          </div>
+        `;
+      } else {
+        actividadesHtml = `
+          <div class="mt-4 pt-3 border-top">
+            <h6 class="fw-bold text-navy mb-3 fs-6">
+              <i class="fa-solid fa-tasks text-primary me-2"></i> ACTIVIDADES ASIGNADAS DE ESTA ASIGNATURA
+            </h6>
+            <div class="p-3 bg-light rounded-3 text-muted text-center small">
+              <i class="fa-solid fa-circle-info me-1"></i> No hay actividades ni tareas públicas asignadas actualmente para esta Unidad Curricular.
+            </div>
+          </div>
+        `;
+      }
+
       $notasContainer.append(`
         <div class="card card-custom mb-4">
           <div class="card-header bg-white border-bottom p-3 d-flex align-items-center flex-wrap gap-2">
@@ -238,6 +405,7 @@ function renderStudentAcademicProfile(res) {
             <div class="row">
               ${evalsHtml}
             </div>
+            ${actividadesHtml}
             <div class="mt-3 pt-3 border-top d-flex justify-content-between align-items-center">
               <span class="fw-bold text-navy fs-5">Promedio Acumulado Total:</span>
               ${getGradeBadgeHTML(n.total)}
@@ -566,5 +734,129 @@ async function generarPDFNominaVocero(seccion, programa, materia, docente, cedul
       sgnShowModal({ title: "Acceso Denegado", message: res.message || "No posee autorización de VOCERO.", type: "warning" });
     }
   });
+}
+
+/**
+ * ==========================================================================
+ * LÓGICA DE ENTREGA DE ACTIVIDADES POR PARTE DEL ESTUDIANTE
+ * ==========================================================================
+ */
+let currentEntregaActivity = null;
+
+function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
+  currentEntregaActivity = actData;
+  
+  $('#entregaActividadId').val(idActividad);
+  $('#entregaEstudianteId').val(idEstudiante);
+  $('#entregaFileInput').val('');
+  $('#entregaUrlInput').val('');
+  
+  const evalUpper = (actData.numero_evaluacion || 'e1').toUpperCase();
+  $('#entregaModalActividadTitulo').text(`Evaluación ${evalUpper}: ${actData.descripcion || ''}`);
+  $('#entregaModalActividadDesc').text(`Fecha de Asignación: ${actData.fecha_asignacion || ''}`);
+
+  if (actData.entrega) {
+    $('#entregaActualStatus').show();
+    $('#entregaActualLink').attr('href', actData.entrega);
+    if (actData.entrega.startsWith('http')) {
+      $('#entregaUrlInput').val(actData.entrega);
+    }
+  } else {
+    $('#entregaActualStatus').hide();
+  }
+
+  // Activar por defecto la pestaña de subida de archivo
+  const tabBtn = new bootstrap.Tab(document.getElementById('tab-tipo-archivo'));
+  tabBtn.show();
+
+  const bsModal = new bootstrap.Modal(document.getElementById('sgnEntregaModal'));
+  bsModal.show();
+}
+
+function submitEstudianteEntrega() {
+  const idActividad = $('#entregaActividadId').val();
+  const idEstudiante = $('#entregaEstudianteId').val();
+
+  const isFileTabActive = $('#tab-tipo-archivo').hasClass('active');
+  
+  if (isFileTabActive) {
+    const fileInput = document.getElementById('entregaFileInput');
+    if (!fileInput.files || fileInput.files.length === 0) {
+      sgnShowModal({ title: "Archivo Requerido", message: "Por favor seleccione un archivo (PDF, DOCX, PPT, etc.) para entregar.", type: "warning" });
+      return;
+    }
+
+    const file = fileInput.files[0];
+    const maxSize = 15 * 1024 * 1024; // 15MB
+    if (file.size > maxSize) {
+      sgnShowModal({ title: "Archivo muy Grande", message: "El archivo seleccionado supera el límite de 15MB. Por favor comprímalo o envíe un enlace de Google Drive.", type: "warning" });
+      return;
+    }
+
+    $('#btnEnviarEntregaSubmit').prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Subiendo a Google Drive...');
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const base64Data = e.target.result;
+      
+      sgnApiCall("uploadEntregaEstudiante", {
+        id_actividades_asignadas: idActividad,
+        id_estudiante: idEstudiante,
+        fileName: file.name,
+        fileData: base64Data
+      }, { showLoading: true }).then(function (res) {
+        $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
+        if (res && res.success) {
+          bootstrap.Modal.getInstance(document.getElementById('sgnEntregaModal')).hide();
+          sgnShowModal({
+            title: "¡Entrega Realizada!",
+            message: "Su tarea ha sido subida con éxito a Google Drive y enviada al docente.",
+            type: "success",
+            onConfirm: function () {
+              if (currentStudentData && currentStudentData.cedula) {
+                performStudentSearch(currentStudentData.cedula);
+              }
+            }
+          });
+        } else {
+          sgnShowModal({ title: "Error en Entrega", message: res.message || "No se pudo procesar la entrega.", type: "danger" });
+        }
+      });
+    };
+    reader.readAsDataURL(file);
+
+  } else {
+    // Opción Enlace URL (Canva, Drive, etc.)
+    const url = $('#entregaUrlInput').val().trim();
+    if (!url || !url.startsWith("http")) {
+      sgnShowModal({ title: "Enlace Inválido", message: "Por favor ingrese un enlace URL válido que comience con http:// o https://", type: "warning" });
+      return;
+    }
+
+    $('#btnEnviarEntregaSubmit').prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Procesando...');
+
+    sgnApiCall("uploadEntregaEstudiante", {
+      id_actividades_asignadas: idActividad,
+      id_estudiante: idEstudiante,
+      entregaUrl: url
+    }, { showLoading: true }).then(function (res) {
+      $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
+      if (res && res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('sgnEntregaModal')).hide();
+        sgnShowModal({
+          title: "¡Entrega Registrada!",
+          message: "El enlace de su actividad ha sido guardado exitosamente.",
+          type: "success",
+          onConfirm: function () {
+            if (currentStudentData && currentStudentData.cedula) {
+              performStudentSearch(currentStudentData.cedula);
+            }
+          }
+        });
+      } else {
+        sgnShowModal({ title: "Error", message: res.message || "No se pudo registrar la entrega.", type: "danger" });
+      }
+    });
+  }
 }
 

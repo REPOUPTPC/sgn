@@ -9,7 +9,9 @@ let sgnDb = {
   profesores: [],
   unidades: [],
   relacionNotas: [],
-  fechasNotas: []
+  fechasNotas: [],
+  actividadesAsignadas: [],
+  actividadesEntregadas: []
 };
 
 let currentUser = null;
@@ -24,6 +26,7 @@ $(document).ready(function () {
   currentUser = sgnAuth.getCurrentUser();
   setupUserInterface();
   loadDashboardData();
+  setupHashNavigation();
 
   // Escuchadores de búsqueda en tiempo real
   $('#searchEstudiantes').on('keyup input', function () {
@@ -44,6 +47,30 @@ $(document).ready(function () {
 
   $('#searchNotas').on('keyup input', function () {
     filterTable('#tablaNotas tbody tr', $(this).val());
+  });
+
+  $('#searchActividades').on('keyup input', function () {
+    filterTable('#tablaActividades tbody tr', $(this).val());
+  });
+
+  // Listener para cambio en el Selector de Cantidad de Evaluaciones (4 o 5)
+  $('#selectCantEvalGestion').on('change', function () {
+    const newCant = parseInt($(this).val()) || 4;
+    const unidadId = $('#selectUnidadGestion').val();
+    
+    if (unidadId) {
+      // Actualizar en memoria INMEDIATAMENTE para que al hacer renderNotasTable(true) no reaparezca e5
+      sgnDb.relacionNotas.forEach(r => {
+        if (r.id_unidad_curricular == unidadId) {
+          r.cantidad_evaluaciones = newCant;
+          if (newCant === 4) {
+            r.e5 = 0;
+          }
+        }
+      });
+    }
+
+    renderNotasTable(true);
   });
 
   // Toggle para ver contraseñas
@@ -95,7 +122,7 @@ function setupUserInterface() {
 /**
  * Carga de Datos Generales del Dashboard
  */
-function loadDashboardData() {
+function loadDashboardData(keepSelectedCant = false) {
   sgnApiCall("getAllData", {}, { showLoading: true }).then(function (res) {
     if (res && res.success) {
       sgnDb.programas = res.programas || [];
@@ -104,8 +131,10 @@ function loadDashboardData() {
       sgnDb.unidades = res.unidades || [];
       sgnDb.relacionNotas = res.relacionNotas || [];
       sgnDb.fechasNotas = res.fechasNotas || [];
+      sgnDb.actividadesAsignadas = res.actividadesAsignadas || [];
+      sgnDb.actividadesEntregadas = res.actividadesEntregadas || [];
 
-      renderAllDashboardTables();
+      renderAllDashboardTables(keepSelectedCant);
       populateDropdownOptions();
     } else {
       sgnShowModal({ title: "Error", message: "Error cargando la base de datos.", type: "danger" });
@@ -113,14 +142,15 @@ function loadDashboardData() {
   });
 }
 
-function renderAllDashboardTables() {
+function renderAllDashboardTables(keepSelectedCant = false) {
   renderEstudiantesTable();
   if (sgnAuth.isSuperAdmin()) {
     renderProfesoresTable();
   }
   renderUnidadesTable();
   renderProgramasTable();
-  renderNotasTable();
+  renderNotasTable(keepSelectedCant);
+  renderActividadesTable();
 }
 
 /**
@@ -788,7 +818,7 @@ function deleteProgramaPrompt(id) {
 // ==========================================================================
 // 5. MÓDULO CALIFICACIONES Y FECHAS DE EVALUACIÓN
 // ==========================================================================
-function renderNotasTable() {
+function renderNotasTable(keepSelectedCant = false) {
   const unidadId = $('#selectUnidadGestion').val();
   const $tbody = $('#tablaNotas tbody');
   $tbody.empty();
@@ -808,11 +838,13 @@ function renderNotasTable() {
   $('#btnGenerarNomina').show();
   $('#containerNoSeleccion').hide();
 
-  // Buscar si existen notas previas para tomar la cantidad de evaluaciones guardada
-  const existingRn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == unidadId);
-  if (existingRn && existingRn.cantidad_evaluaciones) {
-    const savedCant = parseInt(existingRn.cantidad_evaluaciones) || 4;
-    $('#selectCantEvalGestion').val(savedCant);
+  // Buscar si existen notas previas para tomar la cantidad de evaluaciones guardada (solo si no se cambió manualmente)
+  if (!keepSelectedCant) {
+    const existingRn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == unidadId);
+    if (existingRn && existingRn.cantidad_evaluaciones) {
+      const savedCant = parseInt(existingRn.cantidad_evaluaciones) || 4;
+      $('#selectCantEvalGestion').val(savedCant);
+    }
   }
 
   const cantEval = parseInt($('#selectCantEvalGestion').val()) || 4;
@@ -850,9 +882,9 @@ function renderNotasTable() {
     let e2 = parseFloat(rn.e2) || 0;
     let e3 = parseFloat(rn.e3) || 0;
     let e4 = parseFloat(rn.e4) || 0;
-    let e5 = parseFloat(rn.e5) || 0;
+    let e5 = cantEval === 5 ? (parseFloat(rn.e5) || 0) : '';
 
-    let sum = e1 + e2 + e3 + e4 + (cantEval === 5 ? e5 : 0);
+    let sum = e1 + e2 + e3 + e4 + (cantEval === 5 ? parseFloat(rn.e5 || 0) : 0);
     let calcTotal = (sum / cantEval).toFixed(2);
 
     $tbody.append(`
@@ -871,15 +903,16 @@ function renderNotasTable() {
   
   // Agregar un handler para recalcular total on the fly
   $('.nota-input').on('input', function() {
+    const currentCant = parseInt($('#selectCantEvalGestion').val()) || 4;
     const $row = $(this).closest('tr');
     let e1 = parseFloat($row.find('.e1').val() || 0);
     let e2 = parseFloat($row.find('.e2').val() || 0);
     let e3 = parseFloat($row.find('.e3').val() || 0);
     let e4 = parseFloat($row.find('.e4').val() || 0);
-    let e5 = cantEval === 5 ? parseFloat($row.find('.e5').val() || 0) : 0;
+    let e5 = currentCant === 5 ? parseFloat($row.find('.e5').val() || 0) : 0;
     
-    let sum = e1 + e2 + e3 + e4 + (cantEval === 5 ? e5 : 0);
-    let avg = (sum / cantEval).toFixed(2);
+    let sum = e1 + e2 + e3 + e4 + (currentCant === 5 ? e5 : 0);
+    let avg = (sum / currentCant).toFixed(2);
     $row.find('.total-cell').html(getGradeBadgeHTML(avg));
   });
 }
@@ -922,8 +955,17 @@ function saveBulkNotasSubmit() {
     btn.prop('disabled', false).html('<i class="fa-solid fa-save me-2"></i> Guardar Todas las Notas');
     
     if (res && res.success) {
+      // Actualizar la memoria local sgnDb.relacionNotas para que persista la nueva cantidad_evaluaciones (4 o 5) y e5 = 0
+      sgnDb.relacionNotas.forEach(r => {
+        if (r.id_unidad_curricular == unidadId) {
+          r.cantidad_evaluaciones = cantEval;
+          if (cantEval === 4) {
+            r.e5 = 0;
+          }
+        }
+      });
       sgnShowModal({ title: "Notas Guardadas", message: res.message, type: "success" });
-      loadDashboardData(); // Recargamos para actualizar promedios reales
+      loadDashboardData(true); // Recargamos manteniendo la selección actual
     }
   });
 }
@@ -1422,6 +1464,267 @@ function submitChangePassword() {
       sgnShowModal({ title: "Éxito", message: res.message, type: "success" });
     } else {
       sgnShowModal({ title: "Error", message: res.message, type: "danger" });
+    }
+  });
+}
+
+// ==========================================================================
+// 7. NAVEGACIÓN POR HASH (#)
+// ==========================================================================
+const HASH_TAB_MAP = {
+  '#estudiantes': '#tab-estudiantes-btn',
+  '#docentes': '#tab-profesores-btn',
+  '#unidades': '#tab-unidades-btn',
+  '#programas': '#tab-programas-btn',
+  '#calificaciones': '#tab-notas-btn',
+  '#actividades': '#tab-actividades-btn',
+  '#perfil': '#tab-perfil-btn'
+};
+
+const TAB_HASH_MAP = {
+  'tab-estudiantes-btn': '#estudiantes',
+  'tab-profesores-btn': '#docentes',
+  'tab-unidades-btn': '#unidades',
+  'tab-programas-btn': '#programas',
+  'tab-notas-btn': '#calificaciones',
+  'tab-actividades-btn': '#actividades',
+  'tab-perfil-btn': '#perfil'
+};
+
+function setupHashNavigation() {
+  $('#sgnDashboardTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+    const btnId = $(e.target).attr('id');
+    const hash = TAB_HASH_MAP[btnId];
+    if (hash && history.pushState) {
+      history.pushState(null, null, hash);
+    } else if (hash) {
+      window.location.hash = hash;
+    }
+  });
+
+  restoreTabFromHash();
+  $(window).on('hashchange', restoreTabFromHash);
+}
+
+function restoreTabFromHash() {
+  const hash = (window.location.hash || '').toLowerCase();
+  if (hash && HASH_TAB_MAP[hash]) {
+    const btnId = HASH_TAB_MAP[hash];
+    const $btn = $(btnId);
+    if ($btn.length > 0 && $btn.is(':visible')) {
+      const bsTab = bootstrap.Tab.getOrCreateInstance($btn[0]);
+      bsTab.show();
+    }
+  }
+}
+
+// ==========================================================================
+// 8. MÓDULO ACTIVIDADES ASIGNADAS Y REVISIÓN DE ENTREGAS
+// ==========================================================================
+function renderActividadesTable() {
+  const $tbody = $('#tablaActividades tbody');
+  $tbody.empty();
+
+  let list = sgnDb.actividadesAsignadas || [];
+
+  if (!sgnAuth.isSuperAdmin()) {
+    // DOCENTE: Filtrar actividades por sus Unidades Curriculares asignadas
+    const misUnidadesIds = sgnDb.unidades
+      .filter(u => u.id_prof == currentUser.id)
+      .map(u => String(u.id));
+    list = list.filter(a => misUnidadesIds.includes(String(a.id_unidad_curricular)));
+  }
+
+  if (list.length === 0) {
+    $tbody.append('<tr><td colspan="8" class="text-center text-muted py-4">No hay actividades asignadas registradas.</td></tr>');
+    return;
+  }
+
+  list.forEach(a => {
+    const uc = sgnDb.unidades.find(u => u.id == a.id_unidad_curricular);
+    const ucNombre = uc ? (uc.unidad_curricular || uc['unidad curricular']) : "Unidad N/A";
+    const ucSec = uc ? (uc.seccion || "170") : "170";
+    const cleanSec = String(ucSec).replace(/^'/, '');
+    
+    const entregasCount = (sgnDb.actividadesEntregadas || []).filter(e => e.id_actividades_asignadas == a.id).length;
+    const numEvalUpper = (a.numero_evaluacion || "e1").toUpperCase();
+
+    // Detectar si la descripción contiene un enlace URL
+    let descContentHtml = a.descripcion;
+    const urlMatches = a.descripcion.match(/(https?:\/\/[^\s<]+)/g);
+    if (urlMatches && urlMatches.length > 0) {
+      const firstUrl = urlMatches[0].replace(/[.,;!?)]$/, '');
+      descContentHtml = `
+        <div>${a.descripcion.replace(firstUrl, '')}</div>
+        <a href="${firstUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 mt-1 py-0 px-2 fw-bold" style="font-size: 0.78rem;">
+          <i class="fa-solid fa-up-right-from-square me-1"></i> Abrir Enlace
+        </a>
+      `;
+    }
+
+    $tbody.append(`
+      <tr>
+        <td class="fw-bold">${a.id}</td>
+        <td class="fw-bold text-navy">${ucNombre}</td>
+        <td><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
+        <td><span class="badge bg-info text-dark fw-bold">${numEvalUpper}</span></td>
+        <td><small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> ${a.fecha_asignacion || "N/A"}</small></td>
+        <td style="max-width: 280px;">${descContentHtml}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-info text-navy fw-bold" onclick="openModalEntregas(${a.id})">
+            <i class="fa-solid fa-folder-open me-1"></i> ${entregasCount} Entrega(s)
+          </button>
+        </td>
+        <td>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-primary" onclick="editActividad(${a.id})" title="Editar Actividad"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn btn-outline-danger" onclick="deleteActividadPrompt(${a.id})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </td>
+      </tr>
+    `);
+  });
+}
+
+function openModalActividad() {
+  $('#modalActividadForm')[0].reset();
+  $('#actividadId').val('');
+  $('#actividadFecha').val(new Date().toISOString().split('T')[0]);
+  $('#modalActividadTitle').text('Asignar Nueva Actividad / Evaluación');
+  
+  populateDropdownOptions();
+  
+  const bsModal = new bootstrap.Modal(document.getElementById('modalActividad'));
+  bsModal.show();
+}
+
+function editActividad(id) {
+  const a = (sgnDb.actividadesAsignadas || []).find(item => item.id == id);
+  if (!a) return;
+
+  $('#actividadId').val(a.id);
+  $('#actividadUnidadId').val(a.id_unidad_curricular);
+  $('#actividadEval').val((a.numero_evaluacion || "e1").toLowerCase());
+  $('#actividadFecha').val(a.fecha_asignacion);
+  $('#actividadDesc').val(a.descripcion);
+
+  $('#modalActividadTitle').text('Editar Actividad Asignada');
+  const bsModal = new bootstrap.Modal(document.getElementById('modalActividad'));
+  bsModal.show();
+}
+
+function saveActividadSubmit() {
+  const uId = $('#actividadUnidadId').val();
+  const evalKey = $('#actividadEval').val();
+  const fecha = $('#actividadFecha').val();
+  const desc = $('#actividadDesc').val().trim();
+
+  if (!uId || !desc) {
+    sgnShowModal({ title: "Atención", message: "Debe seleccionar la Unidad Curricular e ingresar la descripción de la actividad.", type: "warning" });
+    return;
+  }
+
+  const formData = {
+    id: $('#actividadId').val(),
+    id_unidad_curricular: uId,
+    numero_evaluacion: evalKey,
+    fecha_asignacion: fecha,
+    descripcion: desc
+  };
+
+  sgnApiCall("saveActividadAsignada", formData).then(function (res) {
+    if (res && res.success) {
+      bootstrap.Modal.getInstance(document.getElementById('modalActividad')).hide();
+      sgnShowModal({ title: "Éxito", message: res.message, type: "success" });
+      loadDashboardData();
+    }
+  });
+}
+
+function deleteActividadPrompt(id) {
+  sgnShowConfirm({
+    title: "Eliminar Actividad Asignada",
+    message: "¿Está seguro de eliminar esta actividad? También se eliminarán las entregas que los estudiantes hayan realizado para ella.",
+    confirmText: "Eliminar Actividad",
+    onConfirm: function () {
+      sgnApiCall("deleteActividadAsignada", { id: id }).then(function (res) {
+        if (res && res.success) {
+          sgnShowModal({ title: "Eliminado", message: res.message, type: "success" });
+          loadDashboardData();
+        }
+      });
+    }
+  });
+}
+
+function openModalEntregas(idActividad) {
+  const act = (sgnDb.actividadesAsignadas || []).find(a => a.id == idActividad);
+  if (!act) return;
+
+  const uc = sgnDb.unidades.find(u => u.id == act.id_unidad_curricular);
+  const ucNombre = uc ? (uc.unidad_curricular || uc['unidad curricular']) : "Materia";
+  const numEval = (act.numero_evaluacion || "e1").toUpperCase();
+
+  $('#entregasActividadDesc').text(`Actividad: ${act.descripcion}`);
+  $('#entregasActividadMeta').text(`${ucNombre} | ${numEval} | Fecha de Asignación: ${act.fecha_asignacion}`);
+
+  sgnApiCall("getEntregasByActividad", { id_actividades_asignadas: idActividad }, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      const entregas = res.entregas || [];
+      const $tbody = $('#tablaEntregasActividad tbody');
+      $tbody.empty();
+
+      if (entregas.length === 0) {
+        $tbody.append('<tr><td colspan="6" class="text-center text-muted py-4"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>Aún ningún estudiante ha registrado una entrega para esta actividad.</td></tr>');
+      } else {
+        entregas.forEach(ent => {
+          let linkHtml = '<span class="text-muted small">Sin archivo</span>';
+          if (ent.entrega) {
+            linkHtml = `
+              <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" title="Abrir Documento o Enlace">
+                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver Entrega
+              </a>
+            `;
+          }
+
+          let notaVal = ent.nota !== undefined && ent.nota !== "" ? ent.nota : "";
+
+          $tbody.append(`
+            <tr>
+              <td class="fw-bold text-navy">${ent.cedula}</td>
+              <td>${ent.nombre_estudiante}</td>
+              <td><small class="text-muted">${ent.fecha_entrega || "N/A"}</small></td>
+              <td>${linkHtml}</td>
+              <td>
+                <input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm input-nota-entrega" id="notaEntrega_${ent.id}" value="${notaVal}" placeholder="0-20">
+              </td>
+              <td>
+                <button class="btn btn-sm btn-success" onclick="saveNotaEntregaSubmit(${ent.id})" title="Guardar Nota">
+                  <i class="fa-solid fa-check me-1"></i> Calificar
+                </button>
+              </td>
+            </tr>
+          `);
+        });
+      }
+
+      const bsModal = new bootstrap.Modal(document.getElementById('modalEntregasActividad'));
+      bsModal.show();
+    }
+  });
+}
+
+function saveNotaEntregaSubmit(idEntrega) {
+  const notaVal = $(`#notaEntrega_${idEntrega}`).val();
+  if (notaVal === "") {
+    sgnShowModal({ title: "Atención", message: "Ingrese una calificación de 0 a 20 puntos.", type: "warning" });
+    return;
+  }
+
+  sgnApiCall("saveNotaEntrega", { id_entrega: idEntrega, nota: notaVal }).then(function (res) {
+    if (res && res.success) {
+      sgnShowModal({ title: "Calificado", message: res.message, type: "success" });
+      loadDashboardData();
     }
   });
 }

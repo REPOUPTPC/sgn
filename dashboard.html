@@ -52,36 +52,41 @@
   <!-- ==================== CONTENIDO PRINCIPAL DASHBOARD ==================== -->
   <main class="container-fluid py-4 px-lg-5">
     
-    <!-- PESTAÑAS DE NAVEGACIÓN -->
-    <ul class="nav nav-pills nav-fill bg-white p-2 rounded-3 border mb-4 shadow-sm" id="sgnDashboardTabs" role="tablist">
+    <!-- PESTAÑAS DE NAVEGACIÓN DISCRETAS Y OPTIMIZADAS -->
+    <ul class="nav nav-pills sgn-nav-pills bg-white p-1 rounded-3 border mb-4 shadow-sm" id="sgnDashboardTabs" role="tablist">
       <li class="nav-item" role="presentation">
-        <button class="nav-link active fw-bold" id="tab-estudiantes-btn" data-bs-toggle="tab" data-bs-target="#tab-estudiantes" type="button" role="tab">
-          <i class="fa-solid fa-user-graduate me-2"></i> Estudiantes
+        <button class="nav-link sgn-nav-link active" id="tab-estudiantes-btn" data-bs-toggle="tab" data-bs-target="#tab-estudiantes" type="button" role="tab">
+          <i class="fa-solid fa-user-graduate me-1"></i> Estudiantes
         </button>
       </li>
       <li class="nav-item" role="presentation" id="tab-profesores-nav">
-        <button class="nav-link fw-bold" id="tab-profesores-btn" data-bs-toggle="tab" data-bs-target="#tab-profesores" type="button" role="tab">
-          <i class="fa-solid fa-chalkboard-user me-2"></i> Docentes
+        <button class="nav-link sgn-nav-link" id="tab-profesores-btn" data-bs-toggle="tab" data-bs-target="#tab-profesores" type="button" role="tab">
+          <i class="fa-solid fa-chalkboard-user me-1"></i> Docentes
         </button>
       </li>
       <li class="nav-item" role="presentation" id="tab-unidades-nav">
-        <button class="nav-link fw-bold" id="tab-unidades-btn" data-bs-toggle="tab" data-bs-target="#tab-unidades" type="button" role="tab">
-          <i class="fa-solid fa-book-open me-2"></i> Unidades Curriculares
+        <button class="nav-link sgn-nav-link" id="tab-unidades-btn" data-bs-toggle="tab" data-bs-target="#tab-unidades" type="button" role="tab">
+          <i class="fa-solid fa-book-open me-1"></i> Unidades Curriculares
         </button>
       </li>
       <li class="nav-item" role="presentation" id="tab-programas-nav">
-        <button class="nav-link fw-bold" id="tab-programas-btn" data-bs-toggle="tab" data-bs-target="#tab-programas" type="button" role="tab">
-          <i class="fa-solid fa-sitemap me-2"></i> Programas
+        <button class="nav-link sgn-nav-link" id="tab-programas-btn" data-bs-toggle="tab" data-bs-target="#tab-programas" type="button" role="tab">
+          <i class="fa-solid fa-sitemap me-1"></i> Programas
         </button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link fw-bold" id="tab-notas-btn" data-bs-toggle="tab" data-bs-target="#tab-notas" type="button" role="tab">
-          <i class="fa-solid fa-calculator me-2"></i> Calificaciones
+        <button class="nav-link sgn-nav-link" id="tab-notas-btn" data-bs-toggle="tab" data-bs-target="#tab-notas" type="button" role="tab">
+          <i class="fa-solid fa-calculator me-1"></i> Calificaciones
         </button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link fw-bold" id="tab-perfil-btn" data-bs-toggle="tab" data-bs-target="#tab-perfil" type="button" role="tab">
-          <i class="fa-solid fa-key me-2"></i> Cambiar Clave
+        <button class="nav-link sgn-nav-link" id="tab-actividades-btn" data-bs-toggle="tab" data-bs-target="#tab-actividades" type="button" role="tab">
+          <i class="fa-solid fa-list-check me-1"></i> Actividades Asignadas
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link sgn-nav-link" id="tab-perfil-btn" data-bs-toggle="tab" data-bs-target="#tab-perfil" type="button" role="tab">
+          <i class="fa-solid fa-key me-1"></i> Cambiar Clave
         </button>
       </li>
     </ul>
@@ -249,7 +254,7 @@
               <div class="d-flex gap-2 align-items-end flex-wrap mt-3 mt-md-0">
                 <div>
                   <label class="fw-bold text-navy mb-1 small d-block"><i class="fa-solid fa-calculator me-1"></i> Plan Evaluaciones</label>
-                  <select id="selectCantEvalGestion" class="form-select form-select-sm border-primary" onchange="renderNotasTable()" style="width: 150px;">
+                  <select id="selectCantEvalGestion" class="form-select form-select-sm border-primary" style="width: 150px;">
                     <option value="4" selected>4 Evaluaciones</option>
                     <option value="5">5 Evaluaciones</option>
                   </select>
@@ -335,6 +340,43 @@
                   </button>
                 </form>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7. PESTAÑA ACTIVIDADES ASIGNADAS -->
+      <div class="tab-pane fade" id="tab-actividades" role="tabpanel">
+        <div class="card card-custom">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+              <div class="search-box-group flex-grow-1" style="max-width: 400px;">
+                <i class="fa-solid fa-search"></i>
+                <input type="text" id="searchActividades" class="form-control search-box-input" placeholder="Buscar Actividad en tiempo real...">
+              </div>
+              <button class="btn btn-primary-sgn" onclick="openModalActividad()">
+                <i class="fa-solid fa-plus me-2"></i> Asignar Nueva Actividad
+              </button>
+            </div>
+            
+            <div class="table-responsive">
+              <table class="sgn-table" id="tablaActividades">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Unidad Curricular</th>
+                    <th>Sección</th>
+                    <th>Evaluación</th>
+                    <th>Fecha Asignación</th>
+                    <th>Descripción / Instrucciones</th>
+                    <th>Entregas de Estudiantes</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Render dinámico js/dashboard.js -->
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -672,6 +714,90 @@
             <button type="submit" class="btn btn-primary-sgn">Guardar Fechas</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Asignar / Editar Actividad -->
+  <div class="modal fade" id="modalActividad" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="modalActividadTitle"><i class="fa-solid fa-list-check me-2"></i> Asignar Actividad o Evaluación</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="modalActividadForm" onsubmit="event.preventDefault(); saveActividadSubmit();">
+          <input type="hidden" id="actividadId">
+          <div class="modal-body p-4">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Unidad Curricular *</label>
+              <select id="actividadUnidadId" class="form-select select-unidad-opt" required></select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Número de Evaluación *</label>
+              <select id="actividadEval" class="form-select" required>
+                <option value="e1">Evaluación 1 (E1)</option>
+                <option value="e2">Evaluación 2 (E2)</option>
+                <option value="e3">Evaluación 3 (E3)</option>
+                <option value="e4">Evaluación 4 (E4)</option>
+                <option value="e5">Evaluación 5 (E5)</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Fecha de Asignación / Límite *</label>
+              <input type="date" id="actividadFecha" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Descripción / Instrucciones *</label>
+              <textarea id="actividadDesc" class="form-control" rows="3" placeholder="Ej. Trabajo escrito en PDF sobre Estructuras de Datos o Enlace de Canva..." required></textarea>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">Guardar Actividad</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Revisar y Calificar Entregas de Estudiantes -->
+  <div class="modal fade" id="modalEntregasActividad" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="modalEntregasTitle"><i class="fa-solid fa-file-arrow-up me-2"></i> Entregas de Estudiantes</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="alert alert-info d-flex align-items-center mb-3">
+            <i class="fa-solid fa-circle-info fa-lg me-2"></i>
+            <div>
+              <strong id="entregasActividadDesc">Actividad: </strong>
+              <div class="small" id="entregasActividadMeta">Materia | Evaluación</div>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="sgn-table" id="tablaEntregasActividad">
+              <thead>
+                <tr>
+                  <th>Cédula</th>
+                  <th>Estudiante</th>
+                  <th>Fecha de Entrega</th>
+                  <th>Archivo / Enlace Enviado</th>
+                  <th width="120px">Nota (0-20)</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Render dinámico -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        </div>
       </div>
     </div>
   </div>

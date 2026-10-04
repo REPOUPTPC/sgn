@@ -107,8 +107,14 @@
         </div>
       </div>
 
+      <!-- Contenedor Independiente de Actividades Asignadas -->
+      <div id="stActividadesIndependienteContainer" class="mb-4" style="display: none;">
+        <h4 class="fw-bold text-navy mb-3"><i class="fa-solid fa-list-check text-primary me-2"></i> Actividades Asignadas</h4>
+        <div id="stActividadesList"></div>
+      </div>
+
       <!-- Contenedor de Materias y Calificaciones -->
-      <h4 class="fw-bold text-navy mb-3"><i class="fa-solid fa-graduation-cap text-primary me-2"></i> Mis Unidades Curriculares</h4>
+      <h4 class="fw-bold text-navy mb-3"><i class="fa-solid fa-graduation-cap text-primary me-2"></i> Mis Unidades Curriculares y Calificaciones</h4>
       <div id="stNotasContainer">
         <!-- Renderizado dinámico desde student.js -->
       </div>
@@ -281,6 +287,80 @@
           <div class="modal-footer bg-light">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
             <button type="submit" class="btn btn-primary-sgn px-4">Ingresar al Dashboard</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE ENTREGA DE ACTIVIDAD (ESTUDIANTE) ==================== -->
+  <div class="modal fade" id="sgnEntregaModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2"></i> Realizar Entrega de Actividad</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="sgnEntregaForm">
+          <input type="hidden" id="entregaActividadId">
+          <input type="hidden" id="entregaEstudianteId">
+          
+          <div class="modal-body p-4">
+            <div class="alert alert-info rounded-3 mb-3">
+              <strong id="entregaModalActividadTitulo" class="d-block mb-1 fs-6 text-navy">Actividad Asignada</strong>
+              <span id="entregaModalActividadDesc" class="small">Descripción e instrucciones de la actividad.</span>
+            </div>
+
+            <!-- Pestañas de método de entrega: Archivo vs Enlace -->
+            <ul class="nav nav-pills nav-fill bg-light p-1 rounded border mb-3" id="entregaTipoTabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active fw-bold small" id="tab-tipo-archivo" data-bs-toggle="pill" data-bs-target="#entrega-pane-archivo" type="button" role="tab">
+                  <i class="fa-solid fa-file-arrow-up me-1"></i> Subir Archivo (PDF, DOCX, PPT, ODT, ZIP)
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold small" id="tab-tipo-link" data-bs-toggle="pill" data-bs-target="#entrega-pane-link" type="button" role="tab">
+                  <i class="fa-solid fa-link me-1"></i> Pegar Enlace (Canva, Google Drive, etc.)
+                </button>
+              </li>
+            </ul>
+
+            <div class="tab-content" id="entregaTipoContent">
+              <!-- Pane 1: Archivo -->
+              <div class="tab-pane fade show active" id="entrega-pane-archivo" role="tabpanel">
+                <div class="mb-3">
+                  <label for="entregaFileInput" class="form-label fw-bold">Seleccionar Archivo Documento *</label>
+                  <input type="file" id="entregaFileInput" class="form-control" accept=".pdf,.doc,.docx,.ppt,.pptx,.odt,.png,.jpg,.jpeg,.zip">
+                  <div class="form-text mt-1">Formatos admitidos: PDF, DOCX, PPT, ODT, Imágenes o ZIP (Máx. 15MB). El archivo se guardará en Google Drive de forma pública para el docente.</div>
+                </div>
+              </div>
+
+              <!-- Pane 2: Enlace URL -->
+              <div class="tab-pane fade" id="entrega-pane-link" role="tabpanel">
+                <div class="mb-3">
+                  <label for="entregaUrlInput" class="form-label fw-bold">Enlace de Entrega (URL) *</label>
+                  <input type="url" id="entregaUrlInput" class="form-control" placeholder="Ej: https://www.canva.com/design/... o https://drive.google.com/file/d/...">
+                </div>
+                <div class="alert alert-warning border-warning d-flex align-items-start gap-2 mb-0 py-2 px-3">
+                  <i class="fa-solid fa-triangle-exclamation text-warning mt-1"></i>
+                  <small class="text-dark">
+                    <strong>Importante sobre Privacidad:</strong> Si envías un enlace de Google Drive, Canva o similar, asegúrate de configurar los permisos del enlace como <strong>Público ("Cualquier persona con el enlace puede ver")</strong> para que el docente pueda evaluarlo.
+                  </small>
+                </div>
+              </div>
+            </div>
+
+            <div id="entregaActualStatus" class="mt-3" style="display: none;">
+              <span class="badge bg-success me-2"><i class="fa-solid fa-circle-check"></i> Entrega Previa Guardada</span>
+              <a id="entregaActualLink" href="#" target="_blank" class="small fw-bold text-decoration-none">Ver archivo/enlace enviado</a>
+            </div>
+          </div>
+
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn px-4" id="btnEnviarEntregaSubmit">
+              <i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega
+            </button>
           </div>
         </form>
       </div>
