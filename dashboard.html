@@ -89,6 +89,11 @@
           <i class="fa-solid fa-key me-1"></i> Cambiar Clave
         </button>
       </li>
+      <li class="nav-item" role="presentation" id="tab-extension-nav">
+        <button class="nav-link sgn-nav-link" id="tab-extension-btn" data-bs-toggle="tab" data-bs-target="#tab-extension" type="button" role="tab">
+          <i class="fa-solid fa-graduation-cap me-1"></i> Extensión
+        </button>
+      </li>
     </ul>
 
     <!-- CONTENIDO DE LAS PESTAÑAS -->
@@ -375,6 +380,74 @@
                 </thead>
                 <tbody>
                   <!-- Render dinámico js/dashboard.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8. PESTAÑA EXTENSIÓN (SUPER ADMIN ONLY) -->
+      <div class="tab-pane fade" id="tab-extension" role="tabpanel">
+        <div class="card card-custom">
+          <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+              <h4 class="fw-bold text-navy mb-0">
+                <i class="fa-solid fa-graduation-cap text-primary me-2"></i> Gestión de Pagos de Extensión Universitaria
+              </h4>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button type="button" class="btn btn-outline-primary fw-bold" onclick="bulkMarcarPagoEstado('TRUE')" title="Marcar todos los estudiantes de la vista como Visto / Impartido">
+                  <i class="fa-solid fa-check-double me-1"></i> Marcar Bloque Visto
+                </button>
+                <button type="button" class="btn btn-success text-white fw-bold px-3" onclick="exportExtensionCSV()" title="Exportar solo los estudiantes que aún no han visto el curso (FALSE)">
+                  <i class="fa-solid fa-file-csv me-1"></i> Exportar CSV (Pendientes)
+                </button>
+              </div>
+            </div>
+            <p class="text-muted mb-4">Seleccione la Unidad Curricular / Taller de Extensión para consultar las personas inscritas. Al exportar CSV solo se incluirán los estudiantes con estado <strong>POR VER / PENDIENTE</strong>.</p>
+
+            <div class="row g-3 align-items-center mb-4 bg-light p-3 rounded-3 border">
+              <div class="col-md-6">
+                <label for="selectExtensionGestion" class="form-label fw-bold text-navy mb-1">
+                  <i class="fa-solid fa-filter text-primary me-1"></i> Unidad Curricular / Taller a Gestionar *
+                </label>
+                <select id="selectExtensionGestion" class="form-select border-primary shadow-sm" onchange="renderExtensionTable()">
+                  <option value="">-- Todos los Cursos / Talleres --</option>
+                </select>
+              </div>
+
+              <div class="col-md-6">
+                <label for="searchExtension" class="form-label fw-bold text-navy mb-1">
+                  <i class="fa-solid fa-magnifying-glass text-primary me-1"></i> Búsqueda Rápida
+                </label>
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchExtension" class="form-control search-box-input" placeholder="Buscar por Nombre, Cédula, Referencia o Banco...">
+                </div>
+              </div>
+            </div>
+            
+            <div id="extCursoStatusBox" class="mb-4" style="display: none;"></div>
+
+            <div class="table-responsive">
+              <table class="sgn-table" id="tablaExtensionPagos">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Cédula</th>
+                    <th>Nombre Completo</th>
+                    <th>Curso / Taller</th>
+                    <th>Banco</th>
+                    <th>Monto (Bs.)</th>
+                    <th>Nº Referencia</th>
+                    <th>Fecha Transferencia</th>
+                    <th>Comprobante</th>
+                    <th>Estado Alumno</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyExtensionPagos">
+                  <!-- Renderizado dinámico desde dashboard.js -->
                 </tbody>
               </table>
             </div>

@@ -11,7 +11,11 @@ let sgnDb = {
   relacionNotas: [],
   fechasNotas: [],
   actividadesAsignadas: [],
-  actividadesEntregadas: []
+  actividadesEntregadas: [],
+  extension: [],
+  pagos: [],
+  banco: [],
+  pagosExtJoined: []
 };
 
 let currentUser = null;
@@ -51,6 +55,10 @@ $(document).ready(function () {
 
   $('#searchActividades').on('keyup input', function () {
     filterTable('#tablaActividades tbody tr', $(this).val());
+  });
+
+  $('#searchExtension').on('keyup input', function () {
+    filterTable('#tablaExtensionPagos tbody tr', $(this).val());
   });
 
   // Listener para cambio en el Selector de Cantidad de Evaluaciones (4 o 5)
@@ -112,10 +120,13 @@ function setupUserInterface() {
   $('#navUserRole').text(currentUser.rol === "SUPER_ADMIN" ? "Super Administrador" : "Docente");
 
   if (!sgnAuth.isSuperAdmin()) {
-    // Ocultar pestañas exclusivas de Super Admin (Profesores, Unidades, Programas)
+    // Ocultar pestañas exclusivas de Super Admin (Profesores, Unidades, Programas, Extensión)
     $('#tab-profesores-nav').hide();
     $('#tab-unidades-nav').hide();
     $('#tab-programas-nav').hide();
+    $('#tab-extension-nav').hide();
+  } else {
+    $('#tab-extension-nav').show();
   }
 }
 
@@ -133,7 +144,11 @@ function loadDashboardData(keepSelectedCant = false) {
       sgnDb.fechasNotas = res.fechasNotas || [];
       sgnDb.actividadesAsignadas = res.actividadesAsignadas || [];
       sgnDb.actividadesEntregadas = res.actividadesEntregadas || [];
+      sgnDb.extension = res.extension || [];
+      sgnDb.pagos = res.pagos || [];
+      sgnDb.banco = res.banco || [];
 
+      buildPagosExtJoined();
       renderAllDashboardTables(keepSelectedCant);
       populateDropdownOptions();
     } else {
@@ -146,6 +161,8 @@ function renderAllDashboardTables(keepSelectedCant = false) {
   renderEstudiantesTable();
   if (sgnAuth.isSuperAdmin()) {
     renderProfesoresTable();
+    populateExtensionDropdowns();
+    renderExtensionTable();
   }
   renderUnidadesTable();
   renderProgramasTable();
@@ -1478,7 +1495,8 @@ const HASH_TAB_MAP = {
   '#programas': '#tab-programas-btn',
   '#calificaciones': '#tab-notas-btn',
   '#actividades': '#tab-actividades-btn',
-  '#perfil': '#tab-perfil-btn'
+  '#perfil': '#tab-perfil-btn',
+  '#extension': '#tab-extension-btn'
 };
 
 const TAB_HASH_MAP = {
@@ -1488,7 +1506,8 @@ const TAB_HASH_MAP = {
   'tab-programas-btn': '#programas',
   'tab-notas-btn': '#calificaciones',
   'tab-actividades-btn': '#actividades',
-  'tab-perfil-btn': '#perfil'
+  'tab-perfil-btn': '#perfil',
+  'tab-extension-btn': '#extension'
 };
 
 function setupHashNavigation() {
@@ -1728,3 +1747,291 @@ function saveNotaEntregaSubmit(idEntrega) {
     }
   });
 }
+
+/**
+ * ==================== MÓDULO EXTENSIÓN UNIVERSITARIA (SUPER ADMIN) ====================
+ */
+
+function buildPagosExtJoined() {
+  sgnDb.pagosExtJoined = (sgnDb.pagos || []).map(p => {
+    const st = (sgnDb.estudiantes || []).find(e => e.id == p.id_usuario);
+    const ext = (sgnDb.extension || []).find(ex => ex.id == p.id_extension);
+    const bnk = (sgnDb.banco || []).find(b => b.id == p.id_banco);
+    let rawEstado = (p.estado !== undefined && p.estado !== null && p.estado !== "") ? p.estado.toString().toUpperCase().trim() : "FALSE";
+    return {
+      id: p.id,
+      id_usuario: p.id_usuario,
+      cedula: st ? st.cedula : "N/A",
+      nombre_completo: st ? st.nombre_completo : "Desconocido",
+      id_extension: p.id_extension,
+      curso: ext ? ext.taller : "N/A",
+      estado_curso: ext ? (ext.estado || "EN_CURSO") : "EN_CURSO",
+      id_banco: p.id_banco,
+      banco: bnk ? bnk.banco : "N/A",
+      monto: p.monto,
+      numero_transferencia: p.numero_transferencia,
+      fecha_transferencia: p.fecha_transferencia,
+      capture: p.capture,
+      estado: rawEstado
+    };
+  });
+}
+
+function populateExtensionDropdowns() {
+  const $selectExt = $('#selectExtensionGestion');
+  const currentVal = $selectExt.val();
+  $selectExt.empty().append('<option value="">-- Todos los Cursos / Talleres --</option>');
+  
+  (sgnDb.extension || []).forEach(ext => {
+    const isFinalizado = (ext.estado === "FINALIZADO");
+    const statusLabel = isFinalizado ? " [IMPARTIDO / FINALIZADO]" : " [EN DESARROLLO]";
+    $selectExt.append(`<option value="${ext.id}">${ext.taller} (USD $${ext.valor})${statusLabel}</option>`);
+  });
+
+  if (currentVal) {
+    $selectExt.val(currentVal);
+  }
+}
+
+function renderExtensionTable() {
+  const selectedCursoId = $('#selectExtensionGestion').val();
+  const $tbody = $('#tbodyExtensionPagos');
+  const $statusBox = $('#extCursoStatusBox');
+  $tbody.empty();
+
+  // Renderizar información y control de estado del curso seleccionado
+  if (selectedCursoId) {
+    const cursoObj = (sgnDb.extension || []).find(e => e.id == selectedCursoId);
+    if (cursoObj) {
+      const isFinalizado = (cursoObj.estado === "FINALIZADO");
+      const badgeHTML = isFinalizado 
+        ? `<span class="badge bg-success fs-6"><i class="fa-solid fa-graduation-cap me-1"></i> CURSO IMPARTIDO / FINALIZADO</span>`
+        : `<span class="badge bg-warning text-dark fs-6"><i class="fa-solid fa-clock me-1"></i> CURSO EN DESARROLLO</span>`;
+
+      const btnHTML = isFinalizado
+        ? `<button class="btn btn-outline-warning btn-sm fw-bold" onclick="toggleEstadoCurso(${cursoObj.id}, 'EN_CURSO')"><i class="fa-solid fa-rotate-left me-1"></i> Reabrir / Marcar En Desarrollo</button>`
+        : `<button class="btn btn-primary btn-sm fw-bold" onclick="toggleEstadoCurso(${cursoObj.id}, 'FINALIZADO')"><i class="fa-solid fa-check-double me-1"></i> Indicar que el Curso ya se ha Dado (Finalizar)</button>`;
+
+      $statusBox.html(`
+        <div class="card border-primary-subtle shadow-sm bg-light">
+          <div class="card-body p-3 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+              <h5 class="fw-bold text-navy mb-1">${cursoObj.taller}</h5>
+              <p class="text-muted small mb-2">${cursoObj.descripcion || 'Sin descripción'}</p>
+              <div class="d-flex align-items-center gap-2">
+                ${badgeHTML}
+                <span class="badge bg-light text-dark border">Costo: $${cursoObj.valor} USD</span>
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              ${btnHTML}
+              <a href="https://cyt.uptpc.edu.ve/certificaciones/consulta.html" target="_blank" class="btn btn-outline-success btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Portal de Certificados
+              </a>
+            </div>
+          </div>
+        </div>
+      `).slideDown(200);
+    } else {
+      $statusBox.slideUp(200).html('');
+    }
+  } else {
+    $statusBox.slideUp(200).html('');
+  }
+
+  let list = sgnDb.pagosExtJoined || [];
+  if (selectedCursoId) {
+    list = list.filter(p => p.id_extension == selectedCursoId);
+  }
+
+  if (list.length === 0) {
+    $tbody.append(`
+      <tr>
+        <td colspan="11" class="text-center text-muted py-5">
+          <div class="mb-3">
+            <i class="fa-solid fa-user-slash fs-1 text-muted opacity-50"></i>
+          </div>
+          <h5 class="fw-bold text-navy mb-1">Aún no hay usuarios o personas inscritas en este curso o taller</h5>
+          <p class="text-muted small max-w-500 mx-auto mb-0">
+            Actualmente no se registran declaraciones de pago para el filtro seleccionado. Una vez que los estudiantes efectúen su inscripción desde el portal de extensión, aparecerán en esta lista para su gestión y emisión de certificados.
+          </p>
+        </td>
+      </tr>
+    `);
+    return;
+  }
+
+  list.forEach(p => {
+    let captureHTML = '<span class="text-muted small">Sin comprobante</span>';
+    if (p.capture) {
+      if (p.capture.startsWith('http://') || p.capture.startsWith('https://')) {
+        captureHTML = `<a href="${p.capture}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver Comprobante</a>`;
+      } else {
+        captureHTML = `<span class="badge bg-secondary" title="${p.capture}">${p.capture.substring(0, 15)}...</span>`;
+      }
+    }
+
+    const isVisto = (p.estado === "TRUE");
+    const estadoBadge = isVisto
+      ? `<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i> VISTO / IMPARTIDO</span>`
+      : `<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> POR VER (FALSE)</span>`;
+
+    const btnToggleAction = isVisto
+      ? `<button class="btn btn-sm btn-outline-secondary fw-bold" onclick="togglePagoEstado(${p.id}, 'FALSE')" title="Cambiar a Por Ver (FALSE)"><i class="fa-solid fa-rotate-left me-1"></i> Reabrir</button>`
+      : `<button class="btn btn-sm btn-outline-success fw-bold" onclick="togglePagoEstado(${p.id}, 'TRUE')" title="Marcar como Visto (TRUE)"><i class="fa-solid fa-check me-1"></i> Marcar Visto</button>`;
+
+    $tbody.append(`
+      <tr>
+        <td><strong>#${p.id}</strong></td>
+        <td><span class="badge bg-light text-navy border fw-bold">${p.cedula}</span></td>
+        <td class="fw-bold text-navy">${p.nombre_completo}</td>
+        <td><span class="badge bg-primary-subtle text-primary fw-bold">${p.curso}</span></td>
+        <td>${p.banco}</td>
+        <td class="fw-bold text-success">Bs. ${parseFloat(p.monto || 0).toLocaleString('es-VE', {minimumFractionDigits: 2})}</td>
+        <td><code>${p.numero_transferencia}</code></td>
+        <td><i class="fa-regular fa-calendar-check text-primary me-1"></i> ${p.fecha_transferencia}</td>
+        <td>${captureHTML}</td>
+        <td>${estadoBadge}</td>
+        <td>${btnToggleAction}</td>
+      </tr>
+    `);
+  });
+}
+
+function togglePagoEstado(idPago, nuevoEstado) {
+  const estadoTxt = nuevoEstado === "TRUE" ? "VISTO / IMPARTIDO (TRUE)" : "POR VER (FALSE)";
+  sgnShowConfirm({
+    title: "Cambiar Estado del Estudiante",
+    message: `¿Desea marcar el registro #${idPago} como <strong>${estadoTxt}</strong>?`,
+    confirmText: "Sí, Cambiar Estado",
+    onConfirm: function () {
+      sgnApiCall("updatePagoEstado", { id_pago: idPago, estado: nuevoEstado }, { showLoading: true })
+        .then(function (res) {
+          if (res && res.success) {
+            sgnShowModal({ title: "Éxito", message: res.message, type: "success" });
+            loadDashboardData();
+          } else {
+            sgnShowModal({ title: "Error", message: res.message || "Error al actualizar estado.", type: "danger" });
+          }
+        });
+    }
+  });
+}
+
+function bulkMarcarPagoEstado(nuevoEstado) {
+  const selectedCursoId = $('#selectExtensionGestion').val();
+  const cursoObj = (sgnDb.extension || []).find(e => e.id == selectedCursoId);
+  const nombreCurso = cursoObj ? cursoObj.taller : "TODOS los Cursos / Talleres";
+  const estadoTxt = nuevoEstado === "TRUE" ? "VISTO / IMPARTIDO (TRUE)" : "POR VER (FALSE)";
+
+  sgnShowConfirm({
+    title: "Actualización Masiva en Bloque",
+    message: `¿Está seguro de marcar como <strong>${estadoTxt}</strong> a TODOS los estudiantes inscritos en: <br><strong class="text-primary">${nombreCurso}</strong>?<br><small class="text-muted">Los estudiantes marcados con estado TRUE seguirán visibles en el panel pero quedarán excluidos de las futuras descargas en CSV.</small>`,
+    confirmText: "Sí, Actualizar Bloque",
+    onConfirm: function () {
+      sgnApiCall("bulkUpdatePagoEstado", { id_extension: selectedCursoId || "", estado: nuevoEstado }, { showLoading: true })
+        .then(function (res) {
+          if (res && res.success) {
+            sgnShowModal({ title: "Actualización Masiva Exitosa", message: res.message, type: "success" });
+            loadDashboardData();
+          } else {
+            sgnShowModal({ title: "Error", message: res.message || "Error en la actualización masiva.", type: "danger" });
+          }
+        });
+    }
+  });
+}
+
+function toggleEstadoCurso(idExtension, nuevoEstado) {
+  const estadoMsg = nuevoEstado === "FINALIZADO" ? "IMPARTIDO / FINALIZADO" : "EN DESARROLLO";
+  
+  sgnShowConfirm({
+    title: "Cambiar Estado del Curso",
+    message: `¿Desea cambiar el estado del curso a <strong>${estadoMsg}</strong>?<br><small class="text-muted">Si marca el curso como finalizado, los estudiantes inscritos podrán consultar y descargar su certificado desde la web oficial de certificación.</small>`,
+    confirmText: "Sí, Cambiar Estado",
+    onConfirm: function () {
+      sgnApiCall("updateExtensionEstado", { id_extension: idExtension, estado: nuevoEstado }, { showLoading: true })
+        .then(function (res) {
+          if (res && res.success) {
+            sgnShowModal({
+              title: "Estado Actualizado",
+              message: res.message || "El estado del curso ha sido actualizado correctamente.",
+              type: "success"
+            });
+            loadDashboardData();
+          } else {
+            sgnShowModal({
+              title: "Error",
+              message: res.message || "No se pudo actualizar el estado del curso.",
+              type: "danger"
+            });
+          }
+        });
+    }
+  });
+}
+
+function exportExtensionCSV() {
+  const selectedCursoId = $('#selectExtensionGestion').val();
+  
+  let list = sgnDb.pagosExtJoined || [];
+  if (selectedCursoId) {
+    list = list.filter(p => p.id_extension == selectedCursoId);
+  }
+
+  // EXCLUIR los que ya fueron vistos / impartidos (estado === "TRUE")
+  list = list.filter(p => p.estado !== "TRUE");
+
+  if (list.length === 0) {
+    sgnShowModal({
+      title: "Sin Registros Pendientes",
+      message: "No existen personas pendientes (FALSE) por exportar para el filtro seleccionado. Todos los inscritos ya tienen el estado 'Visto / Impartido' (TRUE) y fueron excluidos del CSV.",
+      type: "info"
+    });
+    return;
+  }
+
+  const headers = ["id", "cedula", "nombre_completo", "curso", "banco", "monto", "numero_transferencia", "fecha_transferencia", "capture", "estado"];
+  
+  let csvRows = [];
+  csvRows.push(headers.join(","));
+
+  list.forEach(item => {
+    const row = [
+      escapeCsvField(item.id),
+      escapeCsvField(item.cedula),
+      escapeCsvField(item.nombre_completo),
+      escapeCsvField(item.curso),
+      escapeCsvField(item.banco),
+      escapeCsvField(item.monto),
+      escapeCsvField(item.numero_transferencia),
+      escapeCsvField(item.fecha_transferencia),
+      escapeCsvField(item.capture),
+      escapeCsvField(item.estado || "FALSE")
+    ];
+    csvRows.push(row.join(","));
+  });
+
+  const csvString = "\uFEFF" + csvRows.join("\n");
+  const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement("a");
+  a.href = url;
+  const filterName = selectedCursoId ? "curso_" + selectedCursoId : "todos";
+  a.download = `extension_pagos_pendientes_${filterName}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsvField(val) {
+  if (val === null || val === undefined) return '""';
+  let str = val.toString().replace(/"/g, '""');
+  if (str.includes(",") || str.includes("\n") || str.includes('"')) {
+    str = `"${str}"`;
+  }
+  return str;
+}
+

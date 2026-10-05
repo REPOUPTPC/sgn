@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SGN - Extensión Universitaria | Cursos y Talleres UPTPC</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Bootstrap 5.3 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- FontAwesome 6 (Free) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  
+  <!-- Estilos Personalizados (Blanco + Azul) -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ==================== HEADER & NAVBAR (IGUAL QUE INDEX.HTML) ==================== -->
+  <header class="sgn-navbar">
+    <div class="container-fluid d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-3">
+        <a href="index.html" class="d-flex align-items-center gap-3 text-decoration-none">
+          <img src="img/cyt.png" alt="SGN Logo" class="brand-logo-img">
+          <div>
+            <span class="sgn-brand-title fs-4 d-block">SGN</span>
+            <span class="sgn-brand-subtitle">Sistema de Gestión de Notas - Unidad de Ciencia y Tecnología UPTPC</span>
+          </div>
+        </a>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <a href="index.html" class="btn btn-outline-primary btn-sm fw-bold">
+          <i class="fa-solid fa-house me-1"></i> Inicio / Calificaciones
+        </a>
+        <a href="extension.html" class="btn btn-primary-sgn btn-sm fw-bold">
+          <i class="fa-solid fa-graduation-cap me-1"></i> Extensión Universitaria
+        </a>
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-1" data-bs-toggle="modal" data-bs-target="#sgnLoginModal">
+          <i class="fa-solid fa-right-to-bracket me-1"></i> Iniciar Sesión (Docentes / Admin)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== CONTENIDO PRINCIPAL EXTENSIÓN ==================== -->
+  <main class="container py-4">
+    <div class="row justify-content-center">
+      <div class="col-lg-10 text-center mb-3">
+        <span class="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill fw-bold mb-2">
+          <i class="fa-solid fa-award me-1"></i> Coordinación de Extensión Universitaria
+        </span>
+        <h2 class="fw-extrabold text-navy mb-2">Inscripción en Cursos y Talleres de Extensión</h2>
+        <p class="text-muted mb-3">Ingrese su número de Cédula de Identidad para solicitar su inscripción en los Cursos y Talleres disponibles, declarar la transferencia bancaria y consultar sus inscripciones activas.</p>
+      </div>
+
+      <!-- Buscador de Cédula -->
+      <div class="col-lg-8">
+        <div class="card card-custom p-4 mb-4 border-primary shadow-sm">
+          <form id="sgnExtensionSearchForm">
+            <label for="sgnSearchCedulaInput" class="form-label fw-bold text-navy mb-2">
+              <i class="fa-solid fa-id-card text-primary me-2"></i> Número de Cédula de Identidad del Estudiante
+            </label>
+            <div class="search-box-group mb-3">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="sgnSearchCedulaInput" class="form-control form-control-lg search-box-input" placeholder="Ej: V-12345678 o 12345678" required>
+            </div>
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+              <button type="submit" class="btn btn-primary-sgn px-5">
+                <i class="fa-solid fa-search me-2"></i> Consultar Mis Inscripciones & Talleres
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ÁREA DE RESULTADOS DE EXTENSIÓN ==================== -->
+    <div id="sgnExtensionResultArea" style="display: none;">
+      
+      <!-- Ficha de Datos del Estudiante -->
+      <div class="card card-custom mb-4">
+        <div class="card-header-blue d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <h4 class="mb-0 fw-bold" id="extStNameDisplay">Nombre del Estudiante</h4>
+            <span class="opacity-75">Estudiante Registrado en el Sistema</span>
+          </div>
+          <div>
+            <span class="badge bg-light text-navy fw-bold fs-6" id="extStCedulaDisplay">V-00000000</span>
+          </div>
+        </div>
+        <div class="card-body p-4 bg-white">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <span class="text-muted d-block small">Correo Electrónico</span>
+              <strong class="text-navy fs-6" id="extStCorreoDisplay">estudiante@correo.com</strong>
+            </div>
+            <div class="col-md-6">
+              <span class="text-muted d-block small">Teléfono de Contacto</span>
+              <strong class="text-navy fs-6" id="extStTelefonoDisplay">0414-0000000</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjeta Informativa de Cuenta Bancaria Oficial & Tasa Oficial de Dólar API -->
+      <div class="card card-custom mb-4 border-info">
+        <div class="card-body p-4 bg-light">
+          <div class="row g-3 align-items-center">
+            <div class="col-lg-7">
+              <h5 class="fw-bold text-navy mb-2">
+                <i class="fa-solid fa-building-columns text-primary me-2"></i> Cuenta Bancaria Institucional para Pagos
+              </h5>
+              <div class="p-3 bg-white rounded-3 border">
+                <div class="row g-2 small">
+                  <div class="col-md-12">
+                    <strong class="text-navy d-block">Universidad Politécnica Territorial de Puerto Cabello</strong>
+                  </div>
+                  <div class="col-md-6">
+                    <span class="text-muted">RIF:</span> <strong>G-20005608-8</strong>
+                  </div>
+                  <div class="col-md-6">
+                    <span class="text-muted">Banco:</span> <strong>Banco de Venezuela</strong>
+                  </div>
+                  <div class="col-md-6">
+                    <span class="text-muted">Tipo de Cuenta:</span> <strong>Cuenta Corriente</strong>
+                  </div>
+                  <div class="col-md-12">
+                    <span class="text-muted">Número de Cuenta:</span> <code class="fs-6 fw-bold text-navy">01020317120000201359</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-lg-5 text-center text-lg-end">
+              <div class="p-3 bg-white rounded-3 border">
+                <span class="text-muted d-block small mb-1">Tasa de Cambio Oficial (API DolarApi)</span>
+                <span id="extDolarBadge" class="fs-5 fw-bold text-navy d-block">
+                  <i class="fa-solid fa-spinner fa-spin me-1"></i> Carga de Tasa...
+                </span>
+                <span class="text-muted d-block tiny-text mt-1">
+                  <i class="fa-solid fa-arrows-rotate me-1"></i> Cambio oficial obtenido en tiempo real desde <code>BCV</code>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulario de Inscripción y Declaración de Pago -->
+      <div class="card card-custom mb-4">
+        <div class="card-header bg-white py-3 border-bottom">
+          <h4 class="fw-bold text-navy mb-0">
+            <i class="fa-solid fa-file-invoice-dollar text-success me-2"></i> Formulario de Inscripción y Declaración de Pago
+          </h4>
+        </div>
+        <div class="card-body p-4">
+          <form id="sgnExtensionPagoForm">
+            <div class="row g-3">
+              
+              <!-- Selector de Curso / Taller -->
+              <div class="col-md-12">
+                <label for="extCursoSelect" class="form-label fw-bold text-navy">
+                  1. Seleccione el Curso o Taller de Extensión *
+                </label>
+                <select id="extCursoSelect" class="form-select form-select-lg border-primary" required>
+                  <option value="">-- Cargar Lista de Cursos --</option>
+                </select>
+                <div id="extCursoDescripcionBox" class="alert alert-info rounded-3 mt-2 py-2 px-3 small" style="display: none;"></div>
+              </div>
+
+              <!-- Selector de Banco de Origen -->
+              <div class="col-md-6">
+                <label for="extBancoSelect" class="form-label fw-bold text-navy">
+                  2. Banco de Origen (Desde donde realizó la transferencia) *
+                </label>
+                <select id="extBancoSelect" class="form-select" required>
+                  <option value="">-- Seleccionar Banco --</option>
+                </select>
+              </div>
+
+              <!-- Monto Equivalente en Bolívares -->
+              <div class="col-md-6">
+                <label for="extMontoTransferencia" class="form-label fw-bold text-navy">
+                  3. Monto Transferido en Bolívares (Bs.) *
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text fw-bold">Bs.</span>
+                  <input type="number" step="0.01" id="extMontoTransferencia" class="form-control fw-bold text-success fs-6" placeholder="0.00" required>
+                </div>
+                <div class="form-text">
+                  Costo en USD convertido automáticamente al Dólar Oficial: <strong id="extMontoCalculadoDisplay" class="text-navy">Bs. 0,00</strong>
+                </div>
+              </div>
+
+              <!-- Número de Referencia o Transferencia -->
+              <div class="col-md-6">
+                <label for="extNumeroTransferencia" class="form-label fw-bold text-navy">
+                  4. Número de Referencia / Transferencia *
+                </label>
+                <input type="text" id="extNumeroTransferencia" class="form-control" placeholder="Ej: 0012345678" required>
+              </div>
+
+              <!-- Fecha de Transferencia -->
+              <div class="col-md-6">
+                <label for="extFechaTransferencia" class="form-label fw-bold text-navy">
+                  5. Fecha de la Transferencia (DD/MM/AAAA) *
+                </label>
+                <input type="date" id="extFechaTransferencia" class="form-control" required>
+                <div class="form-text">La fecha se registrará y mostrará formalmente en formato DD/MM/AAAA.</div>
+              </div>
+
+              <!-- Comprobante / Capture de Pantalla (Subida directa de archivo) -->
+              <div class="col-md-12">
+                <label for="extCaptureFileInput" class="form-label fw-bold text-navy">
+                  <i class="fa-solid fa-file-arrow-up me-1 text-primary"></i> 6. Comprobante / Capture de Pantalla de la Transferencia (Opcional)
+                </label>
+                <input type="file" id="extCaptureFileInput" class="form-control" accept="image/*,.pdf">
+                <div class="form-text">
+                  Seleccione directamente el archivo de imagen (PNG, JPG, JPEG) o PDF de su comprobante de pago. El archivo se alojará en la carpeta institucional de Google Drive.
+                </div>
+              </div>
+
+            </div>
+
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+              <button type="submit" class="btn btn-success btn-lg px-5 text-white fw-bold">
+                <i class="fa-solid fa-paper-plane me-2"></i> Declarar Pago e Inscribirse
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Tabla de Cursos y Talleres Inscritos por el Estudiante -->
+      <div class="card card-custom mb-4">
+        <div class="card-header bg-white py-3 border-bottom">
+          <h4 class="fw-bold text-navy mb-0">
+            <i class="fa-solid fa-list-check text-primary me-2"></i> Mis Cursos y Talleres Inscritos
+          </h4>
+        </div>
+        <div class="card-body p-4">
+          <div class="table-responsive">
+            <table class="sgn-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Curso / Taller de Extensión</th>
+                  <th>Banco de Origen</th>
+                  <th>Monto (Bs.)</th>
+                  <th>Nº Referencia</th>
+                  <th>Fecha de Declaración</th>
+                  <th>Estado / Certificación</th>
+                  <th>Comprobante</th>
+                </tr>
+              </thead>
+              <tbody id="extInscripcionesTbody">
+                <!-- Renderizado dinámico desde js/extension.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ==================== MODAL DE REGISTRO ESTUDIANTIL ==================== -->
+  <div class="modal fade" id="sgnRegisterModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-plus me-2"></i> Registro de Estudiante</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="sgnRegisterStudentForm">
+          <div class="modal-body p-4">
+            <div class="alert alert-info rounded-3 mb-4">
+              <i class="fa-solid fa-circle-info me-2"></i> Ingrese sus datos personales para completar su registro en el sistema.
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label for="regCedula" class="form-label fw-bold">Cédula de Identidad *</label>
+                <div class="input-group">
+                  <select id="regNacionalidad" class="form-select" style="max-width: 95px;">
+                    <option value="V-" selected>V-</option>
+                    <option value="E-">E-</option>
+                  </select>
+                  <input type="text" id="regCedula" class="form-control" placeholder="12345678" required>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label for="regNombreCompleto" class="form-label fw-bold">Nombre Completo *</label>
+                <input type="text" id="regNombreCompleto" class="form-control text-uppercase" placeholder="EJ: JUAN PÉREZ" required style="text-transform: uppercase;">
+              </div>
+              <div class="col-md-6">
+                <label for="regCorreo" class="form-label fw-bold">Correo Electrónico</label>
+                <input type="email" id="regCorreo" class="form-control" placeholder="estudiante@correo.com">
+              </div>
+              <div class="col-md-6">
+                <label for="regTelefono" class="form-label fw-bold">Número de Teléfono</label>
+                <input type="text" id="regTelefono" class="form-control" placeholder="0414XXXXXXX">
+              </div>
+              <div class="col-md-6">
+                <label for="regIdPrograma" class="form-label fw-bold">Programa de Formación *</label>
+                <select id="regIdPrograma" class="form-select" required>
+                  <option value="">Cargando programas...</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label for="regUnidadSeccion" class="form-label fw-bold">Unidad Curricular y Sección *</label>
+                <select id="regUnidadSeccion" class="form-select" disabled required>
+                  <option value="">-- Seleccione primero un Programa --</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn px-4">Completar Registro</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE LOGIN (ADMIN / DOCENTE) ==================== -->
+  <div class="modal fade" id="sgnLoginModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-lock me-2"></i> Acceso al Sistema</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="sgnLoginForm">
+          <div class="modal-body p-4">
+            <div class="text-center mb-4">
+              <img src="img/cyt.png" alt="SGN Logo" class="mb-2" style="max-height: 60px;">
+              <h5 class="fw-bold text-navy">Super Admin & Docentes</h5>
+            </div>
+            <div class="mb-3">
+              <label for="loginUserInput" class="form-label fw-bold">Usuario (Cédula o Correo)</label>
+              <input type="text" id="loginUserInput" class="form-control" placeholder="Ej: V-12345678 o correo@uptpc.edu.ve" required>
+            </div>
+            <div class="mb-3">
+              <label for="loginPassInput" class="form-label fw-bold">Contraseña o Secreto Admin</label>
+              <div class="input-group">
+                <input type="password" id="loginPassInput" class="form-control" placeholder="Ingrese su clave o secreto" required>
+                <button class="btn btn-outline-secondary toggle-password" type="button" data-target="loginPassInput">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn px-4">Ingresar al Dashboard</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER (IGUAL QUE INDEX.HTML) -->
+  <footer class="sgn-footer text-center">
+    <div class="container">
+      <p class="mb-0">&copy; 2026 Sistema de Gestión de Notas (SGN). Todos los derechos reservados.</p>
+    </div>
+  </footer>
+
+  <!-- JS SCRIPTS -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
+  
+  <!-- SGN Modulos -->
+  <script src="js/config.js?v=1.1"></script>
+  <script src="js/modals.js?v=1.1"></script>
+  <script src="js/auth.js?v=1.1"></script>
+  <script src="js/student.js?v=1.1"></script>
+  <script src="js/extension.js?v=1.1"></script>
+  
+  <script>
+    // Evento Formulario Login
+    $('#sgnLoginForm').on('submit', function(e) {
+      e.preventDefault();
+      const user = $('#loginUserInput').val().trim();
+      const pass = $('#loginPassInput').val().trim();
+      
+      sgnAuth.login(user, pass).then(function(res) {
+        bootstrap.Modal.getInstance(document.getElementById('sgnLoginModal')).hide();
+        sgnShowModal({
+          title: "Acceso Concedido",
+          message: `Bienvenido(a), ${res.user.nombre}. Redirigiendo al panel de control...`,
+          type: "success",
+          onConfirm: function() {
+            window.location.href = "dashboard.html";
+          }
+        });
+      }).catch(function(err) {
+        sgnShowModal({
+          title: "Error de Autenticación",
+          message: err.message || "Usuario o clave/secreto incorrectos.",
+          type: "danger"
+        });
+      });
+    });
+  </script>
+</body>
+</html>
