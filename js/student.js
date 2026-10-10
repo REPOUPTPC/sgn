@@ -767,8 +767,8 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
     $('#entregaActualStatus').hide();
   }
 
-  // Activar por defecto la pestaña de subida de archivo
-  const tabBtn = new bootstrap.Tab(document.getElementById('tab-tipo-archivo'));
+  // Activar por defecto la pestaña de Enlace (Google Drive / Canva)
+  const tabBtn = new bootstrap.Tab(document.getElementById('tab-tipo-link'));
   tabBtn.show();
 
   const bsModal = new bootstrap.Modal(document.getElementById('sgnEntregaModal'));
