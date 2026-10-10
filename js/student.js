@@ -8,6 +8,7 @@ let sgnPublicData = {
 };
 
 let currentStudentData = null;
+let currentStudentResponse = null;
 
 $(document).ready(function () {
   loadPublicData();
@@ -148,6 +149,7 @@ function performStudentSearch(cedula) {
     } else {
       // Estudiante Encontrado -> Renderizar Desempeño Académico
       currentStudentData = res.student;
+      currentStudentResponse = res;
       renderStudentAcademicProfile(res);
     }
   });
@@ -773,6 +775,32 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
   bsModal.show();
 }
 
+function handleEntregaSuccess(res) {
+  if (currentEntregaActivity) {
+    currentEntregaActivity.entrega = res.entrega || currentEntregaActivity.entrega || "";
+    currentEntregaActivity.fecha_entrega = res.fecha_entrega || new Date().toLocaleDateString('es-VE');
+  }
+
+  if (currentStudentResponse && currentStudentResponse.notas) {
+    const actId = $('#entregaActividadId').val();
+    currentStudentResponse.notas.forEach(n => {
+      if (n.actividades) {
+        n.actividades.forEach(act => {
+          if (String(act.id) === String(actId)) {
+            act.entrega = res.entrega || act.entrega || "";
+            act.fecha_entrega = res.fecha_entrega || new Date().toLocaleDateString('es-VE');
+          }
+        });
+      }
+    });
+    renderStudentAcademicProfile(currentStudentResponse);
+  }
+
+  if (currentStudentData && currentStudentData.cedula) {
+    performStudentSearch(currentStudentData.cedula);
+  }
+}
+
 function submitEstudianteEntrega() {
   const idActividad = $('#entregaActividadId').val();
   const idEstudiante = $('#entregaEstudianteId').val();
@@ -808,15 +836,11 @@ function submitEstudianteEntrega() {
         $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
         if (res && res.success) {
           bootstrap.Modal.getInstance(document.getElementById('sgnEntregaModal')).hide();
+          handleEntregaSuccess(res);
           sgnShowModal({
             title: "¡Entrega Realizada!",
             message: "Su tarea ha sido subida con éxito a Google Drive y enviada al docente.",
-            type: "success",
-            onConfirm: function () {
-              if (currentStudentData && currentStudentData.cedula) {
-                performStudentSearch(currentStudentData.cedula);
-              }
-            }
+            type: "success"
           });
         } else {
           sgnShowModal({ title: "Error en Entrega", message: res.message || "No se pudo procesar la entrega.", type: "danger" });
@@ -843,15 +867,11 @@ function submitEstudianteEntrega() {
       $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
       if (res && res.success) {
         bootstrap.Modal.getInstance(document.getElementById('sgnEntregaModal')).hide();
+        handleEntregaSuccess(res);
         sgnShowModal({
           title: "¡Entrega Registrada!",
           message: "El enlace de su actividad ha sido guardado exitosamente.",
-          type: "success",
-          onConfirm: function () {
-            if (currentStudentData && currentStudentData.cedula) {
-              performStudentSearch(currentStudentData.cedula);
-            }
-          }
+          type: "success"
         });
       } else {
         sgnShowModal({ title: "Error", message: res.message || "No se pudo registrar la entrega.", type: "danger" });

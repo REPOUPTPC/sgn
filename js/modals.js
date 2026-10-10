@@ -63,7 +63,15 @@ function sgnShowModal(options) {
   bsModal.show();
 
   if (typeof options.onConfirm === 'function') {
-    $('#sgnUniversalModalOkBtn').one('click', options.onConfirm);
+    let executed = false;
+    const runConfirm = function() {
+      if (!executed) {
+        executed = true;
+        options.onConfirm();
+      }
+    };
+    $('#sgnUniversalModalOkBtn').one('click', runConfirm);
+    $('#sgnUniversalModal').one('hidden.bs.modal', runConfirm);
   }
 }
 
