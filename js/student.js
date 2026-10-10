@@ -801,6 +801,24 @@ function handleEntregaSuccess(res) {
   }
 }
 
+/**
+ * Validador de enlaces permitidos para entregas: Google Drive o Canva únicamente
+ */
+function isValidDriveOrCanvaUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  let clean = url.trim().toLowerCase();
+  if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
+
+  if (clean.includes("wps.com") || clean.includes("onedrive") || clean.includes("dropbox.com") || clean.includes("office.com")) {
+    return false;
+  }
+
+  return clean.includes("drive.google.com") || 
+         clean.includes("docs.google.com") || 
+         clean.includes("canva.com") || 
+         clean.includes("canva.site");
+}
+
 function submitEstudianteEntrega() {
   const idActividad = $('#entregaActividadId').val();
   const idEstudiante = $('#entregaEstudianteId').val();
@@ -850,10 +868,19 @@ function submitEstudianteEntrega() {
     reader.readAsDataURL(file);
 
   } else {
-    // Opción Enlace URL (Canva, Drive, etc.)
+    // Opción Enlace URL (Google Drive o Canva)
     const url = $('#entregaUrlInput').val().trim();
     if (!url || !url.startsWith("http")) {
       sgnShowModal({ title: "Enlace Inválido", message: "Por favor ingrese un enlace URL válido que comience con http:// o https://", type: "warning" });
+      return;
+    }
+
+    if (!isValidDriveOrCanvaUrl(url)) {
+      sgnShowModal({ 
+        title: "Enlace No Permitido", 
+        message: "Únicamente se permiten entregas mediante enlaces de <strong>Google Drive</strong> (drive.google.com, docs.google.com) o <strong>Canva</strong> (canva.com). No se aceptan enlaces de WPS Office, OneDrive u otros servicios.", 
+        type: "warning" 
+      });
       return;
     }
 
