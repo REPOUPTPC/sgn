@@ -319,23 +319,32 @@
               <span id="entregaModalActividadDesc" class="small">Descripción e instrucciones de la actividad.</span>
             </div>
 
-            <!-- Pestañas de método de entrega: Enlace (Google Drive / Canva) vs Archivo a Drive -->
+            <!-- Pestañas de método de entrega: Archivo PDF/Doc vs Enlace (Google Drive / Canva) -->
             <ul class="nav nav-pills nav-fill bg-light p-1 rounded border mb-3" id="entregaTipoTabs" role="tablist">
               <li class="nav-item" role="presentation">
-                <button class="nav-link active fw-bold small" id="tab-tipo-link" data-bs-toggle="pill" data-bs-target="#entrega-pane-link" type="button" role="tab">
-                  <i class="fa-solid fa-link me-1"></i> Enlace Google Drive / Canva
+                <button class="nav-link active fw-bold small" id="tab-tipo-archivo" data-bs-toggle="pill" data-bs-target="#entrega-pane-archivo" type="button" role="tab">
+                  <i class="fa-solid fa-file-arrow-up me-1"></i> Subir Archivo (PDF, DOCX, PPT, ODT, ZIP)
                 </button>
               </li>
               <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold small" id="tab-tipo-archivo" data-bs-toggle="pill" data-bs-target="#entrega-pane-archivo" type="button" role="tab">
-                  <i class="fa-solid fa-file-arrow-up me-1"></i> Subir Archivo a Google Drive
+                <button class="nav-link fw-bold small" id="tab-tipo-link" data-bs-toggle="pill" data-bs-target="#entrega-pane-link" type="button" role="tab">
+                  <i class="fa-solid fa-link me-1"></i> Enlace Google Drive / Canva
                 </button>
               </li>
             </ul>
 
             <div class="tab-content" id="entregaTipoContent">
-              <!-- Pane 1: Enlace URL -->
-              <div class="tab-pane fade show active" id="entrega-pane-link" role="tabpanel">
+              <!-- Pane 1: Archivo -->
+              <div class="tab-pane fade show active" id="entrega-pane-archivo" role="tabpanel">
+                <div class="mb-3">
+                  <label for="entregaFileInput" class="form-label fw-bold">Seleccionar Archivo (PDF, DOCX, PPT, etc.) *</label>
+                  <input type="file" id="entregaFileInput" class="form-control" accept=".pdf,.doc,.docx,.ppt,.pptx,.odt,.png,.jpg,.jpeg,.zip">
+                  <div class="form-text mt-1">Formatos admitidos: PDF, DOCX, PPT, ODT, Imágenes o ZIP (Máx. 15MB). El archivo se alojará en Google Drive con acceso directo para el docente.</div>
+                </div>
+              </div>
+
+              <!-- Pane 2: Enlace URL -->
+              <div class="tab-pane fade" id="entrega-pane-link" role="tabpanel">
                 <div class="mb-3">
                   <div class="d-flex align-items-center justify-content-between mb-2">
                     <label for="entregaUrlInput" class="form-label fw-bold mb-0">Enlace de Entrega (URL) *</label>
@@ -346,23 +355,15 @@
                   </div>
                   <input type="url" id="entregaUrlInput" class="form-control" placeholder="https://drive.google.com/file/d/... o https://www.canva.com/design/...">
                   <div class="form-text text-muted mt-1">
-                    <strong>Nota:</strong> Solo se permiten enlaces oficiales de <strong>Google Drive</strong> o <strong>Canva</strong>. No se aceptan enlaces de WPS Office, OneDrive u otros servicios.
+                    <strong>Nota:</strong> Solo se permiten enlaces oficiales de <strong>Google Drive</strong> (`drive.google.com`, `docs.google.com`) o <strong>Canva</strong> (`canva.com`). No se aceptan enlaces de WPS Office, OneDrive u otros servicios.
                   </div>
                 </div>
                 <div class="alert alert-warning border-warning d-flex align-items-start gap-2 mb-0 py-2 px-3">
-                  <i class="fa-solid fa-triangle-exclamation text-warning mt-1"></i>
+                  <i class="fa-solid fa-lock-open text-warning mt-1"></i>
                   <small class="text-dark">
-                    <strong>Importante sobre Privacidad:</strong> Asegúrate de configurar los permisos de tu enlace de Google Drive o Canva como <strong>Público ("Cualquier persona con el enlace puede ver")</strong> para que el docente pueda evaluar tu trabajo.
+                    <strong>Requisito de Privacidad Obligatorio:</strong> Tu enlace de Google Drive DEBE ser <strong>Público ("Cualquier persona con el enlace")</strong>.<br>
+                    <span class="text-muted">En Google Drive: Haz clic en <i>Compartir</i> &rarr; <i>Acceso general</i> &rarr; Cambia a <strong>"Cualquier persona con el enlace" (Lector)</strong>. El sistema verificará el acceso automáticamente antes de registrar la entrega.</span>
                   </small>
-                </div>
-              </div>
-
-              <!-- Pane 2: Archivo -->
-              <div class="tab-pane fade" id="entrega-pane-archivo" role="tabpanel">
-                <div class="mb-3">
-                  <label for="entregaFileInput" class="form-label fw-bold">Seleccionar Archivo Documento *</label>
-                  <input type="file" id="entregaFileInput" class="form-control" accept=".pdf,.doc,.docx,.ppt,.pptx,.odt,.png,.jpg,.jpeg,.zip">
-                  <div class="form-text mt-1">Formatos admitidos: PDF, DOCX, PPT, ODT, Imágenes o ZIP (Máx. 15MB). El archivo se guardará automáticamente en Google Drive con acceso directo para el docente.</div>
                 </div>
               </div>
             </div>

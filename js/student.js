@@ -750,7 +750,7 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
   
   $('#entregaActividadId').val(idActividad);
   $('#entregaEstudianteId').val(idEstudiante);
-  $('#entregaFileInput').val('');
+  if ($('#entregaFileInput').length) $('#entregaFileInput').val('');
   $('#entregaUrlInput').val('');
   
   const evalUpper = (actData.numero_evaluacion || 'e1').toUpperCase();
@@ -767,9 +767,11 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
     $('#entregaActualStatus').hide();
   }
 
-  // Activar por defecto la pestaña de Enlace (Google Drive / Canva)
-  const tabBtn = new bootstrap.Tab(document.getElementById('tab-tipo-link'));
-  tabBtn.show();
+  // Activar por defecto la pestaña de Subir Archivo
+  if (document.getElementById('tab-tipo-archivo')) {
+    const tabBtn = new bootstrap.Tab(document.getElementById('tab-tipo-archivo'));
+    tabBtn.show();
+  }
 
   const bsModal = new bootstrap.Modal(document.getElementById('sgnEntregaModal'));
   bsModal.show();
@@ -827,7 +829,7 @@ function submitEstudianteEntrega() {
   
   if (isFileTabActive) {
     const fileInput = document.getElementById('entregaFileInput');
-    if (!fileInput.files || fileInput.files.length === 0) {
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
       sgnShowModal({ title: "Archivo Requerido", message: "Por favor seleccione un archivo (PDF, DOCX, PPT, etc.) para entregar.", type: "warning" });
       return;
     }
