@@ -1676,6 +1676,12 @@ function deleteActividadPrompt(id) {
   });
 }
 
+let currentEntregasState = {
+  idActividad: null,
+  entregas: [],
+  filtroActual: 'todos'
+};
+
 function openModalEntregas(idActividad) {
   const act = (sgnDb.actividadesAsignadas || []).find(a => a.id == idActividad);
   if (!act) return;
@@ -1687,66 +1693,377 @@ function openModalEntregas(idActividad) {
   $('#entregasActividadDesc').text(`Actividad: ${act.descripcion}`);
   $('#entregasActividadMeta').text(`${ucNombre} | ${numEval} | Fecha de Asignación: ${act.fecha_asignacion}`);
 
+  // Limpiar campos y filtros previos
+  $('#inputNotaMasivaEntregas').val('');
+  currentEntregasState.idActividad = idActividad;
+  currentEntregasState.filtroActual = 'todos';
+  $('#filterEntregasButtonGroup button').removeClass('active');
+  $('#btnFilterTodos').addClass('active');
+  $('#filterFeedbackText').html('<i class="fa-solid fa-circle-info me-1"></i> Mostrando todas las entregas');
+
   sgnApiCall("getEntregasByActividad", { id_actividades_asignadas: idActividad }, { showLoading: true }).then(function (res) {
     if (res && res.success) {
-      const entregas = res.entregas || [];
-      const $tbody = $('#tablaEntregasActividad tbody');
-      $tbody.empty();
+      currentEntregasState.entregas = res.entregas || [];
+      renderTablaEntregasActividad();
 
-      if (entregas.length === 0) {
-        $tbody.append('<tr><td colspan="6" class="text-center text-muted py-4"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>Aún ningún estudiante ha registrado una entrega para esta actividad.</td></tr>');
-      } else {
-        entregas.forEach(ent => {
-          let linkHtml = '<span class="text-muted small">Sin archivo</span>';
-          if (ent.entrega) {
-            linkHtml = `
-              <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" title="Abrir Documento o Enlace">
-                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver Entrega
-              </a>
-            `;
-          }
-
-          let notaVal = ent.nota !== undefined && ent.nota !== "" ? ent.nota : "";
-
-          $tbody.append(`
-            <tr>
-              <td class="fw-bold text-navy">${ent.cedula}</td>
-              <td>${ent.nombre_estudiante}</td>
-              <td><small class="text-muted">${ent.fecha_entrega || "N/A"}</small></td>
-              <td>${linkHtml}</td>
-              <td>
-                <input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm input-nota-entrega" id="notaEntrega_${ent.id}" value="${notaVal}" placeholder="0-20">
-              </td>
-              <td>
-                <button class="btn btn-sm btn-success" onclick="saveNotaEntregaSubmit(${ent.id})" title="Guardar Nota">
-                  <i class="fa-solid fa-check me-1"></i> Calificar
-                </button>
-              </td>
-            </tr>
-          `);
-        });
-      }
-
-      const bsModal = new bootstrap.Modal(document.getElementById('modalEntregasActividad'));
+      const bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEntregasActividad'));
       bsModal.show();
     }
   });
 }
 
-function saveNotaEntregaSubmit(idEntrega) {
-  const notaVal = $(`#notaEntrega_${idEntrega}`).val();
-  if (notaVal === "") {
-    sgnShowModal({ title: "Atención", message: "Ingrese una calificación de 0 a 20 puntos.", type: "warning" });
+function renderTablaEntregasActividad() {
+  const entregas = currentEntregasState.entregas || [];
+  const $tbody = $('#tablaEntregasActividad tbody');
+  $tbody.empty();
+
+  // Calcular estadísticas de calificación
+  const total = entregas.length;
+  const calificados = entregas.filter(e => e.nota !== undefined && e.nota !== "" && e.nota !== null).length;
+  const pendientes = total - calificados;
+  const porcentaje = total > 0 ? Math.round((calificados / total) * 100) : 0;
+
+  // Actualizar contadores y badges de encabezado
+  $('#countTotalEntregas').text(total);
+  $('#countCalificadosEntregas').text(calificados);
+  $('#countPendientesEntregas').text(pendientes);
+  $('#filterCountTodos').text(total);
+  $('#filterCountCalificados').text(calificados);
+  $('#filterCountPendientes').text(pendientes);
+
+  $('#percentEntregasTexto').text(`${porcentaje}% completado (${calificados} de ${total})`);
+  $('#progressBarEntregas').css('width', `${porcentaje}%`).attr('aria-valuenow', porcentaje);
+  $('#footerSummaryEntregas').html(`<i class="fa-solid fa-list-check me-1"></i> <strong>${total}</strong> entregas registradas: <span class="text-success fw-bold">${calificados} calificados</span> y <span class="text-warning-emphasis fw-bold">${pendientes} pendientes</span>.`);
+
+  if (entregas.length === 0) {
+    $tbody.append('<tr><td colspan="7" class="text-center text-muted py-4"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>Aún ningún estudiante ha registrado una entrega para esta actividad.</td></tr>');
     return;
   }
 
-  sgnApiCall("saveNotaEntrega", { id_entrega: idEntrega, nota: notaVal }).then(function (res) {
-    if (res && res.success) {
-      sgnShowModal({ title: "Calificado", message: res.message, type: "success" });
-      loadDashboardData();
+  entregas.forEach(ent => {
+    let linkHtml = '<span class="text-muted small"><i class="fa-regular fa-file-excel me-1"></i> Sin archivo</span>';
+    if (ent.entrega) {
+      linkHtml = `
+        <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" title="Abrir Documento o Enlace">
+          <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver Entrega
+        </a>
+      `;
+    }
+
+    const isCalificado = (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
+    const notaVal = isCalificado ? ent.nota : "";
+    const rowClass = isCalificado ? 'entrega-row-calificada' : 'entrega-row-pendiente';
+
+    let estadoBadgeHtml = '';
+    if (isCalificado) {
+      estadoBadgeHtml = `
+        <span class="badge bg-success-subtle text-success border border-success-subtle badge-status-entrega" id="badgeEstado_${ent.id}">
+          <i class="fa-solid fa-circle-check"></i> Calificado
+        </span>
+      `;
+    } else {
+      estadoBadgeHtml = `
+        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle badge-status-entrega" id="badgeEstado_${ent.id}">
+          <i class="fa-solid fa-clock"></i> Falta Nota
+        </span>
+      `;
+    }
+
+    const $row = $(`
+      <tr class="${rowClass}" id="rowEntrega_${ent.id}" data-id="${ent.id}" data-calificado="${isCalificado ? 'true' : 'false'}">
+        <td class="fw-bold text-navy">${ent.cedula}</td>
+        <td>
+          <div class="fw-semibold text-dark">${ent.nombre_estudiante}</div>
+        </td>
+        <td class="text-center" id="colEstado_${ent.id}">
+          ${estadoBadgeHtml}
+        </td>
+        <td><small class="text-muted"><i class="fa-regular fa-calendar me-1"></i>${ent.fecha_entrega || "N/A"}</small></td>
+        <td>${linkHtml}</td>
+        <td>
+          <input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm input-nota-entrega ${isCalificado ? 'nota-lista' : 'nota-vacia'}" id="notaEntrega_${ent.id}" data-id="${ent.id}" data-original="${notaVal}" value="${notaVal}" placeholder="0-20" oninput="onInputNotaEntregaChange(${ent.id})">
+        </td>
+        <td class="text-center">
+          <button class="btn btn-sm ${isCalificado ? 'btn-outline-success' : 'btn-success'} fw-bold" id="btnCalificar_${ent.id}" onclick="saveNotaEntregaSubmit(${ent.id})" title="${isCalificado ? 'Actualizar Nota' : 'Guardar Nota Individual'}">
+            <i class="fa-solid ${isCalificado ? 'fa-check-double' : 'fa-check'} me-1"></i> ${isCalificado ? 'Actualizar' : 'Calificar'}
+          </button>
+        </td>
+      </tr>
+    `);
+
+    // Respetar filtro activo si es diferente de 'todos'
+    if (currentEntregasState.filtroActual === 'calificados' && !isCalificado) {
+      $row.hide();
+    } else if (currentEntregasState.filtroActual === 'pendientes' && isCalificado) {
+      $row.hide();
+    }
+
+    $tbody.append($row);
+  });
+}
+
+function onInputNotaEntregaChange(idEntrega) {
+  const $input = $(`#notaEntrega_${idEntrega}`);
+  const $row = $(`#rowEntrega_${idEntrega}`);
+  const $badge = $(`#badgeEstado_${idEntrega}`);
+  const $btn = $(`#btnCalificar_${idEntrega}`);
+  const currentVal = $input.val();
+  const originalVal = $input.attr('data-original');
+
+  if (currentVal !== originalVal) {
+    $row.removeClass('entrega-row-calificada entrega-row-pendiente').addClass('entrega-row-modificada');
+    $badge.removeClass('bg-success-subtle text-success border-success-subtle bg-warning-subtle text-warning-emphasis border-warning-subtle')
+          .addClass('bg-primary-subtle text-primary border border-primary-subtle')
+          .html('<i class="fa-solid fa-pen"></i> Por Guardar');
+    $btn.removeClass('btn-outline-success btn-success').addClass('btn-primary')
+        .html('<i class="fa-solid fa-floppy-disk me-1"></i> Guardar');
+  } else {
+    const isOriginalCalificado = (originalVal !== "" && originalVal !== undefined && originalVal !== null);
+    $row.removeClass('entrega-row-modificada').addClass(isOriginalCalificado ? 'entrega-row-calificada' : 'entrega-row-pendiente');
+    if (isOriginalCalificado) {
+      $badge.removeClass('bg-primary-subtle text-primary border-primary-subtle bg-warning-subtle text-warning-emphasis border-warning-subtle')
+            .addClass('bg-success-subtle text-success border border-success-subtle')
+            .html('<i class="fa-solid fa-circle-check"></i> Calificado');
+      $btn.removeClass('btn-primary btn-success').addClass('btn-outline-success')
+          .html('<i class="fa-solid fa-check-double me-1"></i> Actualizar');
+    } else {
+      $badge.removeClass('bg-primary-subtle text-primary border-primary-subtle bg-success-subtle text-success border-success-subtle')
+            .addClass('bg-warning-subtle text-warning-emphasis border border-warning-subtle')
+            .html('<i class="fa-solid fa-clock"></i> Falta Nota');
+      $btn.removeClass('btn-primary btn-outline-success').addClass('btn-success')
+          .html('<i class="fa-solid fa-check me-1"></i> Calificar');
+    }
+  }
+}
+
+function filterEntregas(tipo, btn) {
+  currentEntregasState.filtroActual = tipo;
+  $('#filterEntregasButtonGroup button').removeClass('active');
+  $(btn).addClass('active');
+
+  const $feedback = $('#filterFeedbackText');
+  if (tipo === 'todos') {
+    $feedback.html('<i class="fa-solid fa-circle-info me-1"></i> Mostrando todas las entregas');
+  } else if (tipo === 'calificados') {
+    $feedback.html('<i class="fa-solid fa-filter me-1 text-success"></i> Mostrando únicamente estudiantes ya calificados');
+  } else if (tipo === 'pendientes') {
+    $feedback.html('<i class="fa-solid fa-filter me-1 text-warning"></i> Mostrando únicamente estudiantes que faltan por calificar');
+  }
+
+  $('#tablaEntregasActividad tbody tr').each(function () {
+    const isCalificado = $(this).attr('data-calificado') === 'true';
+    if (tipo === 'todos') {
+      $(this).show();
+    } else if (tipo === 'calificados') {
+      isCalificado ? $(this).show() : $(this).hide();
+    } else if (tipo === 'pendientes') {
+      !isCalificado ? $(this).show() : $(this).hide();
     }
   });
 }
+
+function aplicarNotaMasivaEntregas(modo) {
+  const rawNota = $('#inputNotaMasivaEntregas').val();
+  if (rawNota === "" || isNaN(parseFloat(rawNota))) {
+    sgnShowModal({
+      title: "Nota Requerida",
+      message: "Ingrese una calificación válida de 0 a 20 puntos en el campo de Nota Masiva.",
+      type: "warning"
+    });
+    return;
+  }
+
+  const notaNum = Math.min(20, Math.max(0, parseFloat(rawNota) || 0));
+  const entregas = currentEntregasState.entregas || [];
+
+  if (entregas.length === 0) {
+    sgnShowModal({
+      title: "Sin Entregas",
+      message: "No hay entregas registradas para calificar en esta actividad.",
+      type: "warning"
+    });
+    return;
+  }
+
+  let countAplicadas = 0;
+  entregas.forEach(ent => {
+    const $input = $(`#notaEntrega_${ent.id}`);
+    const originalVal = $input.attr('data-original');
+    const isOriginalCalificado = (originalVal !== "" && originalVal !== undefined && originalVal !== null);
+
+    if (modo === 'todos' || (modo === 'pendientes' && !isOriginalCalificado)) {
+      $input.val(notaNum);
+      onInputNotaEntregaChange(ent.id);
+      countAplicadas++;
+    }
+  });
+
+  if (countAplicadas === 0) {
+    sgnShowModal({
+      title: "Información",
+      message: "No se encontraron estudiantes pendientes de calificar para aplicar la nota.",
+      type: "info"
+    });
+    return;
+  }
+
+  sgnShowModal({
+    title: "Nota Masiva Asignada",
+    message: `Se ha colocado la calificación <strong>${notaNum}</strong> a <strong>${countAplicadas}</strong> estudiante(s).<br><br><span class="text-primary fw-bold"><i class="fa-solid fa-circle-info me-1"></i> Para consolidar y guardar los cambios, haga clic en el botón verde "Guardar Todas las Notas".</span>`,
+    type: "success"
+  });
+}
+
+function guardarTodasNotasEntregasSubmit() {
+  const entregas = currentEntregasState.entregas || [];
+  if (entregas.length === 0) {
+    sgnShowModal({ title: "Atención", message: "No hay entregas disponibles para calificar.", type: "warning" });
+    return;
+  }
+
+  const notasAGuardar = [];
+  let conError = false;
+
+  entregas.forEach(ent => {
+    const val = $(`#notaEntrega_${ent.id}`).val();
+    if (val !== "" && val !== undefined && val !== null) {
+      const num = parseFloat(val);
+      if (isNaN(num) || num < 0 || num > 20) {
+        conError = true;
+      } else {
+        notasAGuardar.push({
+          id_entrega: ent.id,
+          id: ent.id,
+          nota: num,
+          id_actividades_asignadas: ent.id_actividades_asignadas,
+          id_estudiante: ent.id_estudiante
+        });
+      }
+    }
+  });
+
+  if (conError) {
+    sgnShowModal({
+      title: "Notas Inválidas",
+      message: "Existen calificaciones con valores fuera del rango permitido (0 a 20 puntos). Por favor verifique.",
+      type: "danger"
+    });
+    return;
+  }
+
+  if (notasAGuardar.length === 0) {
+    sgnShowModal({
+      title: "Sin Notas Ingresadas",
+      message: "No ha ingresado ninguna calificación para guardar. Puede utilizar 'Calificación Masiva' o escribir las notas individualmente.",
+      type: "warning"
+    });
+    return;
+  }
+
+  // Intentar llamada masiva optimizada
+  sgnApiCall("bulkSaveNotasEntregas", { entregas: notasAGuardar }, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      // Actualizar estado en memoria
+      notasAGuardar.forEach(item => {
+        const target = (currentEntregasState.entregas || []).find(e => e.id == item.id_entrega);
+        if (target) target.nota = item.nota;
+      });
+
+      renderTablaEntregasActividad();
+      sgnShowModal({
+        title: "Calificaciones Guardadas",
+        message: res.message || `Se guardaron las calificaciones de ${notasAGuardar.length} estudiante(s) correctamente.`,
+        type: "success"
+      });
+      loadDashboardData();
+    } else if (res && !res.success && res.message && (res.message.includes("desconocida") || res.message.includes("Acción desconocida"))) {
+      // Fallback transparente: guardar secuencialmente si el backend de Apps Script aún no tiene el nuevo endpoint
+      guardarNotasSecuencialFallback(notasAGuardar);
+    } else {
+      sgnShowModal({
+        title: "Error",
+        message: (res && res.message) ? res.message : "Error al guardar calificaciones masivas.",
+        type: "danger"
+      });
+    }
+  });
+}
+
+function guardarNotasSecuencialFallback(notasAGuardar) {
+  if (typeof sgnShowLoading === 'function') sgnShowLoading(true);
+
+  let procesadas = 0;
+  let errores = 0;
+
+  function procesarSiguiente(index) {
+    if (index >= notasAGuardar.length) {
+      if (typeof sgnShowLoading === 'function') sgnShowLoading(false);
+      renderTablaEntregasActividad();
+      sgnShowModal({
+        title: "Calificaciones Guardadas",
+        message: `Se guardaron ${procesadas} calificación(es) correctamente.${errores > 0 ? ` (${errores} con error)` : ''}`,
+        type: errores === 0 ? "success" : "warning"
+      });
+      loadDashboardData();
+      return;
+    }
+
+    const item = notasAGuardar[index];
+    sgnApiCall("saveNotaEntrega", { id_entrega: item.id_entrega, nota: item.nota }, { showLoading: false }).then(function (res) {
+      if (res && res.success) {
+        procesadas++;
+        const target = (currentEntregasState.entregas || []).find(e => e.id == item.id_entrega);
+        if (target) target.nota = item.nota;
+      } else {
+        errores++;
+      }
+      setTimeout(function () {
+        procesarSiguiente(index + 1);
+      }, 150);
+    }).fail(function () {
+      errores++;
+      setTimeout(function () {
+        procesarSiguiente(index + 1);
+      }, 150);
+    });
+  }
+
+  procesarSiguiente(0);
+}
+
+function saveNotaEntregaSubmit(idEntrega) {
+  const notaVal = $(`#notaEntrega_${idEntrega}`).val();
+  if (notaVal === "" || isNaN(parseFloat(notaVal))) {
+    sgnShowModal({ title: "Atención", message: "Ingrese una calificación válida de 0 a 20 puntos.", type: "warning" });
+    return;
+  }
+
+  const numVal = Math.min(20, Math.max(0, parseFloat(notaVal) || 0));
+
+  sgnApiCall("saveNotaEntrega", { id_entrega: idEntrega, nota: numVal }, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      // Actualizar en el estado de memoria de entregas para reactividad inmediata
+      const ent = (currentEntregasState.entregas || []).find(e => e.id == idEntrega);
+      if (ent) {
+        ent.nota = numVal;
+      }
+
+      renderTablaEntregasActividad();
+
+      sgnShowModal({ title: "Calificado", message: res.message || "Calificación guardada correctamente.", type: "success" });
+      loadDashboardData();
+    } else {
+      sgnShowModal({ title: "Error", message: (res && res.message) ? res.message : "No se pudo guardar la calificación.", type: "danger" });
+    }
+  });
+}
+
+// Mantener scroll del modal de entregas si se cierra un modal superior de notificación
+$(document).on('hidden.bs.modal', '#sgnUniversalModal', function () {
+  if ($('#modalEntregasActividad').hasClass('show')) {
+    $('body').addClass('modal-open');
+  }
+});
 
 /**
  * ==================== MÓDULO EXTENSIÓN UNIVERSITARIA (SUPER ADMIN) ====================

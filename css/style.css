@@ -343,3 +343,75 @@ body {
 .max-w-400 {
   max-width: 400px;
 }
+
+/* ==================== ENTREGAS DE ESTUDIANTES (CALIFICACIÓN Y ESTADOS) ==================== */
+.entrega-row-calificada {
+  border-left: 4.5px solid #16a34a !important;
+  background-color: #ffffff;
+}
+
+.entrega-row-calificada:hover td {
+  background-color: #f0fdf4 !important;
+}
+
+.entrega-row-pendiente {
+  border-left: 4.5px solid #f59e0b !important;
+  background-color: #fffdf5 !important;
+}
+
+.entrega-row-pendiente td {
+  background-color: #fffdf5;
+}
+
+.entrega-row-pendiente:hover td {
+  background-color: #fef9c3 !important;
+}
+
+.entrega-row-modificada {
+  border-left: 4.5px solid #2563eb !important;
+  background-color: #eff6ff !important;
+}
+
+.entrega-row-modificada td {
+  background-color: #eff6ff;
+}
+
+.entrega-row-modificada:hover td {
+  background-color: #dbeafe !important;
+}
+
+.input-nota-entrega {
+  font-weight: 700 !important;
+  text-align: center;
+  font-size: 0.95rem;
+  border-radius: var(--radius-md) !important;
+  border: 1.5px solid #cbd5e1;
+  transition: all 0.2s ease-in-out;
+}
+
+.input-nota-entrega:focus {
+  border-color: var(--primary-blue) !important;
+  box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.2) !important;
+}
+
+.input-nota-entrega.nota-vacia {
+  border-color: #f59e0b;
+  background-color: #fffbeb;
+}
+
+.input-nota-entrega.nota-lista {
+  border-color: #16a34a;
+  background-color: #f0fdf4;
+}
+
+.badge-status-entrega {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.35rem 0.65rem;
+  border-radius: 50rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
