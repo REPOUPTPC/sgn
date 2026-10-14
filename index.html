@@ -323,7 +323,7 @@
             <ul class="nav nav-pills nav-fill bg-light p-1 rounded border mb-3" id="entregaTipoTabs" role="tablist">
               <li class="nav-item" role="presentation">
                 <button class="nav-link active fw-bold small" id="tab-tipo-archivo" data-bs-toggle="pill" data-bs-target="#entrega-pane-archivo" type="button" role="tab">
-                  <i class="fa-solid fa-file-arrow-up me-1"></i> Subir Archivo (PDF, DOCX, PPT, ODT, ZIP)
+                  <i class="fa-solid fa-file-pdf me-1"></i> Subir Archivo PDF (o DOCX, PPT, ZIP)
                 </button>
               </li>
               <li class="nav-item" role="presentation">
@@ -337,9 +337,11 @@
               <!-- Pane 1: Archivo -->
               <div class="tab-pane fade show active" id="entrega-pane-archivo" role="tabpanel">
                 <div class="mb-3">
-                  <label for="entregaFileInput" class="form-label fw-bold">Seleccionar Archivo (PDF, DOCX, PPT, etc.) *</label>
+                  <label for="entregaFileInput" class="form-label fw-bold">Seleccionar Archivo (PDF recomendado) *</label>
                   <input type="file" id="entregaFileInput" class="form-control" accept=".pdf,.doc,.docx,.ppt,.pptx,.odt,.png,.jpg,.jpeg,.zip">
-                  <div class="form-text mt-1">Formatos admitidos: PDF, DOCX, PPT, ODT, Imágenes o ZIP (Máx. 15MB). El archivo se alojará en Google Drive con acceso directo para el docente.</div>
+                  <div class="form-text mt-1">
+                    <i class="fa-solid fa-cloud-arrow-up text-primary me-1"></i> Formatos admitidos: PDF, DOCX, PPT, ODT, Imágenes o ZIP (Máx. 12MB). Tu archivo se subirá directamente a la carpeta oficial de entregas en <strong>Google Drive</strong> para la revisión del docente.
+                  </div>
                 </div>
               </div>
 
@@ -353,7 +355,13 @@
                       <span class="badge bg-info text-dark"><i class="fa-solid fa-palette me-1"></i> Canva</span>
                     </div>
                   </div>
-                  <input type="url" id="entregaUrlInput" class="form-control" placeholder="https://drive.google.com/file/d/... o https://www.canva.com/design/...">
+                  <div class="input-group">
+                    <input type="url" id="entregaUrlInput" class="form-control" placeholder="https://drive.google.com/file/d/... o https://www.canva.com/design/...">
+                    <button type="button" class="btn btn-outline-primary" id="btnVerificarLinkDrive" title="Comprobar si el enlace es público">
+                      <i class="fa-solid fa-shield-halved me-1"></i> Validar Enlace
+                    </button>
+                  </div>
+                  <div id="driveLinkFeedback" class="small mt-2" style="display: none;"></div>
                   <div class="form-text text-muted mt-1">
                     <strong>Nota:</strong> Solo se permiten enlaces oficiales de <strong>Google Drive</strong> (`drive.google.com`, `docs.google.com`) o <strong>Canva</strong> (`canva.com`). No se aceptan enlaces de WPS Office, OneDrive u otros servicios.
                   </div>
@@ -362,7 +370,7 @@
                   <i class="fa-solid fa-lock-open text-warning mt-1"></i>
                   <small class="text-dark">
                     <strong>Requisito de Privacidad Obligatorio:</strong> Tu enlace de Google Drive DEBE ser <strong>Público ("Cualquier persona con el enlace")</strong>.<br>
-                    <span class="text-muted">En Google Drive: Haz clic en <i>Compartir</i> &rarr; <i>Acceso general</i> &rarr; Cambia a <strong>"Cualquier persona con el enlace" (Lector)</strong>. El sistema verificará el acceso automáticamente antes de registrar la entrega.</span>
+                    <span class="text-muted">En Google Drive: Haz clic en <i>Compartir</i> &rarr; <i>Acceso general</i> &rarr; Selecciona <strong>"Cualquier persona con el enlace" (Lector)</strong>. El sistema validará automáticamente que el enlace sea accesible antes de registrar la entrega.</span>
                   </small>
                 </div>
               </div>

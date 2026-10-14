@@ -752,6 +752,7 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
   $('#entregaEstudianteId').val(idEstudiante);
   if ($('#entregaFileInput').length) $('#entregaFileInput').val('');
   $('#entregaUrlInput').val('');
+  $('#driveLinkFeedback').hide().empty();
   
   const evalUpper = (actData.numero_evaluacion || 'e1').toUpperCase();
   $('#entregaModalActividadTitulo').text(`Evaluación ${evalUpper}: ${actData.descripcion || ''}`);
@@ -825,25 +826,39 @@ function submitEstudianteEntrega() {
   const idActividad = $('#entregaActividadId').val();
   const idEstudiante = $('#entregaEstudianteId').val();
 
-  const isFileTabActive = $('#tab-tipo-archivo').hasClass('active');
+  // Comprobar si la pestaña activa es la de Subir Archivo
+  const isFileTabActive = $('#entrega-pane-archivo').hasClass('active') || $('#tab-tipo-archivo').hasClass('active');
   
   if (isFileTabActive) {
     const fileInput = document.getElementById('entregaFileInput');
     if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-      sgnShowModal({ title: "Archivo Requerido", message: "Por favor seleccione un archivo (PDF, DOCX, PPT, etc.) para entregar.", type: "warning" });
+      sgnShowModal({ 
+        title: "Archivo Requerido", 
+        message: "Por favor seleccione un archivo (PDF, DOCX, PPT, etc.) para entregar.", 
+        type: "warning" 
+      });
       return;
     }
 
     const file = fileInput.files[0];
-    const maxSize = 15 * 1024 * 1024; // 15MB
+    const maxSize = 12 * 1024 * 1024; // 12MB límite seguro para codificación base64
     if (file.size > maxSize) {
-      sgnShowModal({ title: "Archivo muy Grande", message: "El archivo seleccionado supera el límite de 15MB. Por favor comprímalo o envíe un enlace de Google Drive.", type: "warning" });
+      sgnShowModal({ 
+        title: "Archivo muy Grande", 
+        message: "El archivo seleccionado supera el límite de 12MB. Por favor comprímalo o envíe un enlace público de Google Drive.", 
+        type: "warning" 
+      });
       return;
     }
 
     $('#btnEnviarEntregaSubmit').prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Subiendo a Google Drive...');
 
     const reader = new FileReader();
+    reader.onerror = function () {
+      $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
+      sgnShowModal({ title: "Error", message: "No se pudo leer el archivo seleccionado.", type: "danger" });
+    };
+
     reader.onload = function (e) {
       const base64Data = e.target.result;
       
@@ -853,18 +868,21 @@ function submitEstudianteEntrega() {
         fileName: file.name,
         fileData: base64Data
       }, { showLoading: true }).then(function (res) {
-        $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
         if (res && res.success) {
           bootstrap.Modal.getInstance(document.getElementById('sgnEntregaModal')).hide();
           handleEntregaSuccess(res);
           sgnShowModal({
             title: "¡Entrega Realizada!",
-            message: "Su tarea ha sido subida con éxito a Google Drive y enviada al docente.",
+            message: "Su trabajo ha sido subido con éxito a la carpeta oficial de Google Drive y registrado para el docente.",
             type: "success"
           });
         } else {
-          sgnShowModal({ title: "Error en Entrega", message: res.message || "No se pudo procesar la entrega.", type: "danger" });
+          sgnShowModal({ title: "Error en Entrega", message: (res && res.message) || "No se pudo procesar la entrega.", type: "danger" });
         }
+      }).catch(function (err) {
+        sgnShowModal({ title: "Error de Conexión", message: "No se pudo completar la subida del archivo. Por favor revise su conexión.", type: "danger" });
+      }).always(function () {
+        $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
       });
     };
     reader.readAsDataURL(file);
@@ -886,26 +904,68 @@ function submitEstudianteEntrega() {
       return;
     }
 
-    $('#btnEnviarEntregaSubmit').prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Procesando...');
+    $('#btnEnviarEntregaSubmit').prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Validando y Guardando...');
 
     sgnApiCall("uploadEntregaEstudiante", {
       id_actividades_asignadas: idActividad,
       id_estudiante: idEstudiante,
       entregaUrl: url
     }, { showLoading: true }).then(function (res) {
-      $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
       if (res && res.success) {
         bootstrap.Modal.getInstance(document.getElementById('sgnEntregaModal')).hide();
         handleEntregaSuccess(res);
         sgnShowModal({
           title: "¡Entrega Registrada!",
-          message: "El enlace de su actividad ha sido guardado exitosamente.",
+          message: "El enlace de su actividad ha sido verificado como público y guardado exitosamente.",
           type: "success"
         });
       } else {
-        sgnShowModal({ title: "Error", message: res.message || "No se pudo registrar la entrega.", type: "danger" });
+        sgnShowModal({ title: "Verificación de Entrega", message: (res && res.message) || "No se pudo registrar la entrega.", type: "danger" });
       }
+    }).catch(function (err) {
+      sgnShowModal({ title: "Error de Conexión", message: "No se pudo conectar con el servidor para registrar la entrega.", type: "danger" });
+    }).always(function () {
+      $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
     });
   }
 }
+
+// Evento de validación interactiva del enlace de Google Drive
+$(document).on('click', '#btnVerificarLinkDrive', function () {
+  const url = $('#entregaUrlInput').val().trim();
+  const $feedback = $('#driveLinkFeedback');
+  const $btn = $(this);
+
+  if (!url || !url.startsWith("http")) {
+    $feedback.html('<span class="text-warning"><i class="fa-solid fa-triangle-exclamation me-1"></i> Ingrese una URL válida para verificar.</span>').show();
+    return;
+  }
+
+  if (!isValidDriveOrCanvaUrl(url)) {
+    $feedback.html('<span class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i> Únicamente se permiten enlaces de Google Drive o Canva.</span>').show();
+    return;
+  }
+
+  const lower = url.toLowerCase();
+  if (lower.includes("canva.com") || lower.includes("canva.site")) {
+    $feedback.html('<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i> Enlace de Canva permitido.</span>').show();
+    return;
+  }
+
+  $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-1"></i> Verificando...');
+  $feedback.html('<span class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i> Comprobando acceso público en Google Drive...</span>').show();
+
+  sgnApiCall("validateDriveLink", { url: url }, { showLoading: false }).then(function (res) {
+    if (res && res.status === "public") {
+      $feedback.html('<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> ¡Enlace Público verificado! Acceso general confirmado.</span>');
+    } else {
+      const detail = (res && res.detail) ? ` (${res.detail})` : '';
+      $feedback.html('<span class="text-danger fw-bold"><i class="fa-solid fa-circle-xmark me-1"></i> El enlace es PRIVADO o restringido' + detail + '. En Google Drive cambia Compartir &rarr; "Cualquier persona con el enlace" (Lector).</span>');
+    }
+  }).catch(function (err) {
+    $feedback.html('<span class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i> Error al verificar con el servidor.</span>');
+  }).always(function () {
+    $btn.prop('disabled', false).html('<i class="fa-solid fa-shield-halved me-1"></i> Validar Enlace');
+  });
+});
 
