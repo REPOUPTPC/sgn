@@ -104,12 +104,25 @@
       <div class="tab-pane fade show active" id="tab-estudiantes" role="tabpanel">
         <div class="card card-custom">
           <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-              <div class="search-box-group flex-grow-1 max-w-400">
-                <i class="fa-solid fa-search"></i>
-                <input type="text" id="searchEstudiantes" class="form-control search-box-input" placeholder="Buscar por Nombre o Cédula en tiempo real...">
+            <div class="row align-items-end g-3 mb-3">
+              <div class="col-12 col-md-5 col-lg-4">
+                <label for="filtroEstudiantesUnidad" class="fw-bold text-navy mb-1 d-block small">
+                  <i class="fa-solid fa-book-bookmark text-primary me-2"></i>Seleccione Unidad Curricular a Gestionar
+                </label>
+                <select id="filtroEstudiantesUnidad" class="form-select border-primary shadow-sm" onchange="renderEstudiantesTable()">
+                  <option value="">-- MOSTRAR TODOS LOS ESTUDIANTES --</option>
+                </select>
               </div>
-              <div class="d-flex gap-2">
+              <div class="col-12 col-md-4 col-lg-4">
+                <label for="searchEstudiantes" class="fw-bold text-navy mb-1 d-block small">
+                  <i class="fa-solid fa-magnifying-glass text-primary me-1"></i>Buscar Estudiante
+                </label>
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchEstudiantes" class="form-control search-box-input" placeholder="Buscar por Nombre o Cédula en tiempo real...">
+                </div>
+              </div>
+              <div class="col-12 col-md-3 col-lg-4 text-md-end d-flex gap-2 justify-content-md-end">
                 <button class="btn btn-outline-success" onclick="openModalCSV()">
                   <i class="fa-solid fa-file-csv me-2"></i> Carga Masiva
                 </button>
@@ -118,6 +131,9 @@
                 </button>
               </div>
             </div>
+
+            <!-- Información / Estado del Filtro de Estudiantes -->
+            <div id="infoFiltroEstudiantes" class="mb-4"></div>
             
             <div class="table-responsive">
               <table class="sgn-table" id="tablaEstudiantes">

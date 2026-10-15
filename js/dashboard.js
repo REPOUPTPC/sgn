@@ -204,6 +204,11 @@ function populateDropdownOptions() {
   const valorPrevioGestion = $selectGestion.val();
   $selectGestion.empty().append('<option value="">-- Seleccione Unidad --</option>');
 
+  // Select especial para filtro sectorizado en Estudiantes (#tab-estudiantes)
+  const $filtroEstudiantes = $('#filtroEstudiantesUnidad');
+  const valorPrevioFiltroEst = $filtroEstudiantes.val();
+  $filtroEstudiantes.empty().append('<option value="">-- MOSTRAR TODOS LOS ESTUDIANTES --</option>');
+
   // Select especial para filtro en Actividades Asignadas (#tab-actividades)
   const $filtroActUnidad = $('#filtroActividadUnidad');
   const valorPrevioFiltro = $filtroActUnidad.val();
@@ -260,6 +265,7 @@ function populateDropdownOptions() {
     $selectUnidad.append(`<option value="${u.id}">${nombreBase}</option>`);
     $selectGestion.append(`<option value="${u.id}">${nombreBase}${pendienteGestionTxt}</option>`);
     $filtroActUnidad.append(`<option value="${u.id}">${nombreFiltroAct}</option>`);
+    $filtroEstudiantes.append(`<option value="${u.id}">${nombreBase}</option>`);
   });
 
   if (valorPrevioGestion && listUnidades.some(u => String(u.id) === String(valorPrevioGestion))) {
@@ -268,6 +274,10 @@ function populateDropdownOptions() {
 
   if (valorPrevioFiltro && listUnidades.some(u => String(u.id) === String(valorPrevioFiltro))) {
     $filtroActUnidad.val(valorPrevioFiltro);
+  }
+
+  if (valorPrevioFiltroEst && listUnidades.some(u => String(u.id) === String(valorPrevioFiltroEst))) {
+    $filtroEstudiantes.val(valorPrevioFiltroEst);
   }
 
   // Actualizar badge en la navegación
@@ -286,18 +296,71 @@ function renderEstudiantesTable() {
   const $tbody = $('#tablaEstudiantes tbody');
   $tbody.empty();
 
-  let list = sgnDb.estudiantes;
+  let list = sgnDb.estudiantes || [];
   
   if (!sgnAuth.isSuperAdmin()) {
     // DOCENTE: Filtrar estudiantes por las secciones de las unidades curriculares asignadas al docente
-    const misSecciones = sgnDb.unidades
+    const misSecciones = (sgnDb.unidades || [])
       .filter(u => u.id_prof == currentUser.id)
-      .map(u => String(u.seccion));
-    list = list.filter(e => misSecciones.includes(String(e.seccion)));
+      .map(u => String(u.seccion || '').replace(/^'/, '').trim());
+    list = list.filter(e => {
+      let eSec = String(e.seccion || '').replace(/^'/, '').trim();
+      return misSecciones.includes(eSec);
+    });
+  }
+
+  // Filtro sectorizado por Unidad Curricular
+  const unidadFiltroId = $('#filtroEstudiantesUnidad').val();
+  const $infoFiltro = $('#infoFiltroEstudiantes');
+
+  if (unidadFiltroId) {
+    const unidadSel = (sgnDb.unidades || []).find(u => String(u.id) === String(unidadFiltroId));
+    if (unidadSel) {
+      let targetSec = (unidadSel.seccion || '').toString().trim().replace(/^'/, '');
+
+      list = list.filter(e => {
+        let eSec = (e.seccion || '').toString().trim().replace(/^'/, '');
+        const matchSecProg = (String(e.id_programa_formacion) === String(unidadSel.id_programa_formacion) && eSec === targetSec);
+        const hasRelacion = (sgnDb.relacionNotas || []).some(r => String(r.id_unidad_curricular) === String(unidadSel.id) && String(r.id_estudiante) === String(e.id));
+        return matchSecProg || hasRelacion;
+      });
+
+      const prog = (sgnDb.programas || []).find(p => p.id == unidadSel.id_programa_formacion);
+      const progNombre = prog ? prog.programa : "No asignado";
+
+      if ($infoFiltro.length) {
+        $infoFiltro.html(`
+          <div class="alert alert-primary py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2 mb-0 shadow-sm border-0">
+            <div>
+              <i class="fa-solid fa-book-bookmark text-primary me-2"></i>
+              Gestión Sectorizada: <strong>${unidadSel.unidad_curricular || unidadSel['unidad curricular']}</strong> &bull; <span class="text-muted">${progNombre}</span> &bull; <span class="badge bg-secondary">Sección: ${targetSec}</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-primary fs-6 px-3 py-2"><i class="fa-solid fa-user-graduate me-1"></i> ${list.length} Estudiante(s)</span>
+              <button type="button" class="btn btn-sm btn-outline-primary bg-white fw-bold shadow-sm" onclick="$('#filtroEstudiantesUnidad').val('').trigger('change')" title="Mostrar todos los estudiantes">
+                <i class="fa-solid fa-rotate-left me-1"></i> Mostrar Todos
+              </button>
+            </div>
+          </div>
+        `).show();
+      }
+    }
+  } else {
+    if ($infoFiltro.length) {
+      $infoFiltro.html(`
+        <div class="d-flex justify-content-between align-items-center text-muted small py-1 px-1">
+          <span><i class="fa-solid fa-users me-1 text-primary"></i> Mostrando lista completa de estudiantes</span>
+          <span class="badge bg-light text-dark border px-2 py-1">${list.length} Estudiante(s) en total</span>
+        </div>
+      `).show();
+    }
   }
 
   if (list.length === 0) {
-    $tbody.append('<tr><td colspan="7" class="text-center text-muted py-4">No hay estudiantes registrados.</td></tr>');
+    const msgVacio = unidadFiltroId 
+      ? 'No hay estudiantes registrados en la Unidad Curricular y Sección seleccionada.' 
+      : 'No hay estudiantes registrados.';
+    $tbody.append(`<tr><td colspan="8" class="text-center text-muted py-4"><i class="fa-solid fa-circle-info me-2 text-warning"></i>${msgVacio}</td></tr>`);
     return;
   }
 
@@ -331,6 +394,12 @@ function renderEstudiantesTable() {
       </tr>
     `);
   });
+
+  // Re-aplicar filtro de búsqueda si el usuario tiene texto en el input
+  const searchVal = $('#searchEstudiantes').val();
+  if (searchVal) {
+    filterTable('#tablaEstudiantes tbody tr', searchVal);
+  }
 }
 
 function openModalEstudiante() {
@@ -338,6 +407,18 @@ function openModalEstudiante() {
   $('#estudianteId').val('');
   $('#estudianteNacionalidad').val('V-');
   $('#estudianteSeccion').val('');
+
+  // Si hay una Unidad Curricular seleccionada en el filtro, preseleccionar programa y sección
+  const unidadFiltroId = $('#filtroEstudiantesUnidad').val();
+  if (unidadFiltroId) {
+    const unidadSel = (sgnDb.unidades || []).find(u => String(u.id) === String(unidadFiltroId));
+    if (unidadSel) {
+      let targetSec = (unidadSel.seccion || '').toString().trim().replace(/^'/, '');
+      $('#estudiantePrograma').val(unidadSel.id_programa_formacion);
+      $('#estudianteSeccion').val(targetSec);
+    }
+  }
+
   $('#modalEstudianteTitle').text('Registrar Nuevo Estudiante');
   const bsModal = new bootstrap.Modal(document.getElementById('modalEstudiante'));
   bsModal.show();
@@ -459,6 +540,17 @@ function openModalCSV() {
     sgnDb.programas.forEach(p => {
       progSelect.append(`<option value="${p.id}">${p.programa}</option>`);
     });
+  }
+
+  // Si hay una Unidad Curricular seleccionada en el filtro, preseleccionar programa y sección
+  const unidadFiltroId = $('#filtroEstudiantesUnidad').val();
+  if (unidadFiltroId) {
+    const unidadSel = (sgnDb.unidades || []).find(u => String(u.id) === String(unidadFiltroId));
+    if (unidadSel) {
+      let targetSec = (unidadSel.seccion || '').toString().trim().replace(/^'/, '');
+      progSelect.val(unidadSel.id_programa_formacion);
+      $('#csvSeccion').val(targetSec);
+    }
   }
 
   const bsModal = new bootstrap.Modal(document.getElementById('modalCSV'));
