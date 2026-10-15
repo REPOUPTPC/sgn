@@ -1,7 +1,7 @@
 /**
  * SISTEMA DE GESTIÓN DE NOTAS (SGN) - GOOGLE APPS SCRIPT BACKEND
  * Apps Script URL: https://script.google.com/macros/s/AKfycbx_8nk6DvGAfGoMbtxNRON02M3nezHbGjBG6HF6xriBkkrTiF7Kek0KkqdUVopqFGI/exec
- * 
+ *
  * Este archivo debe copiarse íntegramente en el editor de Google Apps Script vinculado
  * al Google Spreadsheet del sistema.
  */
@@ -26,11 +26,11 @@ function doPost(e) {
 
 function handleRequest(e) {
   let response = { success: false, message: "Acción no especificada" };
-  
+
   try {
     // Inicializar base de datos si no existe
     initDatabase();
-    
+
     let params = e.parameter || {};
     if (e.postData && e.postData.contents) {
       try {
@@ -40,41 +40,41 @@ function handleRequest(e) {
         // Fallback a e.parameter
       }
     }
-    
+
     const action = params.action;
-    
+
     switch (action) {
       case "init":
       case "getPublicData":
         response = getPublicData();
         break;
-        
+
       case "login":
         response = loginUser(params.email_cedula, params.password_secret);
         break;
-        
+
       case "getStudentByCedula":
         response = getStudentByCedula(params.cedula);
         break;
-        
+
       case "registerStudent":
         response = registerStudent(params);
         break;
-        
+
       case "updateStudentSelf":
         response = updateStudentSelf(params);
         break;
-        
+
       case "getVoceroRoster":
         response = getVoceroRoster(params.cedula, params.seccion, params.id_programa_formacion);
         break;
 
-      // ==================== DASHBOARD & CRUD ====================
+        // ==================== DASHBOARD & CRUD ====================
       case "getAllData":
         response = getAllData(params);
         break;
-        
-      // Estudiantes CRUD
+
+        // Estudiantes CRUD
       case "saveEstudiante":
         response = saveEstudiante(params);
         break;
@@ -88,7 +88,7 @@ function handleRequest(e) {
         response = toggleVocero(params.id, params.rol);
         break;
 
-      // Profesor CRUD
+        // Profesor CRUD
       case "saveProfesor":
         response = saveProfesor(params);
         break;
@@ -99,7 +99,7 @@ function handleRequest(e) {
         response = updateProfesorPassword(params.id, params.new_password);
         break;
 
-      // Unidad Curricular CRUD
+        // Unidad Curricular CRUD
       case "saveUnidadCurricular":
         response = saveUnidadCurricular(params);
         break;
@@ -107,7 +107,7 @@ function handleRequest(e) {
         response = deleteUnidadCurricular(params.id);
         break;
 
-      // Programa Formación CRUD
+        // Programa Formación CRUD
       case "saveProgramaFormacion":
         response = saveProgramaFormacion(params);
         break;
@@ -115,7 +115,7 @@ function handleRequest(e) {
         response = deleteProgramaFormacion(params.id);
         break;
 
-      // Relación Programa Notas & Fechas CRUD
+        // Relación Programa Notas & Fechas CRUD
       case "saveNotas":
         response = saveNotas(params);
         break;
@@ -126,7 +126,7 @@ function handleRequest(e) {
         response = saveFechaNota(params);
         break;
 
-      // ==================== ACTIVIDADES Y ENTREGAS ====================
+        // ==================== ACTIVIDADES Y ENTREGAS ====================
       case "getActividadesAsignadas":
         response = getActividadesAsignadas(params.id_unidad_curricular);
         break;
@@ -142,11 +142,17 @@ function handleRequest(e) {
       case "saveNotaEntrega":
         response = saveNotaEntrega(params.id_entrega, params.nota);
         break;
+      case "bulkSaveNotasEntregas":
+        response = bulkSaveNotasEntregas(params.entregas);
+        break;
       case "uploadEntregaEstudiante":
         response = uploadEntregaEstudiante(params);
         break;
+      case "validateDriveLink":
+        response = checkDriveLinkAccess(params.url);
+        break;
 
-      // ==================== EXTENSIÓN UNIVERSITARIA ====================
+        // ==================== EXTENSIÓN UNIVERSITARIA ====================
       case "getExtensionPublicData":
         response = getExtensionPublicData();
         break;
@@ -162,27 +168,16 @@ function handleRequest(e) {
       case "updateExtensionEstado":
         response = updateExtensionEstado(params.id_extension, params.estado);
         break;
-      case "updatePagoEstado":
-        response = updatePagoEstado(params.id_pago, params.estado);
-        break;
-      case "bulkUpdatePagoEstado":
-        response = bulkUpdatePagoEstado(params.id_extension, params.estado);
-        break;
-      case "bulkSaveNotasEntregas":
-        response = bulkSaveNotasEntregas(params);
-        break;
-      case "validateDriveLink":
-        response = validateDriveLink(params.url);
-        break;
+
       default:
-        response = { success: false, message: "Acción no reconocida: " + action };
+        response = { success: false, message: "Acción desconocida: " + action };
     }
   } catch (error) {
     response = { success: false, message: "Error en servidor: " + error.toString() };
   }
-  
+
   return ContentService.createTextOutput(JSON.stringify(response))
-    .setMimeType(ContentService.MimeType.JSON);
+  .setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
@@ -190,7 +185,7 @@ function handleRequest(e) {
  */
 function initDatabase() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
+
   const tables = {
     "programa_formacion": ["id", "programa"],
     "estudiantes": ["id", "cedula", "nombre_completo", "correo", "telefono", "id_programa_formacion", "seccion", "rol"],
@@ -204,13 +199,13 @@ function initDatabase() {
     "pagos": ["id", "id_usuario", "id_extension", "id_banco", "monto", "numero_transferencia", "fecha_transferencia", "capture"],
     "banco": ["id", "banco"]
   };
-  
+
   for (let tableName in tables) {
     let sheet = ss.getSheetByName(tableName);
     if (!sheet) {
       sheet = ss.insertSheet(tableName);
       sheet.appendRow(tables[tableName]);
-      
+
       // Semillas iniciales requeridas
       if (tableName === "programa_formacion") {
         const seedProgramas = [
@@ -225,11 +220,11 @@ function initDatabase() {
         ];
         seedProgramas.forEach(row => sheet.appendRow(row));
       }
-      
+
       if (tableName === "profesor") {
         sheet.appendRow([1, "JOSE HERRERA", "V-12345678", "584141448515", "MYJ01012023", "DOCENTE", "TRUE"]);
       }
-      
+
       if (tableName === "unidad_curricular") {
         sheet.appendRow([1, 1, 7, "ALGORITMICA Y PROGRAMACION", "'170"]);
         sheet.appendRow([2, 1, 7, "ALGORITMICA Y PROGRAMACION", "'171"]);
@@ -264,9 +259,65 @@ function initDatabase() {
     }
   }
 
-  // Garantizar sanitización de duplicados y reparación de IDs
+  // Garantizar que los encabezados de las tablas coincidan con el esquema oficial
+  fixTableHeaders();
   deduplicateRelacionNotas();
   repairFechaNotaIds();
+
+  // Asegurar que Google Apps Script detecte y solicite autorización para Google Drive
+  try {
+    DriveApp.getFolderById(DRIVE_ENTREGAS_FOLDER_ID);
+  } catch (eDrive) {
+    console.warn("Verificación de Drive en initDatabase: " + eDrive);
+  }
+}
+
+/**
+ * Garantiza que los encabezados (Fila 1) de todas las tablas en Google Sheets
+ * coincidan exactamente con la estructura de columnas requerida por el backend.
+ */
+function fixTableHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const tables = {
+    "programa_formacion": ["id", "programa"],
+    "estudiantes": ["id", "cedula", "nombre_completo", "correo", "telefono", "id_programa_formacion", "seccion", "rol"],
+    "profesor": ["id", "nombre_profesor", "cedula", "telefono", "clave", "rol", "activo"],
+    "unidad_curricular": ["id", "id_prof", "id_programa_formacion", "unidad_curricular", "seccion"],
+    "relacion_programa_notas": ["id", "id_estudiante", "id_unidad_curricular", "cantidad_evaluaciones", "e1", "e2", "e3", "e4", "e5", "total"],
+    "fecha_relacion_nota": ["id", "id_programa_formacion", "seccion", "evaluacion", "fecha", "descripcion"],
+    "actividades_asignadas": ["id", "id_unidad_curricular", "fecha_asignacion", "numero_evaluacion", "descripcion"],
+    "actividades_entregadas": ["id", "id_actividades_asignadas", "id_estudiante", "entrega", "fecha_entrega", "nota"],
+    "extension": ["id", "taller", "descripcion", "valor", "estado"],
+    "pagos": ["id", "id_usuario", "id_extension", "id_banco", "monto", "numero_transferencia", "fecha_transferencia", "capture"],
+    "banco": ["id", "banco"]
+  };
+
+  for (let tableName in tables) {
+    let sheet = ss.getSheetByName(tableName);
+    if (sheet) {
+      const data = sheet.getDataRange().getValues();
+      const expected = tables[tableName];
+      if (data.length > 0) {
+        const currentHeaders = data[0].map(h => h.toString().trim());
+        let needsUpdate = false;
+        if (currentHeaders.length !== expected.length) {
+          needsUpdate = true;
+        } else {
+          for (let i = 0; i < expected.length; i++) {
+            if (currentHeaders[i] !== expected[i]) {
+              needsUpdate = true;
+              break;
+            }
+          }
+        }
+        if (needsUpdate) {
+          for (let col = 0; col < expected.length; col++) {
+            sheet.getRange(1, col + 1).setValue(expected[col]);
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -298,7 +349,7 @@ function getNextId(sheetName) {
     let idNum = parseInt(r.id);
     if (!isNaN(idNum) && idNum > maxId) maxId = idNum;
   });
-  return maxId + 1;
+    return maxId + 1;
 }
 
 /**
@@ -351,10 +402,10 @@ function loginUser(emailCedula, passwordSecret) {
   if (!emailCedula || !passwordSecret) {
     return { success: false, message: "Debe ingresar usuario y clave/secreto" };
   }
-  
+
   const inputUser = emailCedula.toString().trim().toUpperCase();
   const inputPass = passwordSecret.toString().trim();
-  
+
   // 1. Verificación SUPER_ADMIN
   if ((inputUser === SUPER_ADMIN_EMAIL.toUpperCase() || inputUser === SUPER_ADMIN_CEDULA.toUpperCase()) && inputPass === SUPER_ADMIN_SECRET) {
     return {
@@ -368,13 +419,13 @@ function loginUser(emailCedula, passwordSecret) {
       }
     };
   }
-  
+
   // 2. Verificación DOCENTE
   const profesores = getSheetData("profesor");
   const cleanInputCedula = cleanCedula(inputUser);
-  
+
   const doc = profesores.find(p => cleanCedula(p.cedula) === cleanInputCedula || p.cedula.toString().trim() === inputUser);
-  
+
   if (doc) {
     if (doc.activo.toString().toUpperCase() !== "TRUE") {
       return { success: false, message: "El usuario docente se encuentra inactivo." };
@@ -394,7 +445,7 @@ function loginUser(emailCedula, passwordSecret) {
       return { success: false, message: "Contraseña incorrecta para docente." };
     }
   }
-  
+
   return { success: false, message: "Usuario o clave/secreto no válidos." };
 }
 
@@ -404,19 +455,19 @@ function loginUser(emailCedula, passwordSecret) {
 function getStudentByCedula(cedula) {
   const cleanCed = cleanCedula(cedula);
   if (!cleanCed) return { success: false, message: "Cédula requerida" };
-  
+
   const estudiantes = getSheetData("estudiantes");
   const student = estudiantes.find(e => cleanCedula(e.cedula) === cleanCed);
-  
+
   if (!student) {
     return { success: false, registered: false, message: "USUARIO NO REGISTRADO" };
   }
-  
+
   // Obtener nombre del programa de formación
   const programas = getSheetData("programa_formacion");
   const prog = programas.find(p => p.id == student.id_programa_formacion);
   const nombrePrograma = prog ? prog.programa : "No asignado";
-  
+
   // Obtener colecciones principales
   const relacionNotas = getSheetData("relacion_programa_notas");
   const fechasNotas = getSheetData("fecha_relacion_nota");
@@ -424,10 +475,10 @@ function getStudentByCedula(cedula) {
   const profesores = getSheetData("profesor");
   const actividadesAsignadasAll = getSheetData("actividades_asignadas");
   const actividadesEntregadasAll = getSheetData("actividades_entregadas");
-  
+
   let targetSec = (student.seccion || "").toString().trim();
   if (targetSec.startsWith("'")) targetSec = targetSec.substring(1);
-  
+
   // Encontrar todas las Unidades Curriculares asociadas al Programa y Sección del estudiante
   let studentUnidades = unidades.filter(u => {
     let uSec = (u.seccion || "").toString().trim();
@@ -441,44 +492,47 @@ function getStudentByCedula(cedula) {
     const ucIds = studentRelaciones.map(r => r.id_unidad_curricular);
     studentUnidades = unidades.filter(u => ucIds.includes(u.id));
   }
-  
+
   const notasDetalle = studentUnidades.map(uc => {
     const prof = profesores.find(p => p.id == uc.id_prof);
     const rn = relacionNotas.find(r => r.id_estudiante == student.id && r.id_unidad_curricular == uc.id) || {};
-    
+
     let ucSec = (uc.seccion || "").toString().trim();
     if (ucSec.startsWith("'")) ucSec = ucSec.substring(1);
-    
+
     const fechas = fechasNotas.filter(fn => {
       let fnSec = (fn.seccion || "").toString().trim();
       if (fnSec.startsWith("'")) fnSec = fnSec.substring(1);
       return fn.id_programa_formacion == uc.id_programa_formacion && fnSec === ucSec;
     });
-    
+
     const cantEval = parseInt(rn.cantidad_evaluaciones) || 4;
-    
+
     let e1 = parseFloat(rn.e1) || 0;
     let e2 = parseFloat(rn.e2) || 0;
     let e3 = parseFloat(rn.e3) || 0;
     let e4 = parseFloat(rn.e4) || 0;
     let e5 = cantEval === 5 ? (parseFloat(rn.e5) || 0) : 0;
-    
+
     let activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
     let calcTotal = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
-    
+
     // Actividades asignadas para esta unidad curricular
     const actividadesDeUc = actividadesAsignadasAll.filter(a => a.id_unidad_curricular == uc.id);
     const actividadesConEntrega = actividadesDeUc.map(act => {
-      const ent = actividadesEntregadasAll.find(e => e.id_actividades_asignadas == act.id && e.id_estudiante == student.id);
+      const ent = actividadesEntregadasAll.find(e =>
+      String(e.id_actividades_asignadas).trim() === String(act.id).trim() &&
+      String(e.id_estudiante).trim() === String(student.id).trim()
+      );
       return {
         id: act.id,
         id_unidad_curricular: act.id_unidad_curricular,
         fecha_asignacion: act.fecha_asignacion,
         numero_evaluacion: (act.numero_evaluacion || "e1").toString().toLowerCase(),
-        descripcion: act.descripcion,
-        entrega: ent ? ent.entrega : "",
-        fecha_entrega: ent ? ent.fecha_entrega : "",
-        nota: ent && ent.nota !== undefined && ent.nota !== "" ? parseFloat(ent.nota) : ""
+                                                      descripcion: act.descripcion,
+                                                      entrega: ent ? ent.entrega : "",
+                                                      fecha_entrega: ent ? ent.fecha_entrega : "",
+                                                      nota: ent && ent.nota !== undefined && ent.nota !== "" ? parseFloat(ent.nota) : ""
       };
     });
 
@@ -486,16 +540,16 @@ function getStudentByCedula(cedula) {
       id_relacion: rn.id || "",
       id_unidad_curricular: uc.id,
       seccion: formatSeccion(uc.seccion),
-      unidad_curricular: uc.unidad_curricular || uc['unidad curricular'] || "UNIDAD CURRICULAR",
-      profesor: prof ? prof.nombre_profesor : "JOSE HERRERA",
-      cantidad_evaluaciones: cantEval,
-      e1: e1, e2: e2, e3: e3, e4: e4, e5: e5,
-      total: calcTotal,
-      fechas: fechas,
-      actividades: actividadesConEntrega
+                                           unidad_curricular: uc.unidad_curricular || uc['unidad curricular'] || "UNIDAD CURRICULAR",
+                                           profesor: prof ? prof.nombre_profesor : "JOSE HERRERA",
+                                           cantidad_evaluaciones: cantEval,
+                                           e1: e1, e2: e2, e3: e3, e4: e4, e5: e5,
+                                           total: calcTotal,
+                                           fechas: fechas,
+                                           actividades: actividadesConEntrega
     };
   });
-  
+
   return {
     success: true,
     registered: true,
@@ -520,34 +574,34 @@ function getStudentByCedula(cedula) {
 function registerStudent(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetEst = ss.getSheetByName("estudiantes");
-  
+
   const cleanCed = cleanCedula(params.cedula);
   if (!cleanCed || !params.nombre_completo || !params.id_programa_formacion) {
     return { success: false, message: "Campos requeridos incompletos" };
   }
-  
+
   // Validar si ya existe
   const existentes = getSheetData("estudiantes");
   if (existentes.some(e => cleanCedula(e.cedula) === cleanCed)) {
     return { success: false, message: "La cédula ya se encuentra registrada." };
   }
-  
+
   const newId = getNextId("estudiantes");
   const seccion = formatSeccion(params.seccion || "170");
-  
+
   sheetEst.appendRow([
     newId,
     cleanCed,
     params.nombre_completo.toString().trim().toUpperCase(),
-    params.correo || "",
-    params.telefono || "",
-    params.id_programa_formacion,
-    seccion,
-    "ESTUDIANTE"
+                     params.correo || "",
+                     params.telefono || "",
+                     params.id_programa_formacion,
+                     seccion,
+                     "ESTUDIANTE"
   ]);
-  
+
   // (Ya no se crea relacion_programa_notas automáticamente)
-  
+
   return { success: true, message: "Estudiante registrado exitosamente.", id: newId };
 }
 
@@ -558,7 +612,7 @@ function updateStudentSelf(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("estudiantes");
   const data = sheet.getDataRange().getValues();
-  
+
   const idToUpdate = params.id;
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] == idToUpdate) {
@@ -579,32 +633,32 @@ function getVoceroRoster(cedula, seccion, idPrograma) {
   const cleanCed = cleanCedula(cedula);
   const estudiantes = getSheetData("estudiantes");
   const vocero = estudiantes.find(e => cleanCedula(e.cedula) === cleanCed);
-  
+
   if (!vocero || vocero.rol !== "VOCERO") {
     return { success: false, message: "No posee permisos de VOCERO para consultar esta sección." };
   }
-  
+
   const formattedSeccion = formatSeccion(seccion);
   const relacionNotas = getSheetData("relacion_programa_notas");
   const programas = getSheetData("programa_formacion");
   const prog = programas.find(p => p.id == idPrograma);
-  
+
   let targetSec = (seccion || "").toString().trim();
   if (targetSec.startsWith("'")) targetSec = targetSec.substring(1);
-  
+
   const sectionStudents = estudiantes.filter(e => {
     let eSec = (e.seccion || "").toString().trim();
     if (eSec.startsWith("'")) eSec = eSec.substring(1);
     return e.id_programa_formacion == idPrograma && eSec === targetSec;
   });
-  
+
   sectionStudents.sort((a, b) => (a.nombre_completo || "").localeCompare(b.nombre_completo || ""));
-  
+
   const roster = sectionStudents.map(est => {
     const studentNotas = relacionNotas.filter(rn => rn.id_estudiante == est.id);
     let totalAvg = "0.00";
     let e1 = "", e2 = "", e3 = "", e4 = "", e5 = "";
-    
+
     if (studentNotas.length > 0) {
       let sum = 0, count = 0;
       studentNotas.forEach(rn => {
@@ -615,7 +669,7 @@ function getVoceroRoster(cedula, seccion, idPrograma) {
         }
       });
       if (count > 0) totalAvg = (sum / count).toFixed(2);
-      
+
       // Tomar las notas del primer registro si existen
       const firstNote = studentNotas[0];
       e1 = firstNote.e1 || "";
@@ -624,7 +678,7 @@ function getVoceroRoster(cedula, seccion, idPrograma) {
       e4 = firstNote.e4 || "";
       e5 = firstNote.e5 || "";
     }
-    
+
     return {
       id: est.id,
       cedula: est.cedula,
@@ -634,7 +688,7 @@ function getVoceroRoster(cedula, seccion, idPrograma) {
       total: totalAvg
     };
   });
-    
+
   return {
     success: true,
     programa: prog ? prog.programa : "",
@@ -670,22 +724,22 @@ function saveEstudiante(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("estudiantes");
   const cleanCed = cleanCedula(params.cedula);
-  
+
   if (!params.id) {
     // Insertar
     const newId = getNextId("estudiantes");
     const rawSeccion = params.seccion || "170";
     const seccionFormateada = formatSeccion(rawSeccion);
-    
+
     sheet.appendRow([
       newId,
       cleanCed,
       params.nombre_completo.toString().trim().toUpperCase(),
-      params.correo || "",
-      params.telefono || "",
-      params.id_programa_formacion,
-      seccionFormateada,
-      params.rol || "ESTUDIANTE"
+                    params.correo || "",
+                    params.telefono || "",
+                    params.id_programa_formacion,
+                    seccionFormateada,
+                    params.rol || "ESTUDIANTE"
     ]);
 
     // (Ya no se crea relacion_programa_notas automáticamente)
@@ -698,7 +752,7 @@ function saveEstudiante(params) {
         const oldSeccion = data[i][6];
         const newSeccionRaw = params.seccion || "170";
         const newSeccionFormateada = formatSeccion(newSeccionRaw);
-        
+
         sheet.getRange(i + 1, 2).setValue(cleanCed);
         sheet.getRange(i + 1, 3).setValue(params.nombre_completo.toString().trim().toUpperCase());
         sheet.getRange(i + 1, 4).setValue(params.correo || "");
@@ -712,7 +766,7 @@ function saveEstudiante(params) {
         let oldSecCompare = oldSeccion.toString().trim();
         if (oldSecCompare.startsWith("'")) oldSecCompare = oldSecCompare.substring(1);
         let newSecCompare = newSeccionFormateada.substring(1); // Format adds apostrophe
-        
+
         return { success: true, message: "Estudiante actualizado con éxito." };
       }
     }
@@ -724,14 +778,14 @@ function bulkSaveEstudiantes(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("estudiantes");
   const sheetNotas = ss.getSheetByName("relacion_programa_notas");
-  
+
   let students = [];
   try {
     students = JSON.parse(params.students);
   } catch (e) {
     return { success: false, message: "Error procesando los datos JSON." };
   }
-  
+
   if (!students || students.length === 0) {
     return { success: false, message: "No se enviaron estudiantes para registrar." };
   }
@@ -743,23 +797,23 @@ function bulkSaveEstudiantes(params) {
   students.forEach(st => {
     const cleanCed = cleanCedula(st.cedula);
     if (!cleanCed) return; // Skip invalid entries
-    
+
     const rawSeccion = st.seccion || "170";
     const seccionFormateada = formatSeccion(rawSeccion);
-    
+
     sheet.appendRow([
       nextId,
       cleanCed,
       (st.nombre_completo || "").toString().trim().toUpperCase(),
-      st.correo || "",
-      st.telefono || "",
-      st.id_programa_formacion,
-      seccionFormateada,
-      "ESTUDIANTE" // rol default
+                    st.correo || "",
+                    st.telefono || "",
+                    st.id_programa_formacion,
+                    seccionFormateada,
+                    "ESTUDIANTE" // rol default
     ]);
 
     // (Ya no se crea relacion_programa_notas automáticamente)
-    
+
     nextId++;
     savedCount++;
   });
@@ -772,7 +826,7 @@ function deleteEstudiante(id) {
   const sheet = ss.getSheetByName("estudiantes");
   const data = sheet.getDataRange().getValues();
   let deleted = false;
-  
+
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] == id) {
       sheet.deleteRow(i + 1);
@@ -780,7 +834,7 @@ function deleteEstudiante(id) {
       break;
     }
   }
-  
+
   if (deleted) {
     // Cascada: eliminar notas asociadas
     const sheetNotas = ss.getSheetByName("relacion_programa_notas");
@@ -795,7 +849,7 @@ function deleteEstudiante(id) {
     }
     return { success: true, message: "Estudiante y sus notas eliminados correctamente." };
   }
-  
+
   return { success: false, message: "Estudiante no encontrado." };
 }
 
@@ -819,17 +873,17 @@ function saveProfesor(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("profesor");
   const cleanCed = cleanCedula(params.cedula);
-  
+
   if (!params.id) {
     const newId = getNextId("profesor");
     sheet.appendRow([
       newId,
       params.nombre_profesor.toString().trim().toUpperCase(),
-      cleanCed,
-      params.telefono || "",
-      params.clave || "123456",
-      "DOCENTE",
-      params.activo !== undefined ? params.activo.toString().toUpperCase() : "TRUE"
+                    cleanCed,
+                    params.telefono || "",
+                    params.clave || "123456",
+                    "DOCENTE",
+                    params.activo !== undefined ? params.activo.toString().toUpperCase() : "TRUE"
     ]);
     return { success: true, message: "Docente registrado con éxito." };
   } else {
@@ -884,7 +938,7 @@ function saveUnidadCurricular(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("unidad_curricular");
   const seccion = formatSeccion(params.seccion);
-  
+
   if (!params.id) {
     const newId = getNextId("unidad_curricular");
     sheet.appendRow([
@@ -892,7 +946,7 @@ function saveUnidadCurricular(params) {
       params.id_prof,
       params.id_programa_formacion,
       params.unidad_curricular.toString().trim().toUpperCase(),
-      seccion
+                    seccion
     ]);
     return { success: true, message: "Unidad Curricular agregada con éxito." };
   } else {
@@ -929,7 +983,7 @@ function deleteUnidadCurricular(id) {
 function saveProgramaFormacion(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("programa_formacion");
-  
+
   if (!params.id) {
     const newId = getNextId("programa_formacion");
     sheet.appendRow([newId, params.programa.toString().trim()]);
@@ -966,33 +1020,33 @@ function saveNotas(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("relacion_programa_notas");
   const data = sheet.getDataRange().getValues();
-  
+
   const idRel = params.id;
   const idEstudiante = params.id_estudiante;
   const idUnidadCurricular = params.id_unidad_curricular;
   const cantEval = parseInt(params.cantidad_evaluaciones) || 4;
-  
+
   let e1 = parseFloat(params.e1) || 0;
   let e2 = parseFloat(params.e2) || 0;
   let e3 = parseFloat(params.e3) || 0;
   let e4 = parseFloat(params.e4) || 0;
   let e5 = parseFloat(params.e5) || 0;
-  
+
   // Validar límites 0-20
   [e1, e2, e3, e4, e5] = [e1, e2, e3, e4, e5].map(v => Math.min(20, Math.max(0, v)));
-  
+
   // Recalcular promedio total basado en cantidad_evaluaciones
   let activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
   let totalCalculado = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
-  
+
   // Garantizar sin duplicados: Buscar por idRel O por combinación (id_estudiante, id_unidad_curricular)
   let foundIndex = -1;
   for (let i = 1; i < data.length; i++) {
-    if ((idRel && data[i][0] == idRel) || 
-        (idEstudiante && idUnidadCurricular && data[i][1] == idEstudiante && data[i][2] == idUnidadCurricular)) {
+    if ((idRel && data[i][0] == idRel) ||
+      (idEstudiante && idUnidadCurricular && data[i][1] == idEstudiante && data[i][2] == idUnidadCurricular)) {
       foundIndex = i;
-      break;
-    }
+    break;
+      }
   }
 
   if (foundIndex !== -1) {
@@ -1023,22 +1077,22 @@ function bulkSaveNotas(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("relacion_programa_notas");
   const data = sheet.getDataRange().getValues();
-  
+
   let notasArray = [];
   try {
     notasArray = JSON.parse(params.notas);
   } catch(e) {
     return { success: false, message: "Error procesando JSON de notas." };
   }
-  
+
   if (!notasArray || notasArray.length === 0) {
     return { success: false, message: "No se enviaron notas." };
   }
-  
+
   let updatedCount = 0;
   let addedCount = 0;
   let nextId = getNextId("relacion_programa_notas");
-  
+
   // Mapa de filas existentes por ID y por clave compuesta (id_estudiante + "_" + id_unidad_curricular)
   let rowMap = {};
   for (let i = 1; i < data.length; i++) {
@@ -1062,10 +1116,10 @@ function bulkSaveNotas(params) {
     let e3 = Math.min(20, Math.max(0, parseFloat(nota.e3) || 0));
     let e4 = Math.min(20, Math.max(0, parseFloat(nota.e4) || 0));
     let e5 = cantEval === 5 ? Math.min(20, Math.max(0, parseFloat(nota.e5) || 0)) : 0;
-    
+
     let activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
     let total = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
-    
+
     let targetRow = null;
     let key = nota.id_estudiante + "_" + nota.id_unidad_curricular;
 
@@ -1100,9 +1154,9 @@ function bulkSaveNotas(params) {
       addedCount++;
     }
   });
-  
+
   SpreadsheetApp.flush(); // Ensure writes are committed before returning response to client
-  
+
   return { success: true, message: `Notas guardadas. (${updatedCount} actualizadas, ${addedCount} agregadas)` };
 }
 
@@ -1110,14 +1164,14 @@ function saveFechaNota(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("fecha_relacion_nota");
   const data = sheet.getDataRange().getValues();
-  
+
   const idPrograma = params.id_programa_formacion;
   const rawSeccion = params.seccion || "170";
   const seccionFormateada = formatSeccion(rawSeccion);
   const evalKey = (params.evaluacion || "").toLowerCase(); // e1, e2, e3, e4, e5
   const fecha = params.fecha || "";
   const descripcion = params.descripcion || "";
-  
+
   let targetSec = seccionFormateada.substring(1);
   let foundIndex = -1;
   // schema: [id, id_programa_formacion, seccion, evaluacion, fecha, descripcion]
@@ -1130,7 +1184,7 @@ function saveFechaNota(params) {
       break;
     }
   }
-  
+
   if (foundIndex !== -1) {
     sheet.getRange(foundIndex + 1, 5).setValue(fecha);       // Col E: fecha
     sheet.getRange(foundIndex + 1, 6).setValue(descripcion); // Col F: descripcion
@@ -1138,7 +1192,7 @@ function saveFechaNota(params) {
     const newId = getNextId("fecha_relacion_nota");
     sheet.appendRow([newId, idPrograma, seccionFormateada, evalKey, fecha, descripcion]);
   }
-  
+
   return { success: true, message: "Fecha y descripción de evaluación guardada." };
 }
 
@@ -1151,15 +1205,15 @@ function deduplicateRelacionNotas() {
   if (!sheet) return;
   const data = sheet.getDataRange().getValues();
   if (data.length <= 2) return;
-  
+
   let seenKeys = {};
   let rowsToDelete = [];
-  
+
   for (let i = 1; i < data.length; i++) {
     let estId = data[i][1];
     let ucId = data[i][2];
     if (!estId || !ucId) continue;
-    
+
     let key = estId + "_" + ucId;
     if (seenKeys[key]) {
       rowsToDelete.push(i + 1);
@@ -1167,7 +1221,7 @@ function deduplicateRelacionNotas() {
       seenKeys[key] = true;
     }
   }
-  
+
   for (let k = rowsToDelete.length - 1; k >= 0; k--) {
     sheet.deleteRow(rowsToDelete[k]);
   }
@@ -1182,10 +1236,10 @@ function repairFechaNotaIds() {
   if (!sheet) return;
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return;
-  
+
   let idsSeen = new Set();
   let needsRepair = false;
-  
+
   for (let i = 1; i < data.length; i++) {
     let currentId = parseInt(data[i][0]);
     if (isNaN(currentId) || currentId <= 0 || idsSeen.has(currentId)) {
@@ -1194,7 +1248,7 @@ function repairFechaNotaIds() {
     }
     idsSeen.add(currentId);
   }
-  
+
   if (needsRepair) {
     for (let i = 1; i < data.length; i++) {
       sheet.getRange(i + 1, 1).setValue(i);
@@ -1210,7 +1264,7 @@ function repairFechaNotaIds() {
 function getActividadesAsignadas(idUnidadCurricular) {
   const actividades = getSheetData("actividades_asignadas");
   if (!idUnidadCurricular) return { success: true, actividades: actividades };
-  
+
   const filtradas = actividades.filter(a => a.id_unidad_curricular == idUnidadCurricular);
   return { success: true, actividades: filtradas };
 }
@@ -1218,16 +1272,16 @@ function getActividadesAsignadas(idUnidadCurricular) {
 function saveActividadAsignada(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("actividades_asignadas");
-  
+
   const idUnidad = params.id_unidad_curricular;
   const numEval = (params.numero_evaluacion || "e1").toString().toLowerCase(); // e1, e2, e3, e4, e5
   const fechaAsig = params.fecha_asignacion || new Date().toISOString().split('T')[0];
   const desc = params.descripcion || "";
-  
+
   if (!idUnidad) {
     return { success: false, message: "Debe seleccionar la Unidad Curricular." };
   }
-  
+
   if (!params.id) {
     const newId = getNextId("actividades_asignadas");
     sheet.appendRow([newId, idUnidad, fechaAsig, numEval, desc]);
@@ -1252,7 +1306,7 @@ function deleteActividadAsignada(id) {
   const sheet = ss.getSheetByName("actividades_asignadas");
   const data = sheet.getDataRange().getValues();
   let deleted = false;
-  
+
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] == id) {
       sheet.deleteRow(i + 1);
@@ -1260,7 +1314,7 @@ function deleteActividadAsignada(id) {
       break;
     }
   }
-  
+
   if (deleted) {
     const sheetEntregas = ss.getSheetByName("actividades_entregadas");
     if (sheetEntregas) {
@@ -1279,9 +1333,11 @@ function deleteActividadAsignada(id) {
 function getEntregasByActividad(idActividadesAsignadas) {
   const entregas = getSheetData("actividades_entregadas");
   const estudiantes = getSheetData("estudiantes");
-  
-  const filtradas = entregas.filter(e => e.id_actividades_asignadas == idActividadesAsignadas);
-  
+
+  const filtradas = entregas.filter(e =>
+  String(e.id_actividades_asignadas).trim() === String(idActividadesAsignadas).trim()
+  );
+
   const detalle = filtradas.map(ent => {
     const est = estudiantes.find(s => s.id == ent.id_estudiante);
     return {
@@ -1295,7 +1351,7 @@ function getEntregasByActividad(idActividadesAsignadas) {
       nota: ent.nota !== undefined && ent.nota !== "" ? parseFloat(ent.nota) : ""
     };
   });
-  
+
   return { success: true, entregas: detalle };
 }
 
@@ -1303,478 +1359,721 @@ function saveNotaEntrega(idEntrega, nota) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("actividades_entregadas");
   const data = sheet.getDataRange().getValues();
-  
+
   const notaNum = Math.min(20, Math.max(0, parseFloat(nota) || 0));
-  
+
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] == idEntrega) {
       sheet.getRange(i + 1, 6).setValue(notaNum); // Col F: nota
-      
+
       const idActividad = data[i][1]; // id_actividades_asignadas
       const idEstudiante = data[i][2]; // id_estudiante
-      
+
       syncNotaToRelacion(idActividad, idEstudiante, notaNum);
-      
+
       return { success: true, message: "Nota de entrega calificada correctamente.", nota: notaNum };
     }
   }
   return { success: false, message: "Entrega no encontrada." };
 }
 
-function syncNotaToRelacion(idActividad, idEstudiante, notaNum) {
-  const actividades = getSheetData("actividades_asignadas");
-  const act = actividades.find(a => a.id == idActividad);
-  if (!act) return;
-  
-  const numEval = (act.numero_evaluacion || "e1").toString().toLowerCase(); // e1..e5
-  const idUnidad = act.id_unidad_curricular;
-  
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheetRel = ss.getSheetByName("relacion_programa_notas");
-  if (!sheetRel) return;
-  
-  const dataRel = sheetRel.getDataRange().getValues();
-  let foundRow = -1;
-  for (let i = 1; i < dataRel.length; i++) {
-    if (dataRel[i][1] == idEstudiante && dataRel[i][2] == idUnidad) {
-      foundRow = i + 1;
-      break;
-    }
+function bulkSaveNotasEntregas(entregasArray) {
+  if (!entregasArray || !Array.isArray(entregasArray) || entregasArray.length === 0) {
+    return { success: false, message: "No se proporcionaron notas para guardar." };
   }
-  
-  const evalColMap = { "e1": 5, "e2": 6, "e3": 7, "e4": 8, "e5": 9 };
-  const colIdx = evalColMap[numEval];
-  
-  if (foundRow !== -1 && colIdx) {
-    sheetRel.getRange(foundRow, colIdx).setValue(notaNum);
-    
-    let rowVals = sheetRel.getRange(foundRow, 1, 1, 10).getValues()[0];
-    let cantEval = parseInt(rowVals[3]) || 4;
-    let e1 = colIdx === 5 ? notaNum : (parseFloat(rowVals[4]) || 0);
-    let e2 = colIdx === 6 ? notaNum : (parseFloat(rowVals[5]) || 0);
-    let e3 = colIdx === 7 ? notaNum : (parseFloat(rowVals[6]) || 0);
-    let e4 = colIdx === 8 ? notaNum : (parseFloat(rowVals[7]) || 0);
-    let e5 = colIdx === 9 ? notaNum : (parseFloat(rowVals[8]) || 0);
-    
-    let active = [e1, e2, e3, e4, e5].slice(0, cantEval);
-    let total = (active.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
-    sheetRel.getRange(foundRow, 10).setValue(total);
-  }
-}
 
-function uploadEntregaEstudiante(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("actividades_entregadas");
-  
-  const idActividad = params.id_actividades_asignadas;
-  const idEstudiante = params.id_estudiante;
-  const fechaEntrega = new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" });
-  
-  if (!idActividad || !idEstudiante) {
-    return { success: false, message: "Datos de actividad o estudiante incompletos." };
-  }
-  
-  let entregaUrl = "";
-  
-  if (params.fileData) {
-    try {
-      const fileName = params.fileName || "entrega_estudiante.pdf";
-      const base64Str = params.fileData.includes(",") ? params.fileData.split(",")[1] : params.fileData;
-      const bytes = Utilities.base64Decode(base64Str);
-      
-      let mimeType = MimeType.PDF;
-      const lowerName = fileName.toLowerCase();
-      if (lowerName.endsWith(".docx") || lowerName.endsWith(".doc")) {
-        mimeType = MimeType.MICROSOFT_WORD;
-      } else if (lowerName.endsWith(".pptx") || lowerName.endsWith(".ppt")) {
-        mimeType = MimeType.MICROSOFT_POWERPOINT;
-      } else if (lowerName.endsWith(".odt")) {
-        mimeType = "application/vnd.oasis.opendocument.text";
-      } else if (lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
-        mimeType = MimeType.JPEG;
-      } else if (lowerName.endsWith(".zip")) {
-        mimeType = MimeType.ZIP;
-      }
-      
-      const blob = Utilities.newBlob(bytes, mimeType, fileName);
-      
-      let folder;
-      try {
-        folder = DriveApp.getFolderById(DRIVE_ENTREGAS_FOLDER_ID);
-      } catch (errDrive) {
-        folder = DriveApp.getRootFolder();
-      }
-      
-      const driveFile = folder.createFile(blob);
-      
-      // PERMISO PÚBLICO DE LECTURA PARA DOCENTES Y EVALUADORES
-      try {
-        driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      } catch (errShare) {
-        Logger.log("Aviso: setSharing no permitido o restringido por políticas de dominio: " + errShare.toString());
-      }
-      entregaUrl = driveFile.getUrl();
-    } catch (eUpload) {
-      return { success: false, message: "Error subiendo archivo a Google Drive: " + eUpload.toString() };
-    }
-  } else if (params.entregaUrl) {
-    entregaUrl = params.entregaUrl.toString().trim();
-  } else {
-    return { success: false, message: "Debe adjuntar un archivo o ingresar un enlace de entrega." };
-  }
-  
-  const data = sheet.getDataRange().getValues();
-  let foundRow = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][1] == idActividad && data[i][2] == idEstudiante) {
-      foundRow = i + 1;
-      break;
-    }
-  }
-  
-  if (foundRow !== -1) {
-    sheet.getRange(foundRow, 4).setValue(entregaUrl);
-    sheet.getRange(foundRow, 5).setValue(fechaEntrega);
-    return { success: true, message: "Entrega registrada/actualizada con éxito.", entrega: entregaUrl, fecha_entrega: fechaEntrega };
-  } else {
-    const newId = getNextId("actividades_entregadas");
-    sheet.appendRow([newId, idActividad, idEstudiante, entregaUrl, fechaEntrega, ""]);
-    return { success: true, message: "Entrega registrada con éxito.", id: newId, entrega: entregaUrl, fecha_entrega: fechaEntrega };
-  }
-}
-
-/**
- * ==================== FUNCIONES EXTENSIÓN UNIVERSITARIA ====================
- */
-
-function getExtensionPublicData() {
-  return {
-    success: true,
-    extensionList: getSheetData("extension"),
-    bancoList: getSheetData("banco")
-  };
-}
-
-function getStudentExtensionData(cedula) {
-  const cleanCed = cleanCedula(cedula);
-  if (!cleanCed) return { success: false, message: "Cédula requerida" };
-
-  const estudiantes = getSheetData("estudiantes");
-  const student = estudiantes.find(e => cleanCedula(e.cedula) === cleanCed);
-
-  const extensionList = getSheetData("extension");
-  const bancoList = getSheetData("banco");
-
-  if (!student) {
-    return {
-      success: false,
-      registered: false,
-      message: "Estudiante no registrado con esa cédula.",
-      extensionList: extensionList,
-      bancoList: bancoList
-    };
-  }
-
-  const allPagos = getSheetData("pagos");
-  const studentPagos = allPagos.filter(p => p.id_usuario == student.id).map(p => {
-    const ext = extensionList.find(e => e.id == p.id_extension);
-    const bnk = bancoList.find(b => b.id == p.id_banco);
-    return {
-      id: p.id,
-      id_usuario: p.id_usuario,
-      id_extension: p.id_extension,
-      taller: ext ? ext.taller : "Curso Desconocido",
-      descripcion: ext ? ext.descripcion : "",
-      valor_usd: ext ? ext.valor : 0,
-      estado_curso: ext ? (ext.estado || "EN_CURSO") : "EN_CURSO",
-      id_banco: p.id_banco,
-      banco: bnk ? bnk.banco : "Banco Desconocido",
-      monto: p.monto,
-      numero_transferencia: p.numero_transferencia,
-      fecha_transferencia: p.fecha_transferencia,
-      capture: p.capture
-    };
-  });
-
-  return {
-    success: true,
-    registered: true,
-    student: {
-      id: student.id,
-      cedula: student.cedula,
-      nombre_completo: student.nombre_completo,
-      correo: student.correo,
-      telefono: student.telefono
-    },
-    pagos: studentPagos,
-    extensionList: extensionList,
-    bancoList: bancoList
-  };
-}
-
-function savePagoExtension(params) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("pagos");
-
-  if (!params.id_usuario || !params.id_extension || !params.id_banco || !params.numero_transferencia) {
-    return { success: false, message: "Por favor complete todos los campos obligatorios del pago." };
-  }
-
-  let captureUrl = "";
-  if (params.fileData) {
-    try {
-      const fileName = params.fileName || ("capture_" + params.id_usuario + "_" + Date.now() + ".png");
-      const base64Str = params.fileData.includes(",") ? params.fileData.split(",")[1] : params.fileData;
-      const bytes = Utilities.base64Decode(base64Str);
-      
-      let mimeType = MimeType.PNG;
-      const lowerName = fileName.toLowerCase();
-      if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
-        mimeType = MimeType.JPEG;
-      } else if (lowerName.endsWith(".pdf")) {
-        mimeType = MimeType.PDF;
-      }
-
-      const blob = Utilities.newBlob(bytes, mimeType, fileName);
-      
-      let folder;
-      try {
-        folder = DriveApp.getFolderById(DRIVE_CAPTURES_FOLDER_ID);
-      } catch (errDrive) {
-        folder = DriveApp.getRootFolder();
-      }
-
-      const driveFile = folder.createFile(blob);
-      driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      captureUrl = driveFile.getUrl();
-    } catch (eUpload) {
-      return { success: false, message: "Error al subir el comprobante a Google Drive: " + eUpload.toString() };
-    }
-  } else if (params.capture) {
-    captureUrl = params.capture;
-  }
-
-  const newId = getNextId("pagos");
-  
-  let rawFecha = (params.fecha_transferencia || "").toString().trim();
-  let fechaFormateada = rawFecha;
-  if (rawFecha.includes("-")) {
-    let parts = rawFecha.split("-");
-    if (parts.length === 3) {
-      fechaFormateada = `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
-    }
-  }
-
-  sheet.appendRow([
-    newId,
-    params.id_usuario,
-    params.id_extension,
-    params.id_banco,
-    params.monto || "0",
-    params.numero_transferencia.toString().trim(),
-    fechaFormateada,
-    captureUrl
-  ]);
-
-  return {
-    success: true,
-    message: "Inscripción y pago declarados exitosamente."
-  };
-}
-
-function getAllExtensionPagos(params) {
-  const pagos = getSheetData("pagos");
-  const estudiantes = getSheetData("estudiantes");
-  const extensionList = getSheetData("extension");
-  const bancoList = getSheetData("banco");
-
-  const joined = pagos.map(p => {
-    const st = estudiantes.find(e => e.id == p.id_usuario);
-    const ext = extensionList.find(ex => ex.id == p.id_extension);
-    const bnk = bancoList.find(b => b.id == p.id_banco);
-    return {
-      id: p.id,
-      id_usuario: p.id_usuario,
-      cedula: st ? st.cedula : "N/A",
-      nombre_completo: st ? st.nombre_completo : "Desconocido",
-      id_extension: p.id_extension,
-      curso: ext ? ext.taller : "N/A",
-      estado_curso: ext ? (ext.estado || "EN_CURSO") : "EN_CURSO",
-      id_banco: p.id_banco,
-      banco: bnk ? bnk.banco : "N/A",
-      monto: p.monto,
-      numero_transferencia: p.numero_transferencia,
-      fecha_transferencia: p.fecha_transferencia,
-      capture: p.capture
-    };
-  });
-
-  return {
-    success: true,
-    pagos: joined,
-    extensionList: extensionList,
-    bancoList: bancoList
-  };
-}
-
-function updateExtensionEstado(idExtension, nuevoEstado) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("extension");
-  if (!sheet) return { success: false, message: "Tabla extension no existe." };
+  if (!sheet) return { success: false, message: "Hoja de actividades_entregadas no encontrada." };
 
   const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] == idExtension) {
-      sheet.getRange(i + 1, 5).setValue(nuevoEstado);
-      return { success: true, message: "Estado del curso actualizado a " + nuevoEstado };
-    }
-  }
+  let updatedCount = 0;
 
-  return { success: false, message: "Curso de extensión no encontrado." };
-}
+  entregasArray.forEach(item => {
+    const idEntrega = item.id_entrega || item.id;
+    const nota = item.nota;
+    if (nota === "" || nota === undefined || nota === null) return;
 
+    const notaNum = Math.min(20, Math.max(0, parseFloat(nota) || 0));
 
-
-
-
-
-
-
-
-function updatePagoEstado(idPago, nuevoEstado) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("pagos");
-  if (!sheet) return { success: false, message: "Tabla pagos no existe." };
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] == idPago) {
-      sheet.getRange(i + 1, 9).setValue(nuevoEstado);
-      return { success: true, message: "Estado de inscripción/pago actualizado." };
-    }
-  }
-  return { success: false, message: "Registro de pago no encontrado." };
-}
-function bulkUpdatePagoEstado(idExtension, nuevoEstado) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("pagos");
-  if (!sheet) return { success: false, message: "Tabla pagos no existe." };
-  const data = sheet.getDataRange().getValues();
-  let count = 0;
-  for (let i = 1; i < data.length; i++) {
-    if (!idExtension || data[i][2] == idExtension) {
-      sheet.getRange(i + 1, 9).setValue(nuevoEstado);
-      count++;
-    }
-  }
-  return { success: true, message: `Se actualizaron ${count} inscripciones a estado '${nuevoEstado}'.` };
-}
-
-
-/**
- * ============================================================================
- * CALIFICACIONES MASIVAS DE ENTREGAS
- * ============================================================================
- */
-function bulkSaveNotasEntregas(params) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("actividades_entregadas");
-  if (!sheet) return { success: false, message: "Tabla actividades_entregadas no existe." };
-
-  let entregas = params.entregas;
-  if (typeof entregas === "string") {
-    try {
-      entregas = JSON.parse(entregas);
-    } catch(e) {
-      entregas = [];
-    }
-  }
-  if (!Array.isArray(entregas) || entregas.length === 0) {
-    return { success: false, message: "No se recibieron notas para guardar." };
-  }
-
-  const data = sheet.getDataRange().getValues();
-  let count = 0;
-
-  entregas.forEach(item => {
-    const idEntrega = item.id_entrega;
-    const notaNum = Math.min(20, Math.max(0, parseFloat(item.nota) || 0));
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] == idEntrega) {
-        sheet.getRange(i + 1, 6).setValue(notaNum);
-        syncNotaToRelacion(data[i][1], data[i][2], notaNum);
-        count++;
+      if (String(data[i][0]).trim() === String(idEntrega).trim()) {
+        sheet.getRange(i + 1, 6).setValue(notaNum); // Col F: nota
+
+        const idActividad = data[i][1]; // id_actividades_asignadas
+        const idEstudiante = data[i][2]; // id_estudiante
+
+        syncNotaToRelacion(idActividad, idEstudiante, notaNum);
+        updatedCount++;
         break;
       }
     }
   });
 
-  return { success: true, message: `Se guardaron las calificaciones de ${count} estudiante(s) correctamente.` };
+  SpreadsheetApp.flush();
+  return {
+    success: true,
+    message: `Se asignaron y guardaron ${updatedCount} calificaciones correctamente.`,
+    count: updatedCount
+  };
 }
 
 /**
- * ============================================================================
- * VALIDACIÓN DE ENLACE GOOGLE DRIVE / CANVA
- * ============================================================================
+ * Validador de enlaces permitidos: Únicamente Google Drive y Canva
  */
-function validateDriveLink(url) {
-  if (!url) return { status: "private", detail: "URL vacía." };
-  const str = url.toString().trim();
+function isValidDriveOrCanvaUrl(url) {
+  if (!url) return false;
+  let clean = url.toString().trim().toLowerCase();
+  if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
 
-  if (str.includes("canva.com") || str.includes("canva.site")) {
-    return { status: "public", detail: "Enlace de Canva detectado." };
-  }
-
-  let fileId = "";
-  const matchFile = str.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  const matchId = str.match(/id=([a-zA-Z0-9_-]+)/);
-  const matchFolder = str.match(/\/folders\/([a-zA-Z0-9_-]+)/);
-  const matchDocs = str.match(/\/document\/d\/([a-zA-Z0-9_-]+)/) || str.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || str.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/);
-
-  if (matchFile) fileId = matchFile[1];
-  else if (matchId) fileId = matchId[1];
-  else if (matchFolder) fileId = matchFolder[1];
-  else if (matchDocs) fileId = matchDocs[1];
-
-  if (!fileId) {
-    return { status: "private", detail: "No se encontró un ID de archivo o carpeta válido en el enlace." };
-  }
-
-  if (str.includes("usp=sharing") || str.includes("usp=drivesdk") || str.includes("open?id=") || str.includes("/folders/")) {
-    return { status: "public", detail: "Enlace con formato público verificado." };
-  }
-
-  return { status: "public_unverified", detail: "Enlace válido de Google Drive detectado." };
-}
-
-/**
- * ============================================================================
- * FUNCIÓN OBLIGATORIA DE AUTORIZACIÓN DE GOOGLE DRIVE (EJECUTAR EN APPS SCRIPT)
- * ============================================================================
- * Esta función debe ejecutarse manualmente en el editor de Apps Script para
- * que Google solicite la autorización de DriveApp (Revisar permisos -> Permitir).
- */
-function autorizarPermisosDrive() {
-  Logger.log("=== COMPROBANDO PERMISOS DE GOOGLE DRIVE ===");
-  try {
-    const folder = DriveApp.getFolderById(DRIVE_ENTREGAS_FOLDER_ID);
-    Logger.log("✅ Carpeta de entregas encontrada con éxito: " + folder.getName() + " (ID: " + DRIVE_ENTREGAS_FOLDER_ID + ")");
-    
-    // Crear archivo de prueba para confirmar permisos de escritura
-    const testBlob = Utilities.newBlob("SGN Verificación de Permisos", "text/plain", "test_auth_sgn.txt");
-    const testFile = folder.createFile(testBlob);
-    try {
-      testFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    } catch(e) {
-      Logger.log("Nota: setSharing restringido en dominio institucional: " + e.toString());
+    if (clean.includes("wps.com") || clean.includes("onedrive") || clean.includes("dropbox.com") || clean.includes("office.com")) {
+      return false;
     }
-    testFile.setTrashed(true);
-    Logger.log("✅ ¡PERMISOS DE GOOGLE DRIVE AUTORIZADOS Y COMPROBADOS AL 100%!");
-    Logger.log("👉 Ahora ve a 'Implementar' > 'Administrar implementaciones' > Editar > 'Nueva versión' > 'Implementar'.");
-    return "PERMISOS_OK";
-  } catch (err) {
-    Logger.log("⚠️ Advertencia al buscar la carpeta por ID: " + err.toString());
-    const root = DriveApp.getRootFolder();
-    Logger.log("✅ Acceso a Google Drive Root verificado correctamente: " + root.getName());
-    return "PERMISOS_ROOT_OK";
-  }
+
+    return clean.includes("drive.google.com") ||
+    clean.includes("docs.google.com") ||
+    clean.includes("canva.com") ||
+    clean.includes("canva.site");
 }
+
+/**
+ * Extrae el ID (y resourcekey, si existe) de un enlace de Google Drive / Docs.
+ */
+function extractDriveIdInfo(url) {
+  const clean = (url || "").toString().trim();
+  let id = null;
+  let isFolder = false;
+
+  let m = clean.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
+  if (m) {
+    id = m[1];
+    isFolder = true;
+  } else {
+    m = clean.match(/\/d\/([a-zA-Z0-9_-]{10,})/) || clean.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+    if (m) id = m[1];
+  }
+
+  const rk = clean.match(/[?&]resourcekey=([a-zA-Z0-9_-]+)/i);
+  return { id: id, isFolder: isFolder, resourceKey: rk ? rk[1] : null, isDocsEditor: /docs\.google\.com\/(document|spreadsheets|presentation)\//i.test(clean) };
+  }
+
+  /**
+   * Verifica rigurosamente si un enlace de Google Drive / Google Docs es PÚBLICO
+   * ("Cualquier persona con el enlace" / Acceso general con permisos de lectura).
+   * Retorna { status: "public" | "private", detail: string }
+   */
+  function checkDriveLinkAccess(url) {
+    const info = extractDriveIdInfo(url);
+    if (!info || !info.id) {
+      return { status: "private", detail: "No se encontró un ID de archivo o carpeta válido en el enlace." };
+    }
+
+    // 1. Intento directo con DriveApp (archivos o carpetas)
+    try {
+      const item = info.isFolder ? DriveApp.getFolderById(info.id) : DriveApp.getFileById(info.id);
+      if (item) {
+        try {
+          const access = item.getSharingAccess();
+          if (access === DriveApp.Access.ANYONE || access === DriveApp.Access.ANYONE_WITH_LINK) {
+            return { status: "public", detail: "DriveApp: Acceso público confirmado (" + access + ")" };
+          } else if (access === DriveApp.Access.PRIVATE) {
+            return { status: "private", detail: "El archivo o carpeta está configurado como Privado." };
+          }
+        } catch (eAccess) {
+          // En archivos externos donde el script no es el dueño, getSharingAccess() arroja excepción.
+          // Pero si DriveApp pudo acceder al archivo y leer su nombre, el enlace otorga acceso directo:
+          try {
+            const itemName = item.getName();
+            if (itemName) {
+              return { status: "public", detail: "Acceso verificado exitosamente mediante Drive ('" + itemName + "')" };
+            }
+          } catch (eName) {}
+        }
+      }
+    } catch (eDrive) {
+      // Si DriveApp falla porque no lo encuentra o no tiene acceso, continuar a la verificación HTTP
+    }
+
+    // 2. Endpoint de Thumbnail para archivos estándar (PDF, DOCX, ZIP, imágenes)
+    // Google Drive solo devuelve HTTP 200 con imagen si el archivo es público ("Cualquier persona con el enlace")
+    if (!info.isFolder && !info.isDocsEditor) {
+      try {
+        let thumbUrl = "https://drive.google.com/thumbnail?id=" + encodeURIComponent(info.id) + "&sz=w200";
+        if (info.resourceKey) thumbUrl += "&resourcekey=" + encodeURIComponent(info.resourceKey);
+
+                        const thumbRes = UrlFetchApp.fetch(thumbUrl, {
+                          muteHttpExceptions: true,
+                          followRedirects: true,
+                          headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                          }
+                        });
+
+        const thumbCode = thumbRes.getResponseCode();
+        const thumbContentType = (thumbRes.getHeaders()["Content-Type"] || "").toLowerCase();
+
+        if (thumbCode === 200 && thumbContentType.includes("image/")) {
+          return { status: "public", detail: "Thumbnail público verificado (HTTP 200)" };
+        }
+
+        if (thumbCode === 401 || thumbCode === 403 || thumbCode === 404) {
+          return { status: "private", detail: "Acceso restringido en thumbnail (HTTP " + thumbCode + ")" };
+        }
+      } catch (eThumb) {
+        console.warn("Comprobación thumbnail falló: " + eThumb);
+      }
+    }
+
+    // 3. Endpoint de Preview / View anónimo (Docs, Sheets, Slides, Carpetas y archivos)
+    let testUrl = "";
+    if (info.isFolder) {
+      testUrl = "https://drive.google.com/drive/folders/" + encodeURIComponent(info.id);
+    } else if (info.isDocsEditor) {
+      const kindMatch = url.match(/docs\.google\.com\/(document|spreadsheets|presentation)\//i);
+      const kind = kindMatch ? kindMatch[1].toLowerCase() : "document";
+      testUrl = "https://docs.google.com/" + kind + "/d/" + encodeURIComponent(info.id) + "/preview";
+    } else {
+      testUrl = "https://drive.google.com/file/d/" + encodeURIComponent(info.id) + "/view";
+    }
+
+    if (info.resourceKey) {
+      testUrl += (testUrl.includes("?") ? "&" : "?") + "resourcekey=" + encodeURIComponent(info.resourceKey);
+    }
+
+    try {
+      // 3.1. Detección rápida de redirección a login sin seguir redirecciones
+      const resNoRedir = UrlFetchApp.fetch(testUrl, {
+        muteHttpExceptions: true,
+        followRedirects: false,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+
+      const codeNoRedir = resNoRedir.getResponseCode();
+      const headersNoRedir = resNoRedir.getAllHeaders();
+      const location = String(headersNoRedir["Location"] || headersNoRedir["location"] || "");
+
+      if (codeNoRedir === 401 || codeNoRedir === 403 || codeNoRedir === 404) {
+        return { status: "private", detail: "HTTP " + codeNoRedir + " (Acceso denegado)" };
+      }
+
+      if (codeNoRedir >= 300 && codeNoRedir < 400 && /accounts\.google\.com/i.test(location)) {
+        return { status: "private", detail: "Redirección a pantalla de inicio de sesión de Google (Privado)" };
+      }
+
+      // 3.2. Inspección del contenido HTML siguiendo redirecciones
+      const resFollow = UrlFetchApp.fetch(testUrl, {
+        muteHttpExceptions: true,
+        followRedirects: true,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+
+      const codeFollow = resFollow.getResponseCode();
+      if (codeFollow === 401 || codeFollow === 403 || codeFollow === 404) {
+        return { status: "private", detail: "HTTP " + codeFollow + " (No accesible)" };
+      }
+
+      const htmlContent = resFollow.getContentText() || "";
+      const htmlLower = htmlContent.toLowerCase();
+
+      // Detección por título de la página
+      const titleMatch = htmlContent.match(/<title>(.*?)<\/title>/i);
+      const title = titleMatch ? titleMatch[1].toLowerCase().trim() : "";
+
+      const isLoginTitle = title.includes("iniciar sesión") ||
+      title.includes("sign in") ||
+      title.includes("cuentas de google") ||
+      title.includes("google accounts") ||
+      title.includes("acceso denegado") ||
+      title.includes("access denied") ||
+      title.includes("solicitar acceso") ||
+      title.includes("request access") ||
+      title.includes("necesitas permiso") ||
+      title.includes("you need access");
+
+      if (isLoginTitle) {
+        return { status: "private", detail: "Pantalla de acceso restringido detectada ('" + title + "')" };
+      }
+
+      // Detección por marcadores de Google en el DOM
+      const hasBlockedMarkers = htmlLower.includes("accounts.google.com/servicelogin") ||
+      htmlLower.includes("accounts.google.com/v3/signin") ||
+      htmlLower.includes('id="request-access"') ||
+      htmlLower.includes('name="requestaccess"') ||
+      htmlLower.includes('class="doc-access-denied"') ||
+      htmlLower.includes('class="drive-viewer-access-denied"') ||
+      htmlLower.includes('"permission":"denied"');
+
+      if (hasBlockedMarkers) {
+        return { status: "private", detail: "Marcadores de inicio de sesión o solicitud de acceso detectados" };
+      }
+
+      if (codeFollow === 200) {
+        return { status: "public", detail: "Acceso verificado exitosamente (HTTP 200)" };
+      }
+
+      return { status: "private", detail: "Respuesta no autorizada (HTTP " + codeFollow + ")" };
+
+    } catch (eFetch) {
+      console.warn("checkDriveLinkAccess UrlFetchApp error: " + eFetch);
+      const errStr = eFetch.toString();
+      if (/permiso para llamar|permission to call|permisos necesarios|required permissions|script\.external_request|se requiere autorizaci/i.test(errStr)) {
+        // Si la URL cuenta con formato válido de Google Drive y parámetros de compartir (usp=sharing, /view, etc.)
+        const isShareFormat = /[?&]usp=sharing/i.test(url) || /\/view/i.test(url) || /\/preview/i.test(url) || /docs\.google\.com\//i.test(url);
+      if (isShareFormat) {
+        return {
+          status: "public_unverified",
+          detail: "Enlace válido de Google Drive con formato de compartir detectado. Verificación de permisos externos omitida."
+        };
+      }
+      return {
+        status: "public_unverified",
+        detail: "Enlace de Google Drive registrado. Asegúrate de mantenerlo como 'Cualquier persona con el enlace' (Lector)."
+      };
+      }
+      return { status: "private", detail: "No se pudo verificar el enlace: " + errStr };
+    }
+  }
+
+  /**
+   * Función de diagnóstico y autorización rápida en Google Apps Script.
+   * Ejecuta esta función desde el editor de Apps Script (botón 'Ejecutar') para
+   * autorizar automáticamente los permisos externos (script.external_request).
+   */
+  function probarValidacionEnlaceDrive() {
+    const url = "https://docs.google.com/document/d/13og_-xyIqYUCB4VFDb9vSwpO60FIY9qlWpb6czGr2aY/edit?usp=sharing";
+    const r = checkDriveLinkAccess(url);
+    Logger.log("================ RESULTADO DE LA PRUEBA ================");
+    Logger.log("Estado: " + r.status);
+    Logger.log("Detalle: " + r.detail);
+    Logger.log("========================================================");
+    return r;
+  }
+
+  /**
+   * Función de diagnóstico y autorización para la subida de archivos PDF a Google Drive.
+   * Selecciona 'probarSubidaDrive' en el editor de Apps Script y haz clic en '▷ Ejecutar'
+   * para autorizar los permisos de Drive (Revisar permisos -> Permitir).
+   */
+  function probarSubidaDrive() {
+    Logger.log("================ INICIANDO PRUEBA DE GOOGLE DRIVE ================");
+    try {
+      const folder = DriveApp.getFolderById(DRIVE_ENTREGAS_FOLDER_ID);
+      Logger.log("✅ Carpeta de entregas encontrada con éxito: '" + folder.getName() + "'");
+      Logger.log("   ID de la carpeta: " + DRIVE_ENTREGAS_FOLDER_ID);
+
+      // Crear archivo de prueba
+      const testBlob = Utilities.newBlob("Prueba de subida SGN - " + new Date().toISOString(), "text/plain", "prueba_conexion_sgn.txt");
+      const testFile = folder.createFile(testBlob);
+      Logger.log("✅ Archivo de prueba creado con éxito: " + testFile.getUrl());
+
+      // Intentar configurar permisos compartidos
+      try {
+        testFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        Logger.log("✅ Permiso público (Lector) configurado correctamente.");
+      } catch (eShare) {
+        Logger.log("ℹ️ Aviso: Permisos restringidos por la directiva del dominio institucional: " + eShare);
+      }
+
+      // Eliminar archivo de prueba
+      testFile.setTrashed(true);
+      Logger.log("✅ Archivo de prueba enviado a la papelera. Todo funciona al 100%.");
+      Logger.log("=================================================================");
+      Logger.log("👉 ¡ÉXITO! Ahora ve a 'Implementar' > 'Administrar implementaciones' > Editar (icono lápiz) > Versión: 'Nueva versión' > 'Implementar'.");
+      return { success: true, message: "Google Drive autorizado y carpeta verificada con éxito." };
+    } catch (err) {
+      Logger.log("❌ ERROR durante la prueba de Google Drive: " + err.toString());
+      Logger.log("=================================================================");
+      return { success: false, error: err.toString() };
+    }
+  }
+
+  function syncNotaToRelacion(idActividad, idEstudiante, notaNum) {
+    const actividades = getSheetData("actividades_asignadas");
+    const act = actividades.find(a => String(a.id).trim() === String(idActividad).trim());
+    if (!act) return;
+
+    const numEval = (act.numero_evaluacion || "e1").toString().toLowerCase(); // e1..e5
+    const idUnidad = act.id_unidad_curricular;
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheetRel = ss.getSheetByName("relacion_programa_notas");
+    if (!sheetRel) return;
+
+    const dataRel = sheetRel.getDataRange().getValues();
+    let foundRow = -1;
+    for (let i = 1; i < dataRel.length; i++) {
+      if (String(dataRel[i][1]).trim() === String(idEstudiante).trim() && String(dataRel[i][2]).trim() === String(idUnidad).trim()) {
+        foundRow = i + 1;
+        break;
+      }
+    }
+
+    const evalColMap = { "e1": 5, "e2": 6, "e3": 7, "e4": 8, "e5": 9 };
+    const colIdx = evalColMap[numEval];
+    if (!colIdx) return;
+
+    if (foundRow !== -1) {
+      sheetRel.getRange(foundRow, colIdx).setValue(notaNum);
+
+      let rowVals = sheetRel.getRange(foundRow, 1, 1, 10).getValues()[0];
+      let cantEval = parseInt(rowVals[3]) || 4;
+      let e1 = colIdx === 5 ? notaNum : (parseFloat(rowVals[4]) || 0);
+      let e2 = colIdx === 6 ? notaNum : (parseFloat(rowVals[5]) || 0);
+      let e3 = colIdx === 7 ? notaNum : (parseFloat(rowVals[6]) || 0);
+      let e4 = colIdx === 8 ? notaNum : (parseFloat(rowVals[7]) || 0);
+      let e5 = colIdx === 9 ? notaNum : (parseFloat(rowVals[8]) || 0);
+
+      let active = [e1, e2, e3, e4, e5].slice(0, cantEval);
+      let total = (active.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
+      sheetRel.getRange(foundRow, 10).setValue(total);
+    } else {
+      const nextId = getNextId("relacion_programa_notas");
+      const cantEval = 4;
+      let e1 = colIdx === 5 ? notaNum : 0;
+      let e2 = colIdx === 6 ? notaNum : 0;
+      let e3 = colIdx === 7 ? notaNum : 0;
+      let e4 = colIdx === 8 ? notaNum : 0;
+      let e5 = colIdx === 9 ? notaNum : 0;
+      let active = [e1, e2, e3, e4, e5].slice(0, cantEval);
+      let total = (active.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
+      sheetRel.appendRow([nextId, idEstudiante, idUnidad, cantEval, e1, e2, e3, e4, e5, total]);
+    }
+
+    SpreadsheetApp.flush();
+  }
+
+  function uploadEntregaEstudiante(params) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName("actividades_entregadas");
+    if (!sheet) {
+      initDatabase();
+      sheet = ss.getSheetByName("actividades_entregadas");
+    }
+
+    const idActividad = params.id_actividades_asignadas;
+    const idEstudiante = params.id_estudiante;
+    const fechaEntrega = new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" });
+
+    if (!idActividad || !idEstudiante) {
+      return { success: false, message: "Datos de actividad o estudiante incompletos." };
+    }
+
+    let entregaUrl = "";
+
+    if (params.fileData) {
+      try {
+        const fileName = params.fileName || "entrega_estudiante.pdf";
+        let base64Str = params.fileData;
+        if (base64Str.indexOf(",") > -1) {
+          base64Str = base64Str.split(",")[1];
+        }
+        base64Str = base64Str.replace(/\s/g, "");
+        const bytes = Utilities.base64Decode(base64Str);
+
+        let mimeType = MimeType.PDF;
+        const lowerName = fileName.toLowerCase();
+        if (lowerName.endsWith(".docx") || lowerName.endsWith(".doc")) {
+          mimeType = MimeType.MICROSOFT_WORD;
+        } else if (lowerName.endsWith(".pptx") || lowerName.endsWith(".ppt")) {
+          mimeType = MimeType.MICROSOFT_POWERPOINT;
+        } else if (lowerName.endsWith(".odt")) {
+          mimeType = "application/vnd.oasis.opendocument.text";
+        } else if (lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+          mimeType = MimeType.JPEG;
+        } else if (lowerName.endsWith(".zip")) {
+          mimeType = MimeType.ZIP;
+        }
+
+        // Construir nombre representativo del archivo para facilitar su identificación docente: [CEDULA]_[EVAL]_[NOMBRE]
+        let finalFileName = fileName;
+        try {
+          const student = getSheetData("estudiantes").find(s => String(s.id).trim() === String(idEstudiante).trim());
+          const act = getSheetData("actividades_asignadas").find(a => String(a.id).trim() === String(idActividad).trim());
+          const ced = student ? cleanCedula(student.cedula) : ("EST_" + idEstudiante);
+          const ev = act ? (act.numero_evaluacion || "EVAL").toUpperCase() : "EVAL";
+          const cleanOriginal = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+          finalFileName = `${ced}_${ev}_${cleanOriginal}`;
+        } catch (eName) {
+          finalFileName = fileName;
+        }
+
+        const blob = Utilities.newBlob(bytes, mimeType, finalFileName);
+
+        let folder = null;
+        try {
+          folder = DriveApp.getFolderById(DRIVE_ENTREGAS_FOLDER_ID);
+        } catch (errDrive) {
+          console.warn("DriveApp.getFolderById falló para " + DRIVE_ENTREGAS_FOLDER_ID + ": " + errDrive);
+        }
+
+        let driveFile;
+        if (folder) {
+          driveFile = folder.createFile(blob);
+        } else {
+          driveFile = DriveApp.createFile(blob);
+          console.warn("Archivo creado en la raíz de Google Drive (no se pudo acceder a la carpeta " + DRIVE_ENTREGAS_FOLDER_ID + ")");
+        }
+
+        // PERMISO PÚBLICO DE LECTURA PARA DOCENTES Y EVALUADORES
+        try {
+          driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch (eShare) {
+          console.warn("No se pudo aplicar setSharing al archivo: " + eShare);
+        }
+
+        entregaUrl = driveFile.getUrl();
+      } catch (eUpload) {
+        console.error("Error en uploadEntregaEstudiante:", eUpload);
+        let errMsg = eUpload.toString();
+        if (errMsg.includes("permiso") || errMsg.includes("permission") || errMsg.includes("auth") || errMsg.includes("DriveApp")) {
+          return {
+            success: false,
+            message: "Falta autorizar los permisos de Google Drive en Apps Script. En el editor de Apps Script selecciona la función 'probarSubidaDrive', pulsa ▷ Ejecutar, acepta los permisos ('Revisar permisos' -> 'Permitir') y despliega una 'Nueva versión'. Detalle: " + errMsg
+          };
+        }
+        return { success: false, message: "Error subiendo archivo a Google Drive: " + errMsg };
+      }
+    } else if (params.entregaUrl) {
+      const url = params.entregaUrl.toString().trim();
+      if (!isValidDriveOrCanvaUrl(url)) {
+        return {
+          success: false,
+          message: "Enlace no permitido. Únicamente se aceptan enlaces de Google Drive (drive.google.com, docs.google.com) o Canva (canva.com)."
+        };
+      }
+
+      const lowerUrl = url.toLowerCase();
+      if (lowerUrl.includes("drive.google.com") || lowerUrl.includes("docs.google.com")) {
+        const acceso = checkDriveLinkAccess(url);
+        console.log("Validación enlace Drive: " + acceso.status + " | " + acceso.detail);
+        if (acceso.status === "private") {
+          return {
+            success: false,
+            message: "El enlace de Google Drive ingresado es PRIVADO o requiere acceso (" + (acceso.detail || "restringido") + "). Por favor, asegúrate de cambiar la configuración de compartir en Google Drive a 'Cualquier persona con el enlace' (Lector) antes de enviar tu entrega."
+          };
+        }
+      }
+
+      entregaUrl = url;
+    } else {
+      return { success: false, message: "Debe adjuntar un archivo o ingresar un enlace de entrega." };
+    }
+
+    const data = sheet.getDataRange().getValues();
+    let foundRow = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][1]).trim() === String(idActividad).trim() && String(data[i][2]).trim() === String(idEstudiante).trim()) {
+        foundRow = i + 1;
+        break;
+      }
+    }
+
+    if (foundRow !== -1) {
+      sheet.getRange(foundRow, 4).setValue(entregaUrl);
+      sheet.getRange(foundRow, 5).setValue(fechaEntrega);
+    } else {
+      const newId = getNextId("actividades_entregadas");
+      sheet.appendRow([newId, idActividad, idEstudiante, entregaUrl, fechaEntrega, ""]);
+    }
+
+    SpreadsheetApp.flush(); // Garantizar persistencia inmediata
+    return { success: true, message: "Entrega registrada con éxito.", entrega: entregaUrl, fecha_entrega: fechaEntrega };
+  }
+
+  /**
+   * ==================== FUNCIONES EXTENSIÓN UNIVERSITARIA ====================
+   */
+
+  function getExtensionPublicData() {
+    return {
+      success: true,
+      extensionList: getSheetData("extension"),
+                                  bancoList: getSheetData("banco")
+    };
+  }
+
+  function getStudentExtensionData(cedula) {
+    const cleanCed = cleanCedula(cedula);
+    if (!cleanCed) return { success: false, message: "Cédula requerida" };
+
+    const estudiantes = getSheetData("estudiantes");
+    const student = estudiantes.find(e => cleanCedula(e.cedula) === cleanCed);
+
+    const extensionList = getSheetData("extension");
+    const bancoList = getSheetData("banco");
+
+    if (!student) {
+      return {
+        success: false,
+        registered: false,
+        message: "Estudiante no registrado con esa cédula.",
+        extensionList: extensionList,
+        bancoList: bancoList
+      };
+    }
+
+    const allPagos = getSheetData("pagos");
+    const studentPagos = allPagos.filter(p => p.id_usuario == student.id).map(p => {
+      const ext = extensionList.find(e => e.id == p.id_extension);
+      const bnk = bancoList.find(b => b.id == p.id_banco);
+      return {
+        id: p.id,
+        id_usuario: p.id_usuario,
+        id_extension: p.id_extension,
+        taller: ext ? ext.taller : "Curso Desconocido",
+        descripcion: ext ? ext.descripcion : "",
+        valor_usd: ext ? ext.valor : 0,
+        estado_curso: ext ? (ext.estado || "EN_CURSO") : "EN_CURSO",
+                                                                              id_banco: p.id_banco,
+                                                                              banco: bnk ? bnk.banco : "Banco Desconocido",
+                                                                              monto: p.monto,
+                                                                              numero_transferencia: p.numero_transferencia,
+                                                                              fecha_transferencia: p.fecha_transferencia,
+                                                                              capture: p.capture
+      };
+    });
+
+    return {
+      success: true,
+      registered: true,
+      student: {
+        id: student.id,
+        cedula: student.cedula,
+        nombre_completo: student.nombre_completo,
+        correo: student.correo,
+        telefono: student.telefono
+      },
+      pagos: studentPagos,
+      extensionList: extensionList,
+      bancoList: bancoList
+    };
+  }
+
+  function savePagoExtension(params) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("pagos");
+
+    if (!params.id_usuario || !params.id_extension || !params.id_banco || !params.numero_transferencia) {
+      return { success: false, message: "Por favor complete todos los campos obligatorios del pago." };
+    }
+
+    let captureUrl = "";
+    if (params.fileData) {
+      try {
+        const fileName = params.fileName || ("capture_" + params.id_usuario + "_" + Date.now() + ".png");
+        const base64Str = params.fileData.includes(",") ? params.fileData.split(",")[1] : params.fileData;
+        const bytes = Utilities.base64Decode(base64Str);
+
+        let mimeType = MimeType.PNG;
+        const lowerName = fileName.toLowerCase();
+        if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+          mimeType = MimeType.JPEG;
+        } else if (lowerName.endsWith(".pdf")) {
+          mimeType = MimeType.PDF;
+        }
+
+        const blob = Utilities.newBlob(bytes, mimeType, fileName);
+
+        let folder;
+        try {
+          folder = DriveApp.getFolderById(DRIVE_CAPTURES_FOLDER_ID);
+        } catch (errDrive) {
+          folder = DriveApp.getRootFolder();
+        }
+
+        const driveFile = folder.createFile(blob);
+        try {
+          driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch (eShare) {
+          console.warn("No se pudo aplicar setSharing al comprobante: " + eShare);
+        }
+        captureUrl = driveFile.getUrl();
+      } catch (eUpload) {
+        return { success: false, message: "Error al subir el comprobante a Google Drive: " + eUpload.toString() };
+      }
+    } else if (params.capture) {
+      captureUrl = params.capture;
+    }
+
+    const newId = getNextId("pagos");
+
+    let rawFecha = (params.fecha_transferencia || "").toString().trim();
+    let fechaFormateada = rawFecha;
+    if (rawFecha.includes("-")) {
+      let parts = rawFecha.split("-");
+      if (parts.length === 3) {
+        fechaFormateada = `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+      }
+    }
+
+    sheet.appendRow([
+      newId,
+      params.id_usuario,
+      params.id_extension,
+      params.id_banco,
+      params.monto || "0",
+      params.numero_transferencia.toString().trim(),
+                    fechaFormateada,
+                    captureUrl
+    ]);
+
+    return {
+      success: true,
+      message: "Inscripción y pago declarados exitosamente."
+    };
+  }
+
+  function getAllExtensionPagos(params) {
+    const pagos = getSheetData("pagos");
+    const estudiantes = getSheetData("estudiantes");
+    const extensionList = getSheetData("extension");
+    const bancoList = getSheetData("banco");
+
+    const joined = pagos.map(p => {
+      const st = estudiantes.find(e => e.id == p.id_usuario);
+      const ext = extensionList.find(ex => ex.id == p.id_extension);
+      const bnk = bancoList.find(b => b.id == p.id_banco);
+      return {
+        id: p.id,
+        id_usuario: p.id_usuario,
+        cedula: st ? st.cedula : "N/A",
+        nombre_completo: st ? st.nombre_completo : "Desconocido",
+        id_extension: p.id_extension,
+        curso: ext ? ext.taller : "N/A",
+        estado_curso: ext ? (ext.estado || "EN_CURSO") : "EN_CURSO",
+                             id_banco: p.id_banco,
+                             banco: bnk ? bnk.banco : "N/A",
+                             monto: p.monto,
+                             numero_transferencia: p.numero_transferencia,
+                             fecha_transferencia: p.fecha_transferencia,
+                             capture: p.capture
+      };
+    });
+
+    return {
+      success: true,
+      pagos: joined,
+      extensionList: extensionList,
+      bancoList: bancoList
+    };
+  }
+
+  function updateExtensionEstado(idExtension, nuevoEstado) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("extension");
+    if (!sheet) return { success: false, message: "Tabla extension no existe." };
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] == idExtension) {
+        sheet.getRange(i + 1, 5).setValue(nuevoEstado);
+        return { success: true, message: "Estado del curso actualizado a " + nuevoEstado };
+      }
+    }
+
+    return { success: false, message: "Curso de extensión no encontrado." };
+  }
