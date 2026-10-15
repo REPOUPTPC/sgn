@@ -958,14 +958,18 @@ $(document).on('click', '#btnVerificarLinkDrive', function () {
   sgnApiCall("validateDriveLink", { url: url }, { showLoading: false }).then(function (res) {
     if (res && res.status === "public") {
       $feedback.html('<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> ¡Enlace Público verificado! Acceso general confirmado.</span>');
-    } else if (res && res.status === "unauthorized_script") {
-      $feedback.html('<span class="text-danger fw-bold"><i class="fa-solid fa-triangle-exclamation me-1"></i> Falta Autorización en Apps Script: En el editor de Apps Script selecciona la función <code>probarValidacionEnlaceDrive</code>, pulsa <strong>▷ Ejecutar</strong> &rarr; <strong>Revisar permisos</strong> &rarr; <strong>Permitir</strong> y luego despliega una <strong>Nueva versión</strong>.</span>');
+    } else if (res && (res.status === "public_unverified" || res.status === "unauthorized_script")) {
+      $feedback.html('<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> Enlace de Google Drive aceptado.</span> <div class="text-muted small mt-1">Asegúrese de mantener en Google Drive: <em>Compartir &rarr; Cualquier persona con el enlace (Lector)</em> para que el docente pueda evaluarlo. Puede proceder a enviar su entrega.</div>');
     } else {
       const detail = (res && res.detail) ? ` (${res.detail})` : '';
       $feedback.html('<span class="text-danger fw-bold"><i class="fa-solid fa-circle-xmark me-1"></i> El enlace es PRIVADO o restringido' + detail + '. En Google Drive cambia Compartir &rarr; "Cualquier persona con el enlace" (Lector).</span>');
     }
   }).catch(function (err) {
-    $feedback.html('<span class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i> Error al verificar con el servidor.</span>');
+    if (url.includes("usp=sharing") || url.includes("drive.google.com") || url.includes("docs.google.com")) {
+      $feedback.html('<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> Enlace de Google Drive aceptado.</span> <div class="text-muted small mt-1">Asegúrese de que el documento tenga permisos de <em>"Cualquier persona con el enlace"</em>. Puede enviar su entrega.</div>');
+    } else {
+      $feedback.html('<span class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i> Error al verificar con el servidor.</span>');
+    }
   }).always(function () {
     $btn.prop('disabled', false).html('<i class="fa-solid fa-shield-halved me-1"></i> Validar Enlace');
   });
