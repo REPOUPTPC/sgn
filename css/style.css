@@ -415,3 +415,24 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
+
+/* Fila de actividad con entregas pendientes por evaluar */
+.row-actividad-pendiente {
+  background-color: #fffdf5 !important;
+  border-left: 4.5px solid #f59e0b !important;
+}
+
+.row-actividad-pendiente:hover {
+  background-color: #fef9c3 !important;
+}
+
+.badge-pendientes-pulse {
+  animation: pulse-soft 2s infinite ease-in-out;
+}
+
+@keyframes pulse-soft {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+

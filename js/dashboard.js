@@ -199,23 +199,84 @@ function populateDropdownOptions() {
   const $selectUnidad = $('.select-unidad-opt');
   $selectUnidad.empty().append('<option value="">-- Seleccione Unidad --</option>');
   
-  // Select especial para gestión en dashboard
+  // Select especial para gestión en dashboard (#tab-notas)
   const $selectGestion = $('#selectUnidadGestion');
+  const valorPrevioGestion = $selectGestion.val();
   $selectGestion.empty().append('<option value="">-- Seleccione Unidad --</option>');
+
+  // Select especial para filtro en Actividades Asignadas (#tab-actividades)
+  const $filtroActUnidad = $('#filtroActividadUnidad');
+  const valorPrevioFiltro = $filtroActUnidad.val();
+  $filtroActUnidad.empty();
   
   let listUnidades = sgnDb.unidades;
   if (!sgnAuth.isSuperAdmin()) {
     listUnidades = listUnidades.filter(u => u.id_prof == currentUser.id);
   }
 
+  // Pre-calcular entregas y pendientes por unidad curricular
+  let totalPendientesGeneral = 0;
+  const statsPorUnidad = {};
+
+  listUnidades.forEach(u => {
+    const acts = (sgnDb.actividadesAsignadas || []).filter(a => String(a.id_unidad_curricular) === String(u.id));
+    const actIds = acts.map(a => String(a.id));
+    const entregas = (sgnDb.actividadesEntregadas || []).filter(e => actIds.includes(String(e.id_actividades_asignadas)));
+    const totalEnt = entregas.length;
+    const calificados = entregas.filter(e => e.nota !== undefined && e.nota !== "" && e.nota !== null).length;
+    const pendientes = totalEnt - calificados;
+
+    statsPorUnidad[u.id] = { total: totalEnt, calificados: calificados, pendientes: pendientes, actsCount: acts.length };
+    totalPendientesGeneral += pendientes;
+  });
+
+  // Opción principal de todas las unidades
+  const optTodasLabel = totalPendientesGeneral > 0 
+    ? `-- Todas las Unidades Curriculares (🔴 ${totalPendientesGeneral} por evaluar) --` 
+    : `-- Todas las Unidades Curriculares --`;
+  $filtroActUnidad.append(`<option value="">${optTodasLabel}</option>`);
+
   listUnidades.forEach(u => {
     const prog = sgnDb.programas.find(p => p.id == u.id_programa_formacion);
     const progNombre = prog ? prog.programa : "Desc.";
-    const nombre = `${u.unidad_curricular || u['unidad curricular']} - ${progNombre} (Sec: ${u.seccion})`;
+    const cleanSec = String(u.seccion || "170").replace(/^'/, '');
+    const st = statsPorUnidad[u.id] || { total: 0, pendientes: 0 };
+
+    const nombreBase = `${u.unidad_curricular || u['unidad curricular']} - ${progNombre} (Sec: ${cleanSec})`;
     
-    $selectUnidad.append(`<option value="${u.id}">${nombre}</option>`);
-    $selectGestion.append(`<option value="${u.id}">${nombre}</option>`);
+    // Etiqueta distintiva para el desplegable de actividades
+    let badgeTxt = '';
+    if (st.pendientes > 0) {
+      badgeTxt = ` [🔴 ${st.pendientes} por evaluar]`;
+    } else if (st.total > 0 && st.pendientes === 0) {
+      badgeTxt = ` [✅ Al día]`;
+    } else {
+      badgeTxt = ` [0 entregas]`;
+    }
+
+    const nombreFiltroAct = `${u.unidad_curricular || u['unidad curricular']} (Sec: ${cleanSec})${badgeTxt}`;
+    const pendienteGestionTxt = st.pendientes > 0 ? ` [⚠️ ${st.pendientes} por evaluar]` : '';
+
+    $selectUnidad.append(`<option value="${u.id}">${nombreBase}</option>`);
+    $selectGestion.append(`<option value="${u.id}">${nombreBase}${pendienteGestionTxt}</option>`);
+    $filtroActUnidad.append(`<option value="${u.id}">${nombreFiltroAct}</option>`);
   });
+
+  if (valorPrevioGestion && listUnidades.some(u => String(u.id) === String(valorPrevioGestion))) {
+    $selectGestion.val(valorPrevioGestion);
+  }
+
+  if (valorPrevioFiltro && listUnidades.some(u => String(u.id) === String(valorPrevioFiltro))) {
+    $filtroActUnidad.val(valorPrevioFiltro);
+  }
+
+  // Actualizar badge en la navegación
+  const $navBadge = $('#badgeNavActividades');
+  if (totalPendientesGeneral > 0) {
+    $navBadge.text(totalPendientesGeneral).show();
+  } else {
+    $navBadge.hide();
+  }
 }
 
 // ==========================================================================
@@ -1540,6 +1601,19 @@ function restoreTabFromHash() {
 // ==========================================================================
 // 8. MÓDULO ACTIVIDADES ASIGNADAS Y REVISIÓN DE ENTREGAS
 // ==========================================================================
+let filtroEstadoActividades = 'todos';
+
+function setFiltroEstadoActividades(tipo, btn) {
+  filtroEstadoActividades = tipo;
+  $('#btnGroupFiltroEstadoActividades button').removeClass('active');
+  $(btn).addClass('active');
+  renderActividadesTable();
+}
+
+function filtrarActividadesSoloPendientes() {
+  setFiltroEstadoActividades('pendientes', $('#btnFiltroActPendientes'));
+}
+
 function renderActividadesTable() {
   const $tbody = $('#tablaActividades tbody');
   $tbody.empty();
@@ -1554,18 +1628,124 @@ function renderActividadesTable() {
     list = list.filter(a => misUnidadesIds.includes(String(a.id_unidad_curricular)));
   }
 
-  if (list.length === 0) {
-    $tbody.append('<tr><td colspan="8" class="text-center text-muted py-4">No hay actividades asignadas registradas.</td></tr>');
+  // Pre-calcular entregas y estado para todas las actividades del docente en su conjunto
+  let totalActividadesDocente = list.length;
+  let countPendientesDocente = 0;
+  let countCalificadasDocente = 0;
+  let countSinEntregasDocente = 0;
+  let unidadesConPendientesSet = new Set();
+
+  const actividadesConEstadisticas = list.map(a => {
+    const entregas = (sgnDb.actividadesEntregadas || []).filter(e => String(e.id_actividades_asignadas) === String(a.id));
+    const totalEntregas = entregas.length;
+    const calificados = entregas.filter(e => e.nota !== undefined && e.nota !== "" && e.nota !== null).length;
+    const pendientes = totalEntregas - calificados;
+
+    if (pendientes > 0) {
+      countPendientesDocente++;
+      unidadesConPendientesSet.add(String(a.id_unidad_curricular));
+    } else if (totalEntregas > 0) {
+      countCalificadasDocente++;
+    } else {
+      countSinEntregasDocente++;
+    }
+
+    return {
+      actividad: a,
+      totalEntregas: totalEntregas,
+      calificados: calificados,
+      pendientes: pendientes
+    };
+  });
+
+  // Actualizar los contadores de los botones de filtro rápido
+  $('#countFiltroActTodas').text(totalActividadesDocente);
+  $('#countFiltroActPendientes').text(countPendientesDocente);
+  $('#countFiltroActCalificadas').text(countCalificadasDocente);
+  $('#countFiltroActSinEntregas').text(countSinEntregasDocente);
+
+  // Calcular total global de entregas pendientes
+  const totalEntregasPendientesNumero = actividadesConEstadisticas.reduce((acc, item) => acc + item.pendientes, 0);
+
+  // Actualizar badge en la navegación
+  const $navBadge = $('#badgeNavActividades');
+  if (totalEntregasPendientesNumero > 0) {
+    $navBadge.text(totalEntregasPendientesNumero).show();
+  } else {
+    $navBadge.hide();
+  }
+
+  // Renderizar o actualizar banner de alerta global
+  const $alertBox = $('#alertEntregasPendientesGlobal');
+  if (totalEntregasPendientesNumero > 0) {
+    const pluralEntregas = totalEntregasPendientesNumero === 1 ? '1 entrega pendiente' : `${totalEntregasPendientesNumero} entregas pendientes`;
+    const pluralUnidades = unidadesConPendientesSet.size === 1 ? '1 unidad curricular' : `${unidadesConPendientesSet.size} unidades curriculares`;
+    
+    $alertBox.html(`
+      <div class="alert alert-warning border-warning shadow-sm d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 rounded-3 mb-0">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-danger rounded-circle p-2 d-inline-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+            <i class="fa-solid fa-bell text-white"></i>
+          </span>
+          <div>
+            <div class="fw-bold text-dark">¡Nuevas entregas de estudiantes por calificar!</div>
+            <div class="text-muted small">Tienes <strong>${pluralEntregas}</strong> de evaluación esperando revisión en <strong>${pluralUnidades}</strong>.</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-danger fw-bold shadow-sm" onclick="filtrarActividadesSoloPendientes()">
+          <i class="fa-solid fa-filter me-1"></i> Ver Actividades con Entregas Pendientes
+        </button>
+      </div>
+    `).show();
+  } else {
+    $alertBox.empty().hide();
+  }
+
+  // Filtro 1: Unidad Curricular seleccionada en el desplegable
+  const idUnidadSeleccionada = $('#filtroActividadUnidad').val();
+  let actividadesFiltradas = actividadesConEstadisticas;
+  if (idUnidadSeleccionada) {
+    actividadesFiltradas = actividadesFiltradas.filter(item => String(item.actividad.id_unidad_curricular) === String(idUnidadSeleccionada));
+  }
+
+  // Filtro 2: Estado de entregas (Todos / Pendientes / Calificadas / Sin entregas)
+  if (filtroEstadoActividades === 'pendientes') {
+    actividadesFiltradas = actividadesFiltradas.filter(item => item.pendientes > 0);
+  } else if (filtroEstadoActividades === 'calificadas') {
+    actividadesFiltradas = actividadesFiltradas.filter(item => item.totalEntregas > 0 && item.pendientes === 0);
+  } else if (filtroEstadoActividades === 'sin_entregas') {
+    actividadesFiltradas = actividadesFiltradas.filter(item => item.totalEntregas === 0);
+  }
+
+  // Texto explicativo del filtro
+  const $resumenFiltro = $('#resumenFiltroActividadesTexto');
+  if (idUnidadSeleccionada || filtroEstadoActividades !== 'todos') {
+    $resumenFiltro.html(`<i class="fa-solid fa-filter text-primary me-1"></i> Mostrando <strong>${actividadesFiltradas.length}</strong> de <strong>${totalActividadesDocente}</strong> actividades`);
+  } else {
+    $resumenFiltro.html(`Total de actividades: <strong>${totalActividadesDocente}</strong>`);
+  }
+
+  if (actividadesFiltradas.length === 0) {
+    let msgVacio = 'No hay actividades asignadas registradas.';
+    if (filtroEstadoActividades === 'pendientes') {
+      msgVacio = '<i class="fa-solid fa-circle-check text-success fa-2x mb-2 d-block"></i>¡Excelente! No tienes entregas pendientes por evaluar en este filtro. Todo se encuentra al día.';
+    } else if (idUnidadSeleccionada) {
+      msgVacio = 'No se encontraron actividades para la Unidad Curricular seleccionada.';
+    }
+    $tbody.append(`<tr><td colspan="8" class="text-center text-muted py-4">${msgVacio}</td></tr>`);
     return;
   }
 
-  list.forEach(a => {
+  actividadesFiltradas.forEach(item => {
+    const a = item.actividad;
     const uc = sgnDb.unidades.find(u => u.id == a.id_unidad_curricular);
     const ucNombre = uc ? (uc.unidad_curricular || uc['unidad curricular']) : "Unidad N/A";
     const ucSec = uc ? (uc.seccion || "170") : "170";
     const cleanSec = String(ucSec).replace(/^'/, '');
     
-    const entregasCount = (sgnDb.actividadesEntregadas || []).filter(e => e.id_actividades_asignadas == a.id).length;
+    const entregasCount = item.totalEntregas;
+    const pendientesCount = item.pendientes;
+    const calificadosCount = item.calificados;
     const numEvalUpper = (a.numero_evaluacion || "e1").toUpperCase();
 
     // Detectar si la descripción contiene un enlace URL
@@ -1581,19 +1761,55 @@ function renderActividadesTable() {
       `;
     }
 
+    // Badge para la columna Unidad Curricular
+    let badgeUcHtml = '';
+    if (pendientesCount > 0) {
+      badgeUcHtml = `
+        <div class="mt-1">
+          <span class="badge bg-danger text-white fw-bold shadow-sm" style="font-size: 0.73rem;">
+            <i class="fa-solid fa-bell me-1"></i> ${pendientesCount} por evaluar
+          </span>
+        </div>
+      `;
+    }
+
+    // Botón / Estado de Entregas
+    let estadoEntregasHtml = '';
+    if (entregasCount === 0) {
+      estadoEntregasHtml = `
+        <span class="badge bg-light text-muted border py-2 px-3">
+          <i class="fa-regular fa-folder-open me-1"></i> 0 Entregas
+        </span>
+      `;
+    } else if (pendientesCount > 0) {
+      estadoEntregasHtml = `
+        <button class="btn btn-sm btn-warning text-dark fw-bold shadow-sm d-inline-flex align-items-center gap-1" onclick="openModalEntregas(${a.id})" title="Haga clic para calificar las nuevas entregas">
+          <i class="fa-solid fa-inbox text-danger"></i> ${entregasCount} Entrega(s)
+          <span class="badge bg-danger text-white ms-1 badge-pendientes-pulse">${pendientesCount} nueva(s)</span>
+        </button>
+      `;
+    } else {
+      estadoEntregasHtml = `
+        <button class="btn btn-sm btn-outline-success fw-bold d-inline-flex align-items-center gap-1" onclick="openModalEntregas(${a.id})" title="Todas las entregas han sido calificadas">
+          <i class="fa-solid fa-check-double text-success"></i> ${entregasCount} Calificada(s)
+        </button>
+      `;
+    }
+
+    const rowClass = pendientesCount > 0 ? 'row-actividad-pendiente' : '';
+
     $tbody.append(`
-      <tr>
+      <tr class="${rowClass}">
         <td class="fw-bold">${a.id}</td>
-        <td class="fw-bold text-navy">${ucNombre}</td>
+        <td class="fw-bold text-navy">
+          ${ucNombre}
+          ${badgeUcHtml}
+        </td>
         <td><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
         <td><span class="badge bg-info text-dark fw-bold">${numEvalUpper}</span></td>
         <td><small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> ${a.fecha_asignacion || "N/A"}</small></td>
         <td style="max-width: 280px;">${descContentHtml}</td>
-        <td>
-          <button class="btn btn-sm btn-outline-info text-navy fw-bold" onclick="openModalEntregas(${a.id})">
-            <i class="fa-solid fa-folder-open me-1"></i> ${entregasCount} Entrega(s)
-          </button>
-        </td>
+        <td>${estadoEntregasHtml}</td>
         <td>
           <div class="btn-group btn-group-sm">
             <button class="btn btn-outline-primary" onclick="editActividad(${a.id})" title="Editar Actividad"><i class="fa-solid fa-pen"></i></button>
@@ -1967,6 +2183,8 @@ function guardarTodasNotasEntregasSubmit() {
       notasAGuardar.forEach(item => {
         const target = (currentEntregasState.entregas || []).find(e => e.id == item.id_entrega);
         if (target) target.nota = item.nota;
+        const targetDb = (sgnDb.actividadesEntregadas || []).find(e => e.id == item.id_entrega);
+        if (targetDb) targetDb.nota = item.nota;
       });
 
       renderTablaEntregasActividad();
@@ -2046,6 +2264,10 @@ function saveNotaEntregaSubmit(idEntrega) {
       const ent = (currentEntregasState.entregas || []).find(e => e.id == idEntrega);
       if (ent) {
         ent.nota = numVal;
+      }
+      const targetDb = (sgnDb.actividadesEntregadas || []).find(e => e.id == idEntrega);
+      if (targetDb) {
+        targetDb.nota = numVal;
       }
 
       renderTablaEntregasActividad();

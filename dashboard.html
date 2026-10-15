@@ -80,8 +80,9 @@
         </button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link sgn-nav-link" id="tab-actividades-btn" data-bs-toggle="tab" data-bs-target="#tab-actividades" type="button" role="tab">
+        <button class="nav-link sgn-nav-link position-relative d-inline-flex align-items-center" id="tab-actividades-btn" data-bs-toggle="tab" data-bs-target="#tab-actividades" type="button" role="tab">
           <i class="fa-solid fa-list-check me-1"></i> Actividades Asignadas
+          <span class="badge rounded-pill bg-danger ms-2 shadow-sm" id="badgeNavActividades" style="display: none; font-size: 0.72rem;">0</span>
         </button>
       </li>
       <li class="nav-item" role="presentation">
@@ -354,14 +355,56 @@
       <div class="tab-pane fade" id="tab-actividades" role="tabpanel">
         <div class="card card-custom">
           <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-              <div class="search-box-group flex-grow-1" style="max-width: 400px;">
-                <i class="fa-solid fa-search"></i>
-                <input type="text" id="searchActividades" class="form-control search-box-input" placeholder="Buscar Actividad en tiempo real...">
+
+            <!-- ALERTA GLOBAL DE ENTREGAS PENDIENTES POR EVALUAR -->
+            <div id="alertEntregasPendientesGlobal" class="mb-4" style="display: none;"></div>
+
+            <!-- CONTROLES SUPERIORES: DESPLEGABLE DE UNIDAD CURRICULAR Y BÚSQUEDA -->
+            <div class="row g-3 align-items-center mb-4 bg-light p-3 rounded-3 border">
+              <div class="col-md-5">
+                <label for="filtroActividadUnidad" class="form-label fw-bold text-navy mb-1">
+                  <i class="fa-solid fa-book-bookmark text-primary me-1"></i> Unidad Curricular a Gestionar
+                </label>
+                <select id="filtroActividadUnidad" class="form-select border-primary shadow-sm" onchange="renderActividadesTable()">
+                  <option value="">-- Todas las Unidades Curriculares --</option>
+                </select>
               </div>
-              <button class="btn btn-primary-sgn" onclick="openModalActividad()">
-                <i class="fa-solid fa-plus me-2"></i> Asignar Nueva Actividad
-              </button>
+
+              <div class="col-md-4">
+                <label for="searchActividades" class="form-label fw-bold text-navy mb-1">
+                  <i class="fa-solid fa-magnifying-glass text-primary me-1"></i> Búsqueda Rápida
+                </label>
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchActividades" class="form-control search-box-input" placeholder="Buscar por tema, evaluación o instrucción...">
+                </div>
+              </div>
+
+              <div class="col-md-3 text-md-end mt-md-4 pt-md-1">
+                <button class="btn btn-primary-sgn w-100" onclick="openModalActividad()">
+                  <i class="fa-solid fa-plus me-1"></i> Asignar Actividad
+                </button>
+              </div>
+            </div>
+
+            <!-- BOTONES DE FILTRO RÁPIDO DE ESTADO DE ENTREGAS -->
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+              <div class="btn-group btn-group-sm shadow-sm" id="btnGroupFiltroEstadoActividades" role="group">
+                <button type="button" class="btn btn-outline-primary active fw-bold" onclick="setFiltroEstadoActividades('todos', this)" id="btnFiltroActTodas">
+                  <i class="fa-solid fa-list me-1"></i> Todas (<span id="countFiltroActTodas">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-danger fw-bold" onclick="setFiltroEstadoActividades('pendientes', this)" id="btnFiltroActPendientes">
+                  <i class="fa-solid fa-clock me-1"></i> Por Evaluar (<span id="countFiltroActPendientes">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-success fw-bold" onclick="setFiltroEstadoActividades('calificadas', this)" id="btnFiltroActCalificadas">
+                  <i class="fa-solid fa-check-double me-1"></i> Evaluadas (<span id="countFiltroActCalificadas">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-secondary fw-bold" onclick="setFiltroEstadoActividades('sin_entregas', this)" id="btnFiltroActSinEntregas">
+                  <i class="fa-regular fa-folder me-1"></i> Sin Entregas (<span id="countFiltroActSinEntregas">0</span>)
+                </button>
+              </div>
+              
+              <div id="resumenFiltroActividadesTexto" class="text-muted small fw-semibold"></div>
             </div>
             
             <div class="table-responsive">
@@ -374,7 +417,7 @@
                     <th>Evaluación</th>
                     <th>Fecha Asignación</th>
                     <th>Descripción / Instrucciones</th>
-                    <th>Entregas de Estudiantes</th>
+                    <th>Estado de Entregas</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
