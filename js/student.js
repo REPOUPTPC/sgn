@@ -958,6 +958,8 @@ $(document).on('click', '#btnVerificarLinkDrive', function () {
   sgnApiCall("validateDriveLink", { url: url }, { showLoading: false }).then(function (res) {
     if (res && res.status === "public") {
       $feedback.html('<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> ¡Enlace Público verificado! Acceso general confirmado.</span>');
+    } else if (res && res.status === "unauthorized_script") {
+      $feedback.html('<span class="text-danger fw-bold"><i class="fa-solid fa-triangle-exclamation me-1"></i> Falta Autorización en Apps Script: En el editor de Apps Script selecciona la función <code>probarValidacionEnlaceDrive</code>, pulsa <strong>▷ Ejecutar</strong> &rarr; <strong>Revisar permisos</strong> &rarr; <strong>Permitir</strong> y luego despliega una <strong>Nueva versión</strong>.</span>');
     } else {
       const detail = (res && res.detail) ? ` (${res.detail})` : '';
       $feedback.html('<span class="text-danger fw-bold"><i class="fa-solid fa-circle-xmark me-1"></i> El enlace es PRIVADO o restringido' + detail + '. En Google Drive cambia Compartir &rarr; "Cualquier persona con el enlace" (Lector).</span>');
