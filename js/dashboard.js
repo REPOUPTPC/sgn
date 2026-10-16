@@ -95,6 +95,30 @@ $(document).ready(function () {
       icon.removeClass('fa-eye-slash').addClass('fa-eye');
     }
   });
+
+  // Actualizar secciones disponibles al cambiar el Programa de Formación en el Modal Estudiante
+  $('#estudiantePrograma').on('change', function () {
+    populateSeccionesEstudiante();
+  });
+
+  // Manejo de opción personalizada para ingresar otra sección
+  $('#estudianteSeccion').on('change', function () {
+    if ($(this).val() === '__custom__') {
+      const customSec = prompt('Ingrese el número o identificador de la nueva sección (ej: 170):');
+      if (customSec && customSec.trim()) {
+        const cleanSec = customSec.trim().replace(/^'/, '').toUpperCase();
+        let existingOpt = $(this).find(`option[value="${cleanSec}"]`);
+        if (existingOpt.length) {
+          $(this).val(cleanSec);
+        } else {
+          $(`<option value="${cleanSec}">Sección ${cleanSec}</option>`).insertBefore($(this).find('option[value="__custom__"]'));
+          $(this).val(cleanSec);
+        }
+      } else {
+        $(this).val('');
+      }
+    }
+  });
 });
 
 /**
@@ -402,11 +426,79 @@ function renderEstudiantesTable() {
   }
 }
 
+/**
+ * Lista las secciones disponibles según el Programa de Formación seleccionado
+ * en el Modal Estudiante (Registrar / Editar)
+ */
+function populateSeccionesEstudiante(selectedSeccion = null) {
+  const progId = $('#estudiantePrograma').val();
+  const $secSelect = $('#estudianteSeccion');
+  $secSelect.empty();
+
+  if (!progId) {
+    $secSelect.append('<option value="">Seleccione Programa primero...</option>');
+    return;
+  }
+
+  const seccionesSet = new Set();
+
+  // 1. Obtener secciones desde Unidades Curriculares del programa
+  (sgnDb.unidades || []).forEach(u => {
+    if (String(u.id_programa_formacion) === String(progId) && u.seccion !== undefined && u.seccion !== null) {
+      let sec = String(u.seccion).replace(/^'/, '').trim();
+      if (sec) seccionesSet.add(sec);
+    }
+  });
+
+  // 2. Obtener secciones desde Estudiantes registrados en el programa
+  (sgnDb.estudiantes || []).forEach(e => {
+    if (String(e.id_programa_formacion) === String(progId) && e.seccion !== undefined && e.seccion !== null) {
+      let sec = String(e.seccion).replace(/^'/, '').trim();
+      if (sec) seccionesSet.add(sec);
+    }
+  });
+
+  // 3. Obtener secciones desde Fechas de Notas del programa
+  (sgnDb.fechasNotas || []).forEach(f => {
+    if (String(f.id_programa_formacion) === String(progId) && f.seccion !== undefined && f.seccion !== null) {
+      let sec = String(f.seccion).replace(/^'/, '').trim();
+      if (sec) seccionesSet.add(sec);
+    }
+  });
+
+  // Si se pasó una sección previa (ej. al abrir el modal Editar Estudiante), asegurar que esté presente
+  let cleanSelected = (selectedSeccion !== null && selectedSeccion !== undefined) ? String(selectedSeccion).replace(/^'/, '').trim() : '';
+  if (cleanSelected) {
+    seccionesSet.add(cleanSelected);
+  }
+
+  const secciones = Array.from(seccionesSet).sort((a, b) => {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  if (secciones.length === 0) {
+    $secSelect.append('<option value="">Sin secciones registradas</option>');
+  } else {
+    $secSelect.append('<option value="">Seleccione Sección...</option>');
+    secciones.forEach(sec => {
+      $secSelect.append(`<option value="${sec}">Sección ${sec}</option>`);
+    });
+  }
+
+  // Opción para ingresar una nueva sección personalizada si es requerida
+  $secSelect.append('<option value="__custom__">+ Otra sección...</option>');
+
+  if (cleanSelected && seccionesSet.has(cleanSelected)) {
+    $secSelect.val(cleanSelected);
+  } else if (secciones.length === 1) {
+    $secSelect.val(secciones[0]);
+  }
+}
+
 function openModalEstudiante() {
   $('#modalEstudianteForm')[0].reset();
   $('#estudianteId').val('');
   $('#estudianteNacionalidad').val('V-');
-  $('#estudianteSeccion').val('');
 
   // Si hay una Unidad Curricular seleccionada en el filtro, preseleccionar programa y sección
   const unidadFiltroId = $('#filtroEstudiantesUnidad').val();
@@ -415,8 +507,14 @@ function openModalEstudiante() {
     if (unidadSel) {
       let targetSec = (unidadSel.seccion || '').toString().trim().replace(/^'/, '');
       $('#estudiantePrograma').val(unidadSel.id_programa_formacion);
-      $('#estudianteSeccion').val(targetSec);
+      populateSeccionesEstudiante(targetSec);
+    } else {
+      $('#estudiantePrograma').val('');
+      populateSeccionesEstudiante();
     }
+  } else {
+    $('#estudiantePrograma').val('');
+    populateSeccionesEstudiante();
   }
 
   $('#modalEstudianteTitle').text('Registrar Nuevo Estudiante');
@@ -452,7 +550,8 @@ function editEstudiante(id) {
   $('#estudianteCorreo').val(e.correo);
   $('#estudianteTelefono').val(e.telefono);
   $('#estudiantePrograma').val(e.id_programa_formacion);
-  $('#estudianteSeccion').val(e.seccion || '170');
+  let sec = (e.seccion || '170').toString().trim().replace(/^'/, '');
+  populateSeccionesEstudiante(sec);
   $('#estudianteRol').val(e.rol || 'ESTUDIANTE');
   
   $('#modalEstudianteTitle').text('Editar Estudiante');
@@ -472,14 +571,26 @@ function saveEstudianteSubmit() {
     return;
   }
 
+  let progId = $('#estudiantePrograma').val();
+  if (!progId) {
+    sgnShowModal({ title: "Programa Requerido", message: "Debe seleccionar un Programa de Formación.", type: "warning" });
+    return;
+  }
+
+  let seccionVal = ($('#estudianteSeccion').val() || '').toString().trim();
+  if (!seccionVal || seccionVal === '__custom__') {
+    sgnShowModal({ title: "Sección Requerida", message: "Debe seleccionar una sección válida para el estudiante.", type: "warning" });
+    return;
+  }
+
   const formData = {
     id: $('#estudianteId').val(),
     cedula: fullCedula,
     nombre_completo: nombreUpper,
     correo: $('#estudianteCorreo').val().trim(),
     telefono: $('#estudianteTelefono').val().trim(),
-    id_programa_formacion: $('#estudiantePrograma').val(),
-    seccion: $('#estudianteSeccion').val().trim(),
+    id_programa_formacion: progId,
+    seccion: seccionVal,
     rol: $('#estudianteRol').val()
   };
 

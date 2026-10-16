@@ -623,11 +623,15 @@
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Programa de Formación *</label>
-                <select id="estudiantePrograma" class="form-select select-programa-opt" required></select>
+                <select id="estudiantePrograma" class="form-select select-programa-opt" required>
+                  <option value="">Seleccione Programa...</option>
+                </select>
               </div>
               <div class="col-md-3">
                 <label class="form-label fw-bold">Sección *</label>
-                <input type="text" id="estudianteSeccion" class="form-control" placeholder="Ej: 170" required maxlength="3">
+                <select id="estudianteSeccion" class="form-select" required>
+                  <option value="">Seleccione Sección...</option>
+                </select>
               </div>
               <div class="col-md-3">
                 <label class="form-label fw-bold">Rol *</label>
