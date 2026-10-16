@@ -60,6 +60,58 @@ function getGradeBadgeHTML(score) {
 }
 
 /**
+ * Convierte automáticamente URLs dentro de cualquier texto a un bloque visual
+ * estilizado y completamente responsivo para dispositivos móviles.
+ */
+function sgnFormatTextWithLinks(text) {
+  if (!text) return "";
+  const urlRegex = /(https?:\/\/[^\s<]+)/g;
+  
+  return text.replace(urlRegex, function (url) {
+    let cleanUrl = url.replace(/[.,;!?)]$/, '');
+    let lowerUrl = cleanUrl.toLowerCase();
+    
+    let serviceLabel = "Enlace Web";
+    let iconClass = "fa-solid fa-arrow-up-right-from-square text-primary";
+    
+    if (lowerUrl.includes("drive.google.com") || lowerUrl.includes("docs.google.com")) {
+      serviceLabel = "Google Drive / Documento Oficial";
+      iconClass = "fa-brands fa-google-drive text-primary";
+    } else if (lowerUrl.includes("canva.com") || lowerUrl.includes("canva.site")) {
+      serviceLabel = "Presentación / Canva";
+      iconClass = "fa-solid fa-palette text-info";
+    } else if (lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be")) {
+      serviceLabel = "Video / YouTube";
+      iconClass = "fa-brands fa-youtube text-danger";
+    }
+
+    let displayUrl = cleanUrl.replace(/^https?:\/\//i, '');
+    if (displayUrl.length > 40) {
+      displayUrl = displayUrl.substring(0, 37) + '...';
+    }
+
+    return `
+      <div class="sgn-link-block my-2">
+        <div class="sgn-link-card d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1" style="min-width: 0;">
+            <div class="sgn-link-icon-box flex-shrink-0">
+              <i class="${iconClass}"></i>
+            </div>
+            <div class="overflow-hidden" style="min-width: 0;">
+              <span class="d-block fw-bold text-navy small text-truncate">${serviceLabel}</span>
+              <span class="sgn-link-url" title="${cleanUrl}">${displayUrl}</span>
+            </div>
+          </div>
+          <a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary-sgn py-1 px-3 fw-bold text-nowrap flex-shrink-0 d-inline-flex align-items-center gap-1 shadow-sm">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> <span>Abrir</span>
+          </a>
+        </div>
+      </div>
+    `;
+  });
+}
+
+/**
  * Sanitizador Global de Cédula de Identidad (Remueve puntos, comas, espacios y caracteres no numéricos)
  */
 function sgnCleanCedulaInput(rawVal, options = {}) {

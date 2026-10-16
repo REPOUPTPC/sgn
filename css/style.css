@@ -436,3 +436,105 @@ body {
   100% { transform: scale(1); }
 }
 
+/* ==================== BLOQUES RESPONSIVOS DE LINKS PUBLICADOS ==================== */
+.sgn-link-block {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.sgn-link-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.625rem;
+  transition: all 0.2s ease-in-out;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sgn-link-card:hover {
+  background: #ffffff;
+  border-color: var(--primary-blue);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.12);
+}
+
+.sgn-link-icon-box {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.sgn-link-info {
+  flex: 1 1 auto;
+  min-width: 0; /* Impide que el texto flex desborde */
+  overflow: hidden;
+}
+
+.sgn-link-url {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
+}
+
+.sgn-link-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+}
+
+/* Contenedor de descripción de actividad seguro contra desbordamiento */
+.desc-actividad-box {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Prevención global de desbordamiento horizontal en móviles */
+@media (max-width: 768px) {
+  .sgn-link-card {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.6rem;
+  }
+  
+  .sgn-link-info {
+    width: calc(100% - 48px);
+  }
+
+  .sgn-link-btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+    margin-top: 0.25rem;
+  }
+
+  .modal-dialog {
+    margin: 0.5rem;
+    max-width: calc(100% - 1rem);
+  }
+
+  .modal-body {
+    overflow-x: hidden;
+    word-break: break-word;
+  }
+}
+
+

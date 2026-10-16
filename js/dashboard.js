@@ -1840,18 +1840,8 @@ function renderActividadesTable() {
     const calificadosCount = item.calificados;
     const numEvalUpper = (a.numero_evaluacion || "e1").toUpperCase();
 
-    // Detectar si la descripción contiene un enlace URL
-    let descContentHtml = a.descripcion;
-    const urlMatches = a.descripcion.match(/(https?:\/\/[^\s<]+)/g);
-    if (urlMatches && urlMatches.length > 0) {
-      const firstUrl = urlMatches[0].replace(/[.,;!?)]$/, '');
-      descContentHtml = `
-        <div>${a.descripcion.replace(firstUrl, '')}</div>
-        <a href="${firstUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 mt-1 py-0 px-2 fw-bold" style="font-size: 0.78rem;">
-          <i class="fa-solid fa-up-right-from-square me-1"></i> Abrir Enlace
-        </a>
-      `;
-    }
+    // Formatear descripción con soporte de links responsivos
+    const descContentHtml = sgnFormatTextWithLinks(a.descripcion);
 
     // Badge para la columna Unidad Curricular
     let badgeUcHtml = '';
@@ -1900,7 +1890,7 @@ function renderActividadesTable() {
         <td><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
         <td><span class="badge bg-info text-dark fw-bold">${numEvalUpper}</span></td>
         <td><small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> ${a.fecha_asignacion || "N/A"}</small></td>
-        <td style="max-width: 280px;">${descContentHtml}</td>
+        <td style="max-width: 320px; min-width: 180px;" class="text-break desc-actividad-box">${descContentHtml}</td>
         <td>${estadoEntregasHtml}</td>
         <td>
           <div class="btn-group btn-group-sm">
@@ -1998,7 +1988,7 @@ function openModalEntregas(idActividad) {
   const ucNombre = uc ? (uc.unidad_curricular || uc['unidad curricular']) : "Materia";
   const numEval = (act.numero_evaluacion || "e1").toUpperCase();
 
-  $('#entregasActividadDesc').text(`Actividad: ${act.descripcion}`);
+  $('#entregasActividadDesc').html(`<strong>Actividad:</strong> ${sgnFormatTextWithLinks(act.descripcion)}`);
   $('#entregasActividadMeta').text(`${ucNombre} | ${numEval} | Fecha de Asignación: ${act.fecha_asignacion}`);
 
   // Limpiar campos y filtros previos

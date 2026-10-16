@@ -905,12 +905,12 @@
         </div>
         <div class="modal-body p-4">
           <!-- Información de la Actividad y Estadísticas -->
-          <div class="alert alert-info d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-            <div class="d-flex align-items-center">
-              <i class="fa-solid fa-circle-info fa-lg me-2 text-primary"></i>
-              <div>
-                <strong id="entregasActividadDesc">Actividad: </strong>
-                <div class="small text-muted" id="entregasActividadMeta">Materia | Evaluación</div>
+          <div class="alert alert-info d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+            <div class="d-flex align-items-start text-break desc-actividad-box flex-grow-1" style="min-width: 250px;">
+              <i class="fa-solid fa-circle-info fa-lg me-2 mt-1 text-primary flex-shrink-0"></i>
+              <div class="w-100" style="min-width: 0;">
+                <div id="entregasActividadDesc" class="text-break desc-actividad-box">Actividad: </div>
+                <div class="small text-muted mt-1" id="entregasActividadMeta">Materia | Evaluación</div>
               </div>
             </div>
             <!-- Estadísticas de entrega y calificación -->

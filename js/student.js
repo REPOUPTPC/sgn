@@ -155,19 +155,7 @@ function performStudentSearch(cedula) {
   });
 }
 
-/**
- * Convierte automáticamente enlaces URL en texto a etiquetas <a> clicables
- */
-function sgnFormatTextWithLinks(text) {
-  if (!text) return "";
-  const urlRegex = /(https?:\/\/[^\s<]+)/g;
-  return text.replace(urlRegex, function (url) {
-    let cleanUrl = url.replace(/[.,;!?)]$/, '');
-    return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 my-1 fw-bold shadow-sm">
-      <i class="fa-solid fa-up-right-from-square me-1"></i> Abrir Enlace <small class="text-truncate" style="max-width: 180px;">(${cleanUrl})</small>
-    </a>`;
-  });
-}
+// Nota: sgnFormatTextWithLinks(text) se encuentra centralizado en js/config.js con soporte responsivo móvil.
 
 /**
  * Renderizar Resumen Académico del Estudiante
@@ -257,10 +245,10 @@ function renderStudentAcademicProfile(res) {
         <div class="card border-0 shadow-sm mb-3 border-start border-4 border-primary">
           <div class="card-body p-3">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-              <div>
-                <span class="badge bg-navy text-white me-2"><i class="fa-solid fa-bookmark me-1"></i> ${act.unidad_curricular} (${act.seccion})</span>
-                <span class="badge bg-secondary me-2">${evalUpper}</span>
-                <div class="fw-bold text-navy mt-2 fs-6">${descFormatted}</div>
+              <div class="overflow-hidden flex-grow-1" style="min-width: 0; max-width: 100%;">
+                <span class="badge bg-navy text-white me-2 mb-1"><i class="fa-solid fa-bookmark me-1"></i> ${act.unidad_curricular} (${act.seccion})</span>
+                <span class="badge bg-secondary me-2 mb-1">${evalUpper}</span>
+                <div class="fw-bold text-navy mt-2 fs-6 desc-actividad-box text-break">${descFormatted}</div>
                 <div class="text-muted small mt-2"><i class="fa-regular fa-calendar-check me-1"></i> Fecha de Asignación: <strong>${act.fecha_asignacion}</strong> | <i class="fa-solid fa-user-chalkboard me-1"></i> Prof. ${act.profesor}</div>
               </div>
               <div class="d-flex align-items-center flex-wrap gap-2">
@@ -268,9 +256,9 @@ function renderStudentAcademicProfile(res) {
                 ${notaDisplay}
               </div>
             </div>
-            <div class="d-flex justify-content-end align-items-center mt-3 pt-2 border-top">
+            <div class="d-flex justify-content-end align-items-center mt-3 pt-2 border-top flex-wrap gap-2">
               ${linkBtn}
-              <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
+              <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold text-nowrap" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
                 <i class="fa-solid ${hasEntrega ? 'fa-pen' : 'fa-upload'} me-1"></i> ${hasEntrega ? 'Modificar Entrega' : 'Entregar Actividad'}
               </button>
             </div>
@@ -315,7 +303,7 @@ function renderStudentAcademicProfile(res) {
                 ${getGradeBadgeHTML(val)}
               </div>
               <p class="text-muted small mb-1"><i class="fa-regular fa-calendar-check me-1"></i> ${fechaStr}</p>
-              <p class="text-secondary small mb-0"><i class="fa-solid fa-info-circle me-1"></i> ${descStr}</p>
+              <div class="text-secondary small mb-0 desc-actividad-box text-break"><i class="fa-solid fa-info-circle me-1"></i> ${sgnFormatTextWithLinks(descStr)}</div>
             </div>
           </div>
         `;
@@ -350,9 +338,9 @@ function renderStudentAcademicProfile(res) {
           itemsHtml += `
             <div class="border rounded-3 p-3 bg-white mb-2 shadow-sm border-start border-4 border-primary">
               <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                <div>
-                  <span class="badge bg-navy text-white me-2"><i class="fa-solid fa-clipboard-list me-1"></i> ${evalUpper}</span>
-                  <div class="fw-bold text-navy fs-6 mt-1">${descFormatted}</div>
+                <div class="overflow-hidden flex-grow-1" style="min-width: 0; max-width: 100%;">
+                  <span class="badge bg-navy text-white me-2 mb-1"><i class="fa-solid fa-clipboard-list me-1"></i> ${evalUpper}</span>
+                  <div class="fw-bold text-navy fs-6 mt-1 desc-actividad-box text-break">${descFormatted}</div>
                   <div class="text-muted small mt-1"><i class="fa-regular fa-calendar-check me-1"></i> Fecha de Asignación: <strong>${act.fecha_asignacion}</strong></div>
                 </div>
                 <div class="d-flex align-items-center flex-wrap gap-2">
@@ -360,9 +348,9 @@ function renderStudentAcademicProfile(res) {
                   ${notaDisplay}
                 </div>
               </div>
-              <div class="d-flex justify-content-end align-items-center mt-2 pt-2 border-top">
+              <div class="d-flex justify-content-end align-items-center mt-2 pt-2 border-top flex-wrap gap-2">
                 ${linkBtn}
-                <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
+                <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold text-nowrap" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
                   <i class="fa-solid ${hasEntrega ? 'fa-pen' : 'fa-upload'} me-1"></i> ${hasEntrega ? 'Modificar Entrega' : 'Entregar Actividad'}
                 </button>
               </div>
@@ -755,8 +743,11 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
   $('#driveLinkFeedback').hide().empty();
   
   const evalUpper = (actData.numero_evaluacion || 'e1').toUpperCase();
-  $('#entregaModalActividadTitulo').text(`Evaluación ${evalUpper}: ${actData.descripcion || ''}`);
-  $('#entregaModalActividadDesc').text(`Fecha de Asignación: ${actData.fecha_asignacion || ''}`);
+  $('#entregaModalActividadTitulo').html(`<i class="fa-solid fa-list-check me-2"></i> Evaluación ${evalUpper}`);
+  $('#entregaModalActividadDesc').html(`
+    <div class="mb-2">${sgnFormatTextWithLinks(actData.descripcion || '')}</div>
+    <div class="text-muted"><i class="fa-regular fa-calendar me-1"></i> Asignada: <strong>${actData.fecha_asignacion || 'N/A'}</strong></div>
+  `);
 
   if (actData.entrega) {
     $('#entregaActualStatus').show();
@@ -958,18 +949,14 @@ $(document).on('click', '#btnVerificarLinkDrive', function () {
   sgnApiCall("validateDriveLink", { url: url }, { showLoading: false }).then(function (res) {
     if (res && res.status === "public") {
       $feedback.html('<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> ¡Enlace Público verificado! Acceso general confirmado.</span>');
-    } else if (res && (res.status === "public_unverified" || res.status === "unauthorized_script")) {
-      $feedback.html('<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> Enlace de Google Drive aceptado.</span> <div class="text-muted small mt-1">Asegúrese de mantener en Google Drive: <em>Compartir &rarr; Cualquier persona con el enlace (Lector)</em> para que el docente pueda evaluarlo. Puede proceder a enviar su entrega.</div>');
+    } else if (res && res.status === "unauthorized_script") {
+      $feedback.html('<span class="text-danger fw-bold"><i class="fa-solid fa-triangle-exclamation me-1"></i> Falta Autorización en Apps Script: En el editor de Apps Script selecciona la función <code>probarValidacionEnlaceDrive</code>, pulsa <strong>▷ Ejecutar</strong> &rarr; <strong>Revisar permisos</strong> &rarr; <strong>Permitir</strong> y luego despliega una <strong>Nueva versión</strong>.</span>');
     } else {
       const detail = (res && res.detail) ? ` (${res.detail})` : '';
-      $feedback.html('<span class="text-danger fw-bold"><i class="fa-solid fa-circle-xmark me-1"></i> El enlace es PRIVADO o restringido' + detail + '. En Google Drive cambia Compartir &rarr; "Cualquier persona con el enlace" (Lector).</span>');
+      $feedback.html('<span class="text-danger fw-bold"><i class="fa-solid fa-circle-xmark me-1"></i> El enlace es PRIVADO o restringido' + detail + '. En Google Drive ve a Compartir &rarr; Acceso general &rarr; "Cualquier persona con el enlace" (Lector).</span>');
     }
   }).catch(function (err) {
-    if (url.includes("usp=sharing") || url.includes("drive.google.com") || url.includes("docs.google.com")) {
-      $feedback.html('<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> Enlace de Google Drive aceptado.</span> <div class="text-muted small mt-1">Asegúrese de que el documento tenga permisos de <em>"Cualquier persona con el enlace"</em>. Puede enviar su entrega.</div>');
-    } else {
-      $feedback.html('<span class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i> Error al verificar con el servidor.</span>');
-    }
+    $feedback.html('<span class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i> No se pudo verificar el enlace con el servidor. Intente nuevamente.</span>');
   }).always(function () {
     $btn.prop('disabled', false).html('<i class="fa-solid fa-shield-halved me-1"></i> Validar Enlace');
   });
