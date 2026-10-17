@@ -37,11 +37,14 @@
         </div>
       </div>
       
-      <div class="d-flex align-items-center gap-3">
-        <div class="text-end d-none d-md-block">
+      <div class="d-flex align-items-center gap-2">
+        <div class="text-end d-none d-md-block me-2">
           <strong class="d-block text-navy" id="navUserName">Usuario</strong>
           <span class="badge bg-primary" id="navUserRole">Rol</span>
         </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="btnHeaderCambiarClave" onclick="openModalCambiarClave()">
+          <i class="fa-solid fa-key me-1"></i> Cambiar Clave
+        </button>
         <button type="button" class="btn btn-outline-danger btn-sm" onclick="sgnAuth.logout()">
           <i class="fa-solid fa-right-from-bracket me-1"></i> Cerrar Sesión
         </button>
@@ -83,11 +86,6 @@
         <button class="nav-link sgn-nav-link position-relative d-inline-flex align-items-center" id="tab-actividades-btn" data-bs-toggle="tab" data-bs-target="#tab-actividades" type="button" role="tab">
           <i class="fa-solid fa-list-check me-1"></i> Actividades Asignadas
           <span class="badge rounded-pill bg-danger ms-2 shadow-sm" id="badgeNavActividades" style="display: none; font-size: 0.72rem;">0</span>
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link sgn-nav-link" id="tab-perfil-btn" data-bs-toggle="tab" data-bs-target="#tab-perfil" type="button" role="tab">
-          <i class="fa-solid fa-key me-1"></i> Cambiar Clave
         </button>
       </li>
       <li class="nav-item" role="presentation" id="tab-extension-nav">
@@ -329,44 +327,6 @@
         </div>
       </div>
 
-      <!-- 6. PESTAÑA CAMBIAR CLAVE DOCENTE -->
-      <div class="tab-pane fade" id="tab-perfil" role="tabpanel">
-        <div class="row justify-content-center">
-          <div class="col-md-6">
-            <div class="card card-custom">
-              <div class="card-header-blue">
-                <h5 class="fw-bold mb-0"><i class="fa-solid fa-key me-2"></i> Actualizar Contraseña Personal</h5>
-              </div>
-              <div class="card-body p-4">
-                <form id="changePassForm" onsubmit="event.preventDefault(); submitChangePassword();">
-                  <div class="mb-3">
-                    <label for="newPassInput" class="form-label fw-bold">Nueva Contraseña</label>
-                    <div class="input-group">
-                      <input type="password" id="newPassInput" class="form-control" placeholder="Ingrese nueva contraseña" minlength="4" required>
-                      <button class="btn btn-outline-secondary toggle-password" type="button" data-target="newPassInput">
-                        <i class="fa-solid fa-eye"></i>
-                      </button>
-                    </div>
-                  </div>
-                  <div class="mb-4">
-                    <label for="confirmPassInput" class="form-label fw-bold">Confirmar Nueva Contraseña</label>
-                    <div class="input-group">
-                      <input type="password" id="confirmPassInput" class="form-control" placeholder="Repita la nueva contraseña" minlength="4" required>
-                      <button class="btn btn-outline-secondary toggle-password" type="button" data-target="confirmPassInput">
-                        <i class="fa-solid fa-eye"></i>
-                      </button>
-                    </div>
-                  </div>
-                  <button type="submit" class="btn btn-primary-sgn w-100">
-                    <i class="fa-solid fa-shield-halved me-2"></i> Guardar Nueva Contraseña
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- 7. PESTAÑA ACTIVIDADES ASIGNADAS -->
       <div class="tab-pane fade" id="tab-actividades" role="tabpanel">
         <div class="card card-custom">
@@ -403,7 +363,7 @@
               </div>
             </div>
 
-            <!-- BOTONES DE FILTRO RÁPIDO DE ESTADO DE ENTREGAS -->
+            <!-- BOTONES DE FILTRO RÁPIDO DE ESTADO DE ENTREGAS Y MODO DE PRUEBA -->
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
               <div class="btn-group btn-group-sm shadow-sm" id="btnGroupFiltroEstadoActividades" role="group">
                 <button type="button" class="btn btn-outline-primary active fw-bold" onclick="setFiltroEstadoActividades('todos', this)" id="btnFiltroActTodas">
@@ -420,7 +380,15 @@
                 </button>
               </div>
               
-              <div id="resumenFiltroActividadesTexto" class="text-muted small fw-semibold"></div>
+              <div class="d-flex align-items-center flex-wrap gap-2">
+                <div id="resumenFiltroActividadesTexto" class="text-muted small fw-semibold me-2"></div>
+                <button type="button" class="btn btn-sm btn-outline-dark fw-bold shadow-sm" onclick="openPortalPruebaV12345()" title="Abrir vista del estudiante con el usuario reservado de prueba V-12345">
+                  <i class="fa-solid fa-flask-vial text-warning me-1"></i> Probar como Estudiante (V-12345)
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold shadow-sm" onclick="reiniciarIntentosPruebaV12345()" title="Reiniciar intentos de evaluación del estudiante de prueba V-12345">
+                  <i class="fa-solid fa-rotate-left me-1"></i> Reiniciar V-12345
+                </button>
+              </div>
             </div>
             
             <div class="table-responsive">
@@ -431,7 +399,7 @@
                     <th>Unidad Curricular</th>
                     <th>Sección</th>
                     <th>Evaluación</th>
-                    <th>Fecha Asignación</th>
+                    <th>Lapso de Entrega</th>
                     <th>Descripción / Instrucciones</th>
                     <th>Estado de Entregas</th>
                     <th>Acciones</th>
@@ -854,9 +822,49 @@
     </div>
   </div>
 
+  <!-- Modal Cambiar Clave Docente -->
+  <div class="modal fade" id="modalCambiarClave" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-key me-2"></i> Actualizar Contraseña Personal</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="changePassForm" onsubmit="event.preventDefault(); submitChangePassword();">
+          <div class="modal-body p-4">
+            <div class="mb-3">
+              <label for="newPassInput" class="form-label fw-bold">Nueva Contraseña</label>
+              <div class="input-group">
+                <input type="password" id="newPassInput" class="form-control" placeholder="Ingrese nueva contraseña" minlength="4" required>
+                <button class="btn btn-outline-secondary toggle-password" type="button" data-target="newPassInput">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label for="confirmPassInput" class="form-label fw-bold">Confirmar Nueva Contraseña</label>
+              <div class="input-group">
+                <input type="password" id="confirmPassInput" class="form-control" placeholder="Repita la nueva contraseña" minlength="4" required>
+                <button class="btn btn-outline-secondary toggle-password" type="button" data-target="confirmPassInput">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn">
+              <i class="fa-solid fa-shield-halved me-2"></i> Guardar Nueva Contraseña
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Asignar / Editar Actividad -->
   <div class="modal fade" id="modalActividad" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header modal-header-blue">
           <h5 class="modal-title fw-bold" id="modalActividadTitle"><i class="fa-solid fa-list-check me-2"></i> Asignar Actividad o Evaluación</h5>
@@ -865,32 +873,108 @@
         <form id="modalActividadForm" onsubmit="event.preventDefault(); saveActividadSubmit();">
           <input type="hidden" id="actividadId">
           <div class="modal-body p-4">
-            <div class="mb-3">
-              <label class="form-label fw-bold">Unidad Curricular *</label>
-              <select id="actividadUnidadId" class="form-select select-unidad-opt" required></select>
+            <div class="row g-3">
+              <div class="col-md-12">
+                <label class="form-label fw-bold">Unidad Curricular *</label>
+                <select id="actividadUnidadId" class="form-select select-unidad-opt" required></select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Número de Evaluación *</label>
+                <select id="actividadEval" class="form-select" required>
+                  <option value="e1">Evaluación 1 (E1)</option>
+                  <option value="e2">Evaluación 2 (E2)</option>
+                  <option value="e3">Evaluación 3 (E3)</option>
+                  <option value="e4">Evaluación 4 (E4)</option>
+                  <option value="e5">Evaluación 5 (E5)</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Tipo de Actividad *</label>
+                <select id="actividadTipo" class="form-select border-primary fw-semibold" onchange="onTipoActividadChange()" required>
+                  <option value="ENTREGA">📄 Entrega PDF / Enlace</option>
+                  <option value="QUIZ">📝 Evaluación Online (Quiz)</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Fecha de Asignación (Inicio) *</label>
+                <input type="date" id="actividadFecha" class="form-control" onchange="onActividadLapsoChange('inicio')" required>
+                <div class="form-text small">Inicio del conteo de días.</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold text-primary"><i class="fa-solid fa-hourglass-half me-1"></i> Lapso de Entrega (Días) *</label>
+                <input type="number" id="actividadDiasLapso" class="form-control border-primary fw-bold" min="0" max="365" value="7" oninput="onActividadLapsoChange('dias')" required>
+                <div class="form-text small">Días que descontará la barra.</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold text-danger"><i class="fa-regular fa-calendar-xmark me-1"></i> Fecha Límite (Cierre) *</label>
+                <input type="date" id="actividadFechaLimite" class="form-control border-danger fw-semibold" onchange="onActividadLapsoChange('limite')" required>
+                <div class="form-text small">Al vencer se bloquean entregas.</div>
+              </div>
+              <div class="col-md-12">
+                <label class="form-label fw-bold">Descripción / Instrucciones *</label>
+                <textarea id="actividadDesc" class="form-control" rows="2" placeholder="Ej. Trabajo escrito en PDF sobre Estructuras de Datos, Enlace de Canva o Evaluación Online Parcial..." required></textarea>
+              </div>
             </div>
-            <div class="mb-3">
-              <label class="form-label fw-bold">Número de Evaluación *</label>
-              <select id="actividadEval" class="form-select" required>
-                <option value="e1">Evaluación 1 (E1)</option>
-                <option value="e2">Evaluación 2 (E2)</option>
-                <option value="e3">Evaluación 3 (E3)</option>
-                <option value="e4">Evaluación 4 (E4)</option>
-                <option value="e5">Evaluación 5 (E5)</option>
-              </select>
-            </div>
-            <div class="mb-3">
-              <label class="form-label fw-bold">Fecha de Asignación / Límite *</label>
-              <input type="date" id="actividadFecha" class="form-control" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label fw-bold">Descripción / Instrucciones *</label>
-              <textarea id="actividadDesc" class="form-control" rows="3" placeholder="Ej. Trabajo escrito en PDF sobre Estructuras de Datos o Enlace de Canva..." required></textarea>
+
+            <!-- SECCIÓN EXCLUSIVA PARA EVALUACIÓN ONLINE (QUIZ EN MARKDOWN) -->
+            <div id="quizConfigSection" class="mt-3 pt-3 border-top" style="display: none;">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h6 class="fw-bold text-navy mb-0">
+                  <i class="fa-solid fa-file-code text-primary me-1"></i> Configuración de Evaluación Online (Banco Markdown)
+                </h6>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertSampleQuizMarkdown()">
+                  <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Insertar Plantilla de Ejemplo
+                </button>
+              </div>
+
+              <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                  <label for="quizCantidadMostrar" class="form-label fw-bold small">
+                    Cantidad de preguntas a mostrar *
+                  </label>
+                  <input type="number" id="quizCantidadMostrar" class="form-control" min="1" max="200" value="15" oninput="updateQuizMarkdownPreview()">
+                  <div class="form-text">Preguntas sorteadas al azar del banco.</div>
+                </div>
+                <div class="col-md-4">
+                  <label for="quizPuntajeMaximo" class="form-label fw-bold small">
+                    Puntaje máximo de evaluación *
+                  </label>
+                  <input type="number" id="quizPuntajeMaximo" class="form-control" min="1" max="100" step="0.5" value="20" oninput="updateQuizMarkdownPreview()">
+                  <div class="form-text">Escala de calificación (ej. 20 pts).</div>
+                </div>
+                <div class="col-md-4">
+                  <label for="quizTiempoMinutos" class="form-label fw-bold small">
+                    <i class="fa-solid fa-stopwatch text-danger me-1"></i> Tiempo de duración (minutos) *
+                  </label>
+                  <input type="number" id="quizTiempoMinutos" class="form-control" min="1" max="240" step="1" value="30" oninput="updateQuizMarkdownPreview()">
+                  <div class="form-text">Tiempo límite para responder el examen.</div>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
+                  <label for="quizMarkdownInput" class="form-label fw-bold small mb-0">
+                    Banco de Preguntas en Formato Markdown *
+                  </label>
+                  <div>
+                    <label for="quizMdFileInput" class="btn btn-sm btn-outline-primary mb-0 cursor-pointer">
+                      <i class="fa-solid fa-upload me-1"></i> Cargar archivo .md
+                    </label>
+                    <input type="file" id="quizMdFileInput" accept=".md,.txt" class="d-none" onchange="handleQuizMdFileUpload(event)">
+                  </div>
+                </div>
+                <textarea id="quizMarkdownInput" class="form-control font-monospace small" rows="9" placeholder="Pegue aquí su banco de preguntas separado por ---&#10;&#10;## ¿Cuál es la salida de este código?&#10;- [ ] Opción incorrecta&#10;  > Explicación de por qué es incorrecta.&#10;- [x] Opción correcta&#10;  > Explicación de por qué es correcta." oninput="updateQuizMarkdownPreview()"></textarea>
+              </div>
+
+              <!-- Vista Previa Rápida del Parser Markdown -->
+              <div id="quizParserPreviewBox" class="alert alert-secondary py-2 px-3 mb-0 small">
+                <i class="fa-solid fa-circle-info me-1"></i> Pegue su banco de preguntas o cargue un archivo <code>.md</code> para validar la estructura.
+              </div>
             </div>
           </div>
           <div class="modal-footer bg-light">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-            <button type="submit" class="btn btn-primary-sgn">Guardar Actividad</button>
+            <button type="submit" class="btn btn-primary-sgn" id="btnGuardarActividadModal">Guardar Actividad</button>
           </div>
         </form>
       </div>

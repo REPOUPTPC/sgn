@@ -197,6 +197,13 @@ function renderAllDashboardTables(keepSelectedCant = false) {
 /**
  * Poblado de Selects en Formularios Modal
  */
+function isUnidadDePrueba(u) {
+  if (!u) return false;
+  const nombre = String(u.unidad_curricular || u['unidad curricular'] || '').toUpperCase().trim();
+  const sec = String(u.seccion || '').replace(/^'/, '').trim();
+  return nombre === 'UNIDAD CURRICULAR DE PRUEBA' || nombre.includes('DE PRUEBA') || sec === '000';
+}
+
 function populateDropdownOptions() {
   // Select Programas
   const $selectProg = $('.select-programa-opt');
@@ -240,7 +247,7 @@ function populateDropdownOptions() {
   
   let listUnidades = sgnDb.unidades;
   if (!sgnAuth.isSuperAdmin()) {
-    listUnidades = listUnidades.filter(u => u.id_prof == currentUser.id);
+    listUnidades = listUnidades.filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u));
   }
 
   // Pre-calcular entregas y pendientes por unidad curricular
@@ -323,13 +330,13 @@ function renderEstudiantesTable() {
   let list = sgnDb.estudiantes || [];
   
   if (!sgnAuth.isSuperAdmin()) {
-    // DOCENTE: Filtrar estudiantes por las secciones de las unidades curriculares asignadas al docente
+    // DOCENTE: Filtrar estudiantes por las secciones de las unidades curriculares asignadas al docente (incluyendo entorno de prueba)
     const misSecciones = (sgnDb.unidades || [])
-      .filter(u => u.id_prof == currentUser.id)
+      .filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u))
       .map(u => String(u.seccion || '').replace(/^'/, '').trim());
     list = list.filter(e => {
       let eSec = String(e.seccion || '').replace(/^'/, '').trim();
-      return misSecciones.includes(eSec);
+      return misSecciones.includes(eSec) || String(e.cedula || '').toUpperCase().trim() === 'V-12345';
     });
   }
 
@@ -944,12 +951,18 @@ function renderUnidadesTable() {
   sgnDb.unidades.forEach(u => {
     const prof = sgnDb.profesores.find(p => p.id == u.id_prof);
     const profNombre = prof ? prof.nombre_profesor : "Sin asignar";
+    const prog = sgnDb.programas.find(p => p.id == u.id_programa_formacion);
+    const progNombre = prog ? prog.programa : "";
+    const cleanSec = String(u.seccion || '').replace(/^'/, '');
 
     $tbody.append(`
       <tr>
         <td class="fw-bold">${u.id}</td>
-        <td class="fw-bold text-navy">${u.unidad_curricular || u['unidad curricular']}</td>
-        <td><span class="badge bg-primary">Sección: ${u.seccion}</span></td>
+        <td class="fw-bold text-navy">
+          ${u.unidad_curricular || u['unidad curricular']}
+          ${progNombre ? `<div class="small text-muted fw-normal"><i class="fa-solid fa-graduation-cap me-1"></i>${progNombre}</div>` : ''}
+        </td>
+        <td><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
         <td>Prof. ${profNombre}</td>
         <td>
           <div class="btn-group btn-group-sm">
@@ -974,10 +987,13 @@ function editUnidad(id) {
   const u = sgnDb.unidades.find(item => item.id == id);
   if (!u) return;
 
+  const cleanSec = String(u.seccion || '').replace(/^'/, '');
+
   $('#unidadId').val(u.id);
   $('#unidadNombre').val(u.unidad_curricular || u['unidad curricular']);
+  $('#unidadPrograma').val(u.id_programa_formacion);
   $('#unidadProfesor').val(u.id_prof);
-  $('#unidadSeccion').val(u.seccion);
+  $('#unidadSeccion').val(cleanSec);
 
   $('#modalUnidadTitle').text('Editar Unidad Curricular');
   const bsModal = new bootstrap.Modal(document.getElementById('modalUnidad'));
@@ -988,8 +1004,9 @@ function saveUnidadSubmit() {
   const formData = {
     id: $('#unidadId').val(),
     unidad_curricular: $('#unidadNombre').val().trim().toUpperCase(),
+    id_programa_formacion: $('#unidadPrograma').val(),
     id_prof: $('#unidadProfesor').val(),
-    seccion: $('#unidadSeccion').val().trim()
+    seccion: $('#unidadSeccion').val().trim().replace(/^'/, '')
   };
 
   sgnApiCall("saveUnidadCurricular", formData).then(function (res) {
@@ -1725,8 +1742,19 @@ function saveFechasSubmit() {
 }
 
 // ==========================================================================
-// 6. CAMBIO DE CONTRASEÑA DOCENTE
+// 6. CAMBIO DE CONTRASEÑA DOCENTE (MODAL EN CABECERA)
 // ==========================================================================
+function openModalCambiarClave() {
+  if ($('#changePassForm').length) {
+    $('#changePassForm')[0].reset();
+  }
+  const modalEl = document.getElementById('modalCambiarClave');
+  if (modalEl) {
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    bsModal.show();
+  }
+}
+
 function submitChangePassword() {
   const pass1 = $('#newPassInput').val().trim();
   const pass2 = $('#confirmPassInput').val().trim();
@@ -1742,6 +1770,11 @@ function submitChangePassword() {
   }).then(function (res) {
     if (res && res.success) {
       $('#changePassForm')[0].reset();
+      const modalEl = document.getElementById('modalCambiarClave');
+      if (modalEl) {
+        const inst = bootstrap.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+      }
       sgnShowModal({ title: "Éxito", message: res.message, type: "success" });
     } else {
       sgnShowModal({ title: "Error", message: res.message, type: "danger" });
@@ -1759,7 +1792,6 @@ const HASH_TAB_MAP = {
   '#programas': '#tab-programas-btn',
   '#calificaciones': '#tab-notas-btn',
   '#actividades': '#tab-actividades-btn',
-  '#perfil': '#tab-perfil-btn',
   '#extension': '#tab-extension-btn'
 };
 
@@ -1770,7 +1802,6 @@ const TAB_HASH_MAP = {
   'tab-programas-btn': '#programas',
   'tab-notas-btn': '#calificaciones',
   'tab-actividades-btn': '#actividades',
-  'tab-perfil-btn': '#perfil',
   'tab-extension-btn': '#extension'
 };
 
@@ -1791,6 +1822,10 @@ function setupHashNavigation() {
 
 function restoreTabFromHash() {
   const hash = (window.location.hash || '').toLowerCase();
+  if (hash === '#perfil') {
+    openModalCambiarClave();
+    return;
+  }
   if (hash && HASH_TAB_MAP[hash]) {
     const btnId = HASH_TAB_MAP[hash];
     const $btn = $(btnId);
@@ -1817,6 +1852,28 @@ function filtrarActividadesSoloPendientes() {
   setFiltroEstadoActividades('pendientes', $('#btnFiltroActPendientes'));
 }
 
+function openPortalPruebaV12345() {
+  window.open('index.html?test_cedula=V-12345', '_blank');
+}
+
+function reiniciarIntentosPruebaV12345(idActividad = '') {
+  sgnShowConfirm({
+    title: "Reiniciar Usuario de Prueba (V-12345)",
+    message: "¿Desea reiniciar los intentos de evaluación y notas del estudiante reservado de prueba <strong>V-12345</strong> para poder probar nuevamente desde cero?",
+    confirmText: "Sí, Reiniciar V-12345",
+    onConfirm: function () {
+      sgnApiCall("resetTestStudentQuiz", { id_actividades_asignadas: idActividad || '' }).then(function (res) {
+        if (res && res.success) {
+          sgnShowModal({ title: "Entorno de Prueba Reiniciado", message: res.message, type: "success" });
+          loadDashboardData(true);
+        } else if (res) {
+          sgnShowModal({ title: "Aviso", message: res.message || "No se pudo reiniciar.", type: "warning" });
+        }
+      });
+    }
+  });
+}
+
 function renderActividadesTable() {
   const $tbody = $('#tablaActividades tbody');
   $tbody.empty();
@@ -1824,9 +1881,9 @@ function renderActividadesTable() {
   let list = sgnDb.actividadesAsignadas || [];
 
   if (!sgnAuth.isSuperAdmin()) {
-    // DOCENTE: Filtrar actividades por sus Unidades Curriculares asignadas
+    // DOCENTE: Filtrar actividades por sus Unidades Curriculares asignadas (incluyendo Unidad Curricular de Prueba)
     const misUnidadesIds = sgnDb.unidades
-      .filter(u => u.id_prof == currentUser.id)
+      .filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u))
       .map(u => String(u.id));
     list = list.filter(a => misUnidadesIds.includes(String(a.id_unidad_curricular)));
   }
@@ -1950,9 +2007,50 @@ function renderActividadesTable() {
     const pendientesCount = item.pendientes;
     const calificadosCount = item.calificados;
     const numEvalUpper = (a.numero_evaluacion || "e1").toUpperCase();
+    const tipoAct = String(a.tipo_actividad || "ENTREGA").toUpperCase();
 
     // Formatear descripción con soporte de links responsivos
-    const descContentHtml = sgnFormatTextWithLinks(a.descripcion);
+    let tipoBadgeHtml = '';
+    if (tipoAct === 'QUIZ') {
+      let cantMostrar = 10;
+      let puntajeMax = 20;
+      let totalBanco = 0;
+      let tiempoMin = parseInt(a.tiempo_minutos, 10) || 0;
+      try {
+        const cfg = typeof a.quiz_config_json === 'string' ? JSON.parse(a.quiz_config_json || '{}') : (a.quiz_config_json || {});
+        if (cfg.cantidad_mostrar) cantMostrar = cfg.cantidad_mostrar;
+        if (cfg.puntaje_maximo) puntajeMax = cfg.puntaje_maximo;
+        if (cfg.total_banco) totalBanco = cfg.total_banco;
+        if (!tiempoMin && cfg.tiempo_minutos) tiempoMin = parseInt(cfg.tiempo_minutos, 10);
+      } catch (e) {}
+      if (!tiempoMin || tiempoMin <= 0) tiempoMin = 30;
+      if (!totalBanco && a.quiz_preguntas_json) {
+        try {
+          const arr = typeof a.quiz_preguntas_json === 'string' ? JSON.parse(a.quiz_preguntas_json) : a.quiz_preguntas_json;
+          if (Array.isArray(arr)) totalBanco = arr.length;
+        } catch (e) {}
+      }
+      tipoBadgeHtml = `
+        <div class="mb-1 d-flex flex-wrap gap-1 align-items-center">
+          <span class="badge bg-purple-subtle text-primary border border-primary-subtle fw-bold">
+            <i class="fa-solid fa-bolt me-1"></i> Evaluación Online (Quiz): ${cantMostrar} de ${totalBanco || cantMostrar} preg. (${puntajeMax} pts)
+          </span>
+          <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-bold">
+            <i class="fa-solid fa-stopwatch me-1"></i> Duración: ${tiempoMin} min
+          </span>
+        </div>
+      `;
+    } else {
+      tipoBadgeHtml = `
+        <div class="mb-1">
+          <span class="badge bg-light text-secondary border">
+            <i class="fa-solid fa-file-arrow-up me-1"></i> Entrega PDF / Enlace
+          </span>
+        </div>
+      `;
+    }
+
+    const descContentHtml = tipoBadgeHtml + sgnFormatTextWithLinks(a.descripcion);
 
     // Badge para la columna Unidad Curricular
     let badgeUcHtml = '';
@@ -1978,7 +2076,7 @@ function renderActividadesTable() {
       estadoEntregasHtml = `
         <button class="btn btn-sm btn-warning text-dark fw-bold shadow-sm d-inline-flex align-items-center gap-1" onclick="openModalEntregas(${a.id})" title="Haga clic para calificar las nuevas entregas">
           <i class="fa-solid fa-inbox text-danger"></i> ${entregasCount} Entrega(s)
-          <span class="badge bg-danger text-white ms-1 badge-pendientes-pulse">${pendientesCount} nueva(s)</span>
+          <span class="badge bg-danger text-white ms-1 badge-pendientes-pulse">${pendientesCount} falta(n) nota</span>
         </button>
       `;
     } else {
@@ -1990,6 +2088,7 @@ function renderActividadesTable() {
     }
 
     const rowClass = pendientesCount > 0 ? 'row-actividad-pendiente' : '';
+    const lapsoBarHtml = renderBarraLapsoDashboardHtml(a);
 
     $tbody.append(`
       <tr class="${rowClass}">
@@ -2000,8 +2099,8 @@ function renderActividadesTable() {
         </td>
         <td><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
         <td><span class="badge bg-info text-dark fw-bold">${numEvalUpper}</span></td>
-        <td><small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> ${a.fecha_asignacion || "N/A"}</small></td>
-        <td style="max-width: 320px; min-width: 180px;" class="text-break desc-actividad-box">${descContentHtml}</td>
+        <td style="min-width: 215px;">${lapsoBarHtml}</td>
+        <td style="max-width: 340px; min-width: 180px;" class="text-break desc-actividad-box">${descContentHtml}</td>
         <td>${estadoEntregasHtml}</td>
         <td>
           <div class="btn-group btn-group-sm">
@@ -2014,10 +2113,447 @@ function renderActividadesTable() {
   });
 }
 
+// ==========================================================================
+// CONTROL DE LAPSO DE ENTREGA Y BARRA DE DESCUENTO DE DÍAS (DASHBOARD)
+// ==========================================================================
+function normalizeDateYMDClient(val) {
+  if (!val) return '';
+  const str = String(val).trim().replace(/^'+/, '');
+  if (!str) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str)) return str.substring(0, 10);
+  const dmy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) {
+    return `${dmy[3]}-${String(dmy[2]).padStart(2, '0')}-${String(dmy[1]).padStart(2, '0')}`;
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return str;
+}
+
+function getTodayYMDClient() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseYMDLocalMs(ymd) {
+  const clean = normalizeDateYMDClient(ymd);
+  const parts = clean.split('-');
+  if (parts.length !== 3) return NaN;
+  return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0).getTime();
+}
+
+function addDaysYMDClient(ymd, days) {
+  const baseMs = parseYMDLocalMs(ymd || getTodayYMDClient());
+  const dObj = isNaN(baseMs) ? new Date() : new Date(baseMs);
+  dObj.setDate(dObj.getDate() + (parseInt(days, 10) || 0));
+  const y = dObj.getFullYear();
+  const m = String(dObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function calcularLapsoActividadDashboard(a) {
+  const hoyYMD = getTodayYMDClient();
+  const hoyMs = parseYMDLocalMs(hoyYMD);
+  const MS_PER_DAY = 86400000;
+
+  let fechaAsig = normalizeDateYMDClient(a && a.fecha_asignacion ? a.fecha_asignacion : '');
+  let fechaLim = normalizeDateYMDClient(a && a.fecha_limite ? a.fecha_limite : '');
+
+  if (!fechaAsig && !fechaLim) {
+    fechaAsig = hoyYMD;
+    fechaLim = addDaysYMDClient(hoyYMD, 7);
+  } else if (fechaAsig && !fechaLim) {
+    const asigMsTmp = parseYMDLocalMs(fechaAsig);
+    if (!isNaN(asigMsTmp) && asigMsTmp > hoyMs) {
+      fechaLim = fechaAsig;
+    } else {
+      fechaLim = addDaysYMDClient(fechaAsig, 7);
+    }
+  } else if (!fechaAsig && fechaLim) {
+    fechaAsig = fechaLim;
+  }
+
+  let startMs = parseYMDLocalMs(fechaAsig);
+  let endMs = parseYMDLocalMs(fechaLim);
+  if (isNaN(startMs)) startMs = hoyMs;
+  if (isNaN(endMs)) endMs = startMs;
+  if (endMs < startMs) startMs = endMs;
+
+  const diffRemaining = Math.round((endMs - hoyMs) / MS_PER_DAY);
+  const vencida = diffRemaining < 0;
+  const venceHoy = diffRemaining === 0;
+  const diasRestantes = Math.max(0, diffRemaining);
+
+  const rawTotalDays = Math.round((endMs - startMs) / MS_PER_DAY);
+  const diasTotales = rawTotalDays > 0 ? rawTotalDays : Math.max(1, diasRestantes || 1);
+
+  let porcentajeRestante = 0;
+  if (vencida) {
+    porcentajeRestante = 0;
+  } else if (venceHoy) {
+    porcentajeRestante = Math.max(10, Math.round((0.5 / diasTotales) * 100));
+  } else if (hoyMs <= startMs && rawTotalDays > 0) {
+    porcentajeRestante = 100;
+  } else {
+    porcentajeRestante = Math.max(0, Math.min(100, Math.round((diasRestantes / diasTotales) * 100)));
+  }
+
+  return {
+    fecha_asignacion: fechaAsig,
+    fecha_limite: fechaLim,
+    dias_totales: diasTotales,
+    dias_restantes: diasRestantes,
+    porcentaje_restante: porcentajeRestante,
+    vence_hoy: venceHoy,
+    vencida: vencida
+  };
+}
+
+function renderBarraLapsoDashboardHtml(a) {
+  const lapso = calcularLapsoActividadDashboard(a);
+  let barColorClass = 'bg-success';
+  let statusBadgeHtml = '';
+
+  if (lapso.vencida) {
+    barColorClass = 'bg-danger';
+    statusBadgeHtml = `<span class="badge bg-danger text-white"><i class="fa-solid fa-lock me-1"></i> Cerrada (Vencida)</span>`;
+  } else if (lapso.vence_hoy) {
+    barColorClass = 'bg-warning progress-bar-striped progress-bar-animated';
+    statusBadgeHtml = `<span class="badge bg-warning text-dark fw-bold"><i class="fa-solid fa-hourglass-end me-1"></i> ¡Vence Hoy!</span>`;
+  } else if (lapso.dias_restantes <= 2) {
+    barColorClass = 'bg-warning';
+    statusBadgeHtml = `<span class="badge bg-warning text-dark fw-bold"><i class="fa-solid fa-hourglass-half me-1"></i> Quedan ${lapso.dias_restantes} día(s)</span>`;
+  } else {
+    barColorClass = 'bg-success';
+    statusBadgeHtml = `<span class="badge bg-success-subtle text-success border border-success-subtle fw-bold"><i class="fa-solid fa-hourglass-start me-1"></i> Quedan ${lapso.dias_restantes} de ${lapso.dias_totales} días</span>`;
+  }
+
+  return `
+    <div class="d-flex flex-column gap-1">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-1">
+        ${statusBadgeHtml}
+        <small class="text-muted fw-semibold" style="font-size: 0.72rem;">${lapso.porcentaje_restante}%</small>
+      </div>
+      <div class="progress bg-secondary-subtle" style="height: 8px; border-radius: 6px; overflow: hidden;" title="Tiempo restante del lapso de entrega: ${lapso.porcentaje_restante}%">
+        <div class="progress-bar ${barColorClass}" role="progressbar" style="width: ${lapso.porcentaje_restante}%; transition: width 0.4s ease;" aria-valuenow="${lapso.porcentaje_restante}" aria-valuemin="0" aria-valuemax="100"></div>
+      </div>
+      <div class="d-flex justify-content-between text-muted" style="font-size: 0.72rem;">
+        <span title="Fecha de Asignación"><i class="fa-regular fa-calendar me-1"></i>Asig: ${lapso.fecha_asignacion}</span>
+        <span class="fw-bold ${lapso.vencida ? 'text-danger' : 'text-navy'}" title="Fecha Límite de Cierre"><i class="fa-regular fa-calendar-xmark me-1"></i>Lím: ${lapso.fecha_limite}</span>
+      </div>
+    </div>
+  `;
+}
+
+function onActividadLapsoChange(source) {
+  const fechaInicio = normalizeDateYMDClient($('#actividadFecha').val()) || getTodayYMDClient();
+  if (!$('#actividadFecha').val()) {
+    $('#actividadFecha').val(fechaInicio);
+  }
+
+  if (source === 'dias' || source === 'inicio') {
+    let dias = parseInt($('#actividadDiasLapso').val(), 10);
+    if (isNaN(dias) || dias < 0) dias = 0;
+    const nuevaFechaLim = addDaysYMDClient(fechaInicio, dias);
+    $('#actividadFechaLimite').val(nuevaFechaLim);
+  } else if (source === 'limite') {
+    const fechaLim = normalizeDateYMDClient($('#actividadFechaLimite').val());
+    if (fechaLim) {
+      const startMs = parseYMDLocalMs(fechaInicio);
+      const endMs = parseYMDLocalMs(fechaLim);
+      if (!isNaN(startMs) && !isNaN(endMs)) {
+        const diffDays = Math.max(0, Math.round((endMs - startMs) / 86400000));
+        $('#actividadDiasLapso').val(diffDays);
+      }
+    }
+  }
+}
+
+// ==========================================================================
+// PARSER Y GESTIÓN DE BANCO DE PREGUNTAS EN MARKDOWN (EVALUACIÓN ONLINE)
+// ==========================================================================
+function onTipoActividadChange() {
+  const tipo = $('#actividadTipo').val();
+  if (tipo === 'QUIZ') {
+    $('#quizConfigSection').slideDown(200);
+    updateQuizMarkdownPreview();
+  } else {
+    $('#quizConfigSection').slideUp(200);
+  }
+}
+
+/**
+ * Parsea un bloque de texto Markdown siguiendo la estructura estricta:
+ * - Separador de preguntas: ---
+ * - Enunciado: ## Texto de la pregunta (con soporte de código o párrafos debajo)
+ * - Opciones falsas: - [ ] Texto
+ * - Opción verdadera: - [x] Texto
+ * - Explicación / Feedback: > Texto debajo de cada opción
+ */
+function parseMarkdownQuizBank(mdText) {
+  if (!mdText || typeof mdText !== 'string' || !mdText.trim()) {
+    return { questions: [], errors: [] };
+  }
+
+  const lines = mdText.replace(/\r\n/g, '\n').split('\n');
+  const rawBlocks = [];
+  let currentBlockLines = [];
+  let insideCodeFence = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      insideCodeFence = !insideCodeFence;
+    }
+
+    if (!insideCodeFence && /^---+$/.test(trimmed)) {
+      if (currentBlockLines.join('\n').trim().length > 0) {
+        rawBlocks.push(currentBlockLines);
+      }
+      currentBlockLines = [];
+    } else {
+      currentBlockLines.push(line);
+    }
+  }
+  if (currentBlockLines.join('\n').trim().length > 0) {
+    rawBlocks.push(currentBlockLines);
+  }
+
+  const questions = [];
+  const errors = [];
+
+  rawBlocks.forEach((blockLines, blockIdx) => {
+    let foundHeader = false;
+    let enunciadoLines = [];
+    let opciones = [];
+    let currentOption = null;
+    let inFence = false;
+
+    for (let j = 0; j < blockLines.length; j++) {
+      const rawLine = blockLines[j];
+      const trimmed = rawLine.trim();
+
+      if (trimmed.startsWith('```')) {
+        inFence = !inFence;
+      }
+
+      if (!inFence && !foundHeader && /^##\s+(.+)$/.test(trimmed)) {
+        foundHeader = true;
+        const headerMatch = trimmed.match(/^##\s+(.+)$/);
+        enunciadoLines.push(headerMatch[1].trim());
+        continue;
+      }
+
+      if (!inFence && foundHeader) {
+        // Verificar si es una opción: - [ ] Texto o - [x] Texto
+        const optMatch = rawLine.match(/^\s*-\s*\[([ xX])\]\s*(.+)$/);
+        if (optMatch) {
+          const isCorrect = optMatch[1].toLowerCase() === 'x';
+          const optText = optMatch[2].trim();
+          currentOption = {
+            id: `q${questions.length + 1}_o${opciones.length + 1}`,
+            texto: optText,
+            isCorrect: isCorrect,
+            feedback: ""
+          };
+          opciones.push(currentOption);
+          continue;
+        }
+
+        // Verificar si es línea de feedback (> Texto) debajo de una opción activa
+        if (currentOption && /^\s*>\s*(.*)$/.test(rawLine)) {
+          const fbMatch = rawLine.match(/^\s*>\s*(.*)$/);
+          const fbText = fbMatch[1].trim();
+          if (fbText) {
+            currentOption.feedback = currentOption.feedback
+              ? (currentOption.feedback + " " + fbText)
+              : fbText;
+          }
+          continue;
+        }
+      }
+
+      // Si aún no hemos llegado a las opciones pero ya pasamos el ##, forma parte del enunciado (ej. bloques de código o texto adicional)
+      if (foundHeader && opciones.length === 0) {
+        enunciadoLines.push(rawLine);
+      }
+    }
+
+    const enunciadoFinal = enunciadoLines.join('\n').trim();
+    const numBlock = blockIdx + 1;
+
+    if (!foundHeader || !enunciadoFinal) {
+      errors.push(`Bloque #${numBlock}: No se encontró el enunciado con formato "## Texto de la pregunta".`);
+      return;
+    }
+
+    if (opciones.length < 2) {
+      errors.push(`Pregunta #${numBlock} ("${enunciadoFinal.substring(0, 40)}..."): Debe tener al menos 2 opciones (- [ ] / - [x]).`);
+      return;
+    }
+
+    const correctCount = opciones.filter(o => o.isCorrect).length;
+    if (correctCount === 0) {
+      errors.push(`Pregunta #${numBlock} ("${enunciadoFinal.substring(0, 40)}..."): No tiene ninguna opción marcada como verdadera (- [x]).`);
+      return;
+    }
+
+    const qId = `q${questions.length + 1}`;
+    opciones.forEach((o, idx) => {
+      o.id = `${qId}_o${idx + 1}`;
+    });
+
+    questions.push({
+      id: qId,
+      enunciado: enunciadoFinal,
+      opciones: opciones
+    });
+  });
+
+  return { questions, errors };
+}
+
+/**
+ * Reconstruye el texto Markdown a partir del arreglo JSON guardado en la BD
+ * para permitir la edición transparente por parte del docente.
+ */
+function serializeQuizBankToMarkdown(bank) {
+  if (!Array.isArray(bank) || bank.length === 0) return "";
+  return bank.map(q => {
+    const enunciado = String(q.enunciado || "").trim();
+    const lines = enunciado.split('\n');
+    const firstLine = `## ${lines[0]}`;
+    const restEnunciado = lines.slice(1).join('\n');
+    const headerBlock = restEnunciado ? `${firstLine}\n${restEnunciado}` : firstLine;
+
+    const optsBlock = (q.opciones || []).map(o => {
+      const mark = o.isCorrect ? 'x' : ' ';
+      const fbLine = o.feedback ? `\n  > ${o.feedback}` : '';
+      return `- [${mark}] ${o.texto}${fbLine}`;
+    }).join('\n');
+
+    return `${headerBlock}\n\n${optsBlock}`;
+  }).join('\n\n---\n\n');
+}
+
+function updateQuizMarkdownPreview() {
+  const mdText = $('#quizMarkdownInput').val() || '';
+  const cantMostrar = parseInt($('#quizCantidadMostrar').val(), 10) || 10;
+  const puntajeMax = parseFloat($('#quizPuntajeMaximo').val()) || 20;
+  const tiempoMin = parseInt($('#quizTiempoMinutos').val(), 10) || 30;
+  const $preview = $('#quizParserPreviewBox');
+
+  if (!mdText.trim()) {
+    $preview.removeClass('alert-success alert-danger alert-warning').addClass('alert-secondary')
+      .html('<i class="fa-solid fa-circle-info me-1"></i> Pegue o cargue su banco de preguntas en Markdown para validar la sintaxis.');
+    return;
+  }
+
+  const parsed = parseMarkdownQuizBank(mdText);
+  const validCount = parsed.questions.length;
+  const effectiveShow = Math.min(cantMostrar, validCount || cantMostrar);
+  const valorCadaUna = effectiveShow > 0 ? Math.round((puntajeMax / effectiveShow) * 100) / 100 : 0;
+
+  if (validCount > 0 && parsed.errors.length === 0) {
+    const warnCant = cantMostrar > validCount
+      ? `<div class="mt-1 text-warning-emphasis small"><i class="fa-solid fa-triangle-exclamation me-1"></i> Ha configurado mostrar <strong>${cantMostrar}</strong> preguntas, pero el banco tiene <strong>${validCount}</strong>. Se mostrarán las ${validCount} preguntas disponibles.</div>`
+      : '';
+    $preview.removeClass('alert-secondary alert-danger alert-warning').addClass('alert-success')
+      .html(`
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <i class="fa-solid fa-circle-check me-1"></i> <strong>Se detectaron ${validCount} pregunta(s) válida(s)</strong> en el banco.
+          </div>
+          <div class="d-flex gap-1 flex-wrap">
+            <span class="badge bg-success text-white">Sorteo: ${effectiveShow} preg. &times; ${valorCadaUna} pts = ${puntajeMax} pts</span>
+            <span class="badge bg-dark text-white"><i class="fa-solid fa-stopwatch me-1"></i> ${tiempoMin} min</span>
+          </div>
+        </div>
+        ${warnCant}
+      `);
+  } else if (validCount > 0 && parsed.errors.length > 0) {
+    const errHtml = parsed.errors.map(e => `<li>${e}</li>`).join('');
+    $preview.removeClass('alert-secondary alert-success alert-danger').addClass('alert-warning')
+      .html(`
+        <div><i class="fa-solid fa-triangle-exclamation me-1"></i> <strong>Se detectaron ${validCount} pregunta(s) válida(s)</strong>, pero hay <strong>${parsed.errors.length} bloque(s) con error de sintaxis</strong>:</div>
+        <ul class="mb-0 mt-1 small">${errHtml}</ul>
+      `);
+  } else {
+    const errHtml = parsed.errors.map(e => `<li>${e}</li>`).join('');
+    $preview.removeClass('alert-secondary alert-success alert-warning').addClass('alert-danger')
+      .html(`
+        <div><i class="fa-solid fa-circle-xmark me-1"></i> <strong>Se detectaron 0 preguntas válidas.</strong> Verifique el formato Markdown:</div>
+        <ul class="mb-0 mt-1 small">${errHtml}</ul>
+      `);
+  }
+}
+
+function handleQuizMdFileUpload(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    $('#quizMarkdownInput').val(e.target.result || '');
+    updateQuizMarkdownPreview();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function insertSampleQuizMarkdown() {
+  const sample = `## ¿Cuál es la complejidad temporal de búsqueda en un Árbol Binario de Búsqueda (BST) balanceado?
+- [ ] O(n)
+  > Incorrecto. O(n) ocurre en una búsqueda secuencial o en un árbol degenerado.
+- [x] O(log n)
+  > ¡Correcto! En cada nivel del árbol balanceado se descarta la mitad del espacio de búsqueda.
+- [ ] O(1)
+  > Incorrecto. O(1) corresponde a tablas hash en el caso promedio, no a árboles de búsqueda.
+
+---
+
+## ¿Qué etiqueta o comando SQL se utiliza para filtrar registros agrupados después de un GROUP BY?
+\`\`\`sql
+SELECT departamento, COUNT(*)
+FROM empleados
+GROUP BY departamento
+-- ¿Qué cláusula va aquí?
+\`\`\`
+- [ ] WHERE
+  > Incorrecto. WHERE filtra filas antes del agrupamiento GROUP BY.
+- [x] HAVING
+  > ¡Correcto! HAVING permite aplicar condiciones sobre funciones de agregación después de GROUP BY.
+- [ ] ORDER BY
+  > Incorrecto. ORDER BY solo ordena el conjunto de resultados final.`;
+
+  $('#quizMarkdownInput').val(sample);
+  updateQuizMarkdownPreview();
+}
+
 function openModalActividad() {
   $('#modalActividadForm')[0].reset();
   $('#actividadId').val('');
-  $('#actividadFecha').val(new Date().toISOString().split('T')[0]);
+  const hoyStr = getTodayYMDClient();
+  $('#actividadFecha').val(hoyStr);
+  $('#actividadDiasLapso').val(7);
+  $('#actividadFechaLimite').val(addDaysYMDClient(hoyStr, 7));
+  $('#actividadTipo').val('ENTREGA');
+  $('#quizCantidadMostrar').val(15);
+  $('#quizPuntajeMaximo').val(20);
+  $('#quizTiempoMinutos').val(30);
+  $('#quizMarkdownInput').val('');
+  $('#quizConfigSection').hide();
+  updateQuizMarkdownPreview();
   $('#modalActividadTitle').text('Asignar Nueva Actividad / Evaluación');
   
   populateDropdownOptions();
@@ -2030,11 +2566,48 @@ function editActividad(id) {
   const a = (sgnDb.actividadesAsignadas || []).find(item => item.id == id);
   if (!a) return;
 
+  populateDropdownOptions();
+
+  const lapsoInfo = calcularLapsoActividadDashboard(a);
+
   $('#actividadId').val(a.id);
   $('#actividadUnidadId').val(a.id_unidad_curricular);
   $('#actividadEval').val((a.numero_evaluacion || "e1").toLowerCase());
-  $('#actividadFecha').val(a.fecha_asignacion);
+  $('#actividadFecha').val(lapsoInfo.fecha_asignacion);
+  $('#actividadFechaLimite').val(lapsoInfo.fecha_limite);
+  const startMs = parseYMDLocalMs(lapsoInfo.fecha_asignacion);
+  const endMs = parseYMDLocalMs(lapsoInfo.fecha_limite);
+  const diffDays = (!isNaN(startMs) && !isNaN(endMs)) ? Math.max(0, Math.round((endMs - startMs) / 86400000)) : lapsoInfo.dias_totales;
+  $('#actividadDiasLapso').val(diffDays);
   $('#actividadDesc').val(a.descripcion);
+
+  const tipoAct = String(a.tipo_actividad || "ENTREGA").toUpperCase();
+  $('#actividadTipo').val(tipoAct === 'QUIZ' ? 'QUIZ' : 'ENTREGA');
+
+  if (tipoAct === 'QUIZ') {
+    let cfg = {};
+    let bank = [];
+    try {
+      cfg = typeof a.quiz_config_json === 'string' ? JSON.parse(a.quiz_config_json || '{}') : (a.quiz_config_json || {});
+    } catch (e) {}
+    try {
+      bank = typeof a.quiz_preguntas_json === 'string' ? JSON.parse(a.quiz_preguntas_json || '[]') : (a.quiz_preguntas_json || []);
+    } catch (e) {}
+
+    const tiempoMin = parseInt(a.tiempo_minutos, 10) || parseInt(cfg.tiempo_minutos, 10) || 30;
+    $('#quizCantidadMostrar').val(cfg.cantidad_mostrar || 15);
+    $('#quizPuntajeMaximo').val(cfg.puntaje_maximo || 20);
+    $('#quizTiempoMinutos').val(tiempoMin);
+    $('#quizMarkdownInput').val(serializeQuizBankToMarkdown(bank));
+    $('#quizConfigSection').show();
+    updateQuizMarkdownPreview();
+  } else {
+    $('#quizCantidadMostrar').val(15);
+    $('#quizPuntajeMaximo').val(20);
+    $('#quizTiempoMinutos').val(30);
+    $('#quizMarkdownInput').val('');
+    $('#quizConfigSection').hide();
+  }
 
   $('#modalActividadTitle').text('Editar Actividad Asignada');
   const bsModal = new bootstrap.Modal(document.getElementById('modalActividad'));
@@ -2044,12 +2617,66 @@ function editActividad(id) {
 function saveActividadSubmit() {
   const uId = $('#actividadUnidadId').val();
   const evalKey = $('#actividadEval').val();
-  const fecha = $('#actividadFecha').val();
+  const fecha = normalizeDateYMDClient($('#actividadFecha').val()) || getTodayYMDClient();
+  const diasInput = parseInt($('#actividadDiasLapso').val(), 10);
+  const fechaLimite = normalizeDateYMDClient($('#actividadFechaLimite').val()) || addDaysYMDClient(fecha, isNaN(diasInput) ? 7 : diasInput);
   const desc = $('#actividadDesc').val().trim();
+  const tipoActividad = $('#actividadTipo').val() || 'ENTREGA';
 
   if (!uId || !desc) {
     sgnShowModal({ title: "Atención", message: "Debe seleccionar la Unidad Curricular e ingresar la descripción de la actividad.", type: "warning" });
     return;
+  }
+
+  const startMs = parseYMDLocalMs(fecha);
+  const endMs = parseYMDLocalMs(fechaLimite);
+  if (!isNaN(startMs) && !isNaN(endMs) && endMs < startMs) {
+    sgnShowModal({
+      title: "Fechas Inválidas",
+      message: "La <strong>Fecha Límite (Cierre)</strong> no puede ser anterior a la <strong>Fecha de Asignación (Inicio)</strong>.",
+      type: "warning"
+    });
+    return;
+  }
+
+  let quizConfigJson = "";
+  let quizPreguntasJson = "";
+  let tiempoMinutos = "";
+
+  if (tipoActividad === 'QUIZ') {
+    const mdText = $('#quizMarkdownInput').val() || '';
+    const parsed = parseMarkdownQuizBank(mdText);
+
+    if (parsed.questions.length === 0) {
+      sgnShowModal({
+        title: "Banco de Preguntas Inválido",
+        message: "No se detectaron preguntas válidas en el bloque Markdown. Verifique que cada pregunta inicie con <code>## Enunciado</code> y tenga opciones <code>- [ ]</code> y <code>- [x]</code> separadas por <code>---</code>.",
+        type: "warning"
+      });
+      return;
+    }
+
+    if (parsed.errors.length > 0) {
+      sgnShowModal({
+        title: "Errores de Sintaxis en el Markdown",
+        message: `Por favor corrija los siguientes errores antes de guardar:<br><ul class="text-start small mt-2 mb-0">${parsed.errors.map(e => `<li>${e}</li>`).join('')}</ul>`,
+        type: "warning"
+      });
+      return;
+    }
+
+    const cantMostrar = Math.max(1, parseInt($('#quizCantidadMostrar').val(), 10) || 10);
+    const puntajeMax = Math.max(1, parseFloat($('#quizPuntajeMaximo').val()) || 20);
+    const tiempoMin = Math.max(1, parseInt($('#quizTiempoMinutos').val(), 10) || 30);
+    tiempoMinutos = tiempoMin;
+
+    quizConfigJson = JSON.stringify({
+      cantidad_mostrar: Math.min(cantMostrar, parsed.questions.length),
+      puntaje_maximo: puntajeMax,
+      total_banco: parsed.questions.length,
+      tiempo_minutos: tiempoMin
+    });
+    quizPreguntasJson = JSON.stringify(parsed.questions);
   }
 
   const formData = {
@@ -2057,7 +2684,12 @@ function saveActividadSubmit() {
     id_unidad_curricular: uId,
     numero_evaluacion: evalKey,
     fecha_asignacion: fecha,
-    descripcion: desc
+    fecha_limite: fechaLimite,
+    descripcion: desc,
+    tipo_actividad: tipoActividad,
+    quiz_config_json: quizConfigJson,
+    quiz_preguntas_json: quizPreguntasJson,
+    tiempo_minutos: tiempoMinutos
   };
 
   sgnApiCall("saveActividadAsignada", formData).then(function (res) {
@@ -2108,7 +2740,7 @@ function openModalEntregas(idActividad) {
   currentEntregasState.filtroActual = 'todos';
   $('#filterEntregasButtonGroup button').removeClass('active');
   $('#btnFilterTodos').addClass('active');
-  $('#filterFeedbackText').html('<i class="fa-solid fa-circle-info me-1"></i> Mostrando todas las entregas');
+  $('#filterFeedbackText').html('<i class="fa-solid fa-circle-info me-1"></i> Mostrando todas las entregas (primero sin nota)');
 
   sgnApiCall("getEntregasByActividad", { id_actividades_asignadas: idActividad }, { showLoading: true }).then(function (res) {
     if (res && res.success) {
@@ -2122,7 +2754,18 @@ function openModalEntregas(idActividad) {
 }
 
 function renderTablaEntregasActividad() {
-  const entregas = currentEntregasState.entregas || [];
+  const rawEntregas = currentEntregasState.entregas || [];
+  // Ordenar: primero los estudiantes que les falta nota (pendientes) y luego los ya calificados
+  const entregas = [...rawEntregas].sort((a, b) => {
+    const aHasNota = (a.nota !== undefined && a.nota !== "" && a.nota !== null);
+    const bHasNota = (b.nota !== undefined && b.nota !== "" && b.nota !== null);
+    if (aHasNota !== bHasNota) {
+      return aHasNota ? 1 : -1;
+    }
+    return String(a.nombre_estudiante || "").localeCompare(String(b.nombre_estudiante || ""));
+  });
+  currentEntregasState.entregas = entregas;
+
   const $tbody = $('#tablaEntregasActividad tbody');
   $tbody.empty();
 
@@ -2142,7 +2785,7 @@ function renderTablaEntregasActividad() {
 
   $('#percentEntregasTexto').text(`${porcentaje}% completado (${calificados} de ${total})`);
   $('#progressBarEntregas').css('width', `${porcentaje}%`).attr('aria-valuenow', porcentaje);
-  $('#footerSummaryEntregas').html(`<i class="fa-solid fa-list-check me-1"></i> <strong>${total}</strong> entregas registradas: <span class="text-success fw-bold">${calificados} calificados</span> y <span class="text-warning-emphasis fw-bold">${pendientes} pendientes</span>.`);
+  $('#footerSummaryEntregas').html(`<i class="fa-solid fa-list-check me-1"></i> <strong>${total}</strong> entregas registradas: <span class="text-warning-emphasis fw-bold">${pendientes} sin nota (mostradas primero)</span> y <span class="text-success fw-bold">${calificados} calificadas</span>.`);
 
   if (entregas.length === 0) {
     $tbody.append('<tr><td colspan="7" class="text-center text-muted py-4"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>Aún ningún estudiante ha registrado una entrega para esta actividad.</td></tr>');
@@ -2151,12 +2794,27 @@ function renderTablaEntregasActividad() {
 
   entregas.forEach(ent => {
     let linkHtml = '<span class="text-muted small"><i class="fa-regular fa-file-excel me-1"></i> Sin archivo</span>';
+    const isEnCurso = String(ent.entrega || '').trim() === 'EN_CURSO';
     if (ent.entrega) {
-      linkHtml = `
-        <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" title="Abrir Documento o Enlace">
-          <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver Entrega
-        </a>
-      `;
+      if (isEnCurso) {
+        linkHtml = `
+          <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle py-2 px-2">
+            <i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Evaluación en curso...
+          </span>
+        `;
+      } else if (String(ent.entrega).startsWith('QUIZ_ONLINE:')) {
+        linkHtml = `
+          <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-2 px-2">
+            <i class="fa-solid fa-bolt me-1"></i> ${ent.entrega.replace('QUIZ_ONLINE:', 'Quiz:')}
+          </span>
+        `;
+      } else {
+        linkHtml = `
+          <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" title="Abrir Documento o Enlace">
+            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver Entrega
+          </a>
+        `;
+      }
     }
 
     const isCalificado = (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
@@ -2170,12 +2828,26 @@ function renderTablaEntregasActividad() {
           <i class="fa-solid fa-circle-check"></i> Calificado
         </span>
       `;
+    } else if (isEnCurso) {
+      estadoBadgeHtml = `
+        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle badge-status-entrega" id="badgeEstado_${ent.id}">
+          <i class="fa-solid fa-stopwatch"></i> En Curso
+        </span>
+      `;
     } else {
       estadoBadgeHtml = `
         <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle badge-status-entrega" id="badgeEstado_${ent.id}">
           <i class="fa-solid fa-clock"></i> Falta Nota
         </span>
       `;
+    }
+
+    let tiemposQuizHtml = `<small class="text-muted"><i class="fa-regular fa-calendar me-1"></i>${ent.fecha_entrega || "N/A"}</small>`;
+    if (ent.hora_inicio) {
+      tiemposQuizHtml += `<div class="small text-muted mt-1"><i class="fa-solid fa-play text-success me-1"></i>Inicio: ${ent.hora_inicio}</div>`;
+    }
+    if (ent.hora_fin) {
+      tiemposQuizHtml += `<div class="small text-muted"><i class="fa-solid fa-flag-checkered text-primary me-1"></i>Fin: ${ent.hora_fin}</div>`;
     }
 
     const $row = $(`
@@ -2187,7 +2859,7 @@ function renderTablaEntregasActividad() {
         <td class="text-center" id="colEstado_${ent.id}">
           ${estadoBadgeHtml}
         </td>
-        <td><small class="text-muted"><i class="fa-regular fa-calendar me-1"></i>${ent.fecha_entrega || "N/A"}</small></td>
+        <td>${tiemposQuizHtml}</td>
         <td>${linkHtml}</td>
         <td>
           <input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm input-nota-entrega ${isCalificado ? 'nota-lista' : 'nota-vacia'}" id="notaEntrega_${ent.id}" data-id="${ent.id}" data-original="${notaVal}" value="${notaVal}" placeholder="0-20" oninput="onInputNotaEntregaChange(${ent.id})">

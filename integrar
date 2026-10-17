@@ -1,0 +1,54 @@
+Organiza la lista de link quiero que Cambiar clave lo muevas al lado de Cerrar sesion no debe estar en la seccion donde esta actualmente ya que eso es muy particular de cada docente
+
+Quiero que en la seccion Entregas de Estudiantes las entrega de ellos se muestre primero los que les falta nota y luego los que ya han entregado
+
+Quiero agregar una nueva funcionalidad a nuestro sistema actual sin alterar ni romper los tipos de actividades que ya funcionan (entrega de PDF y links). Quiero añadir un tercer tipo de actividad llamado "Evaluación Online (Quiz)" basado en un banco de preguntas en Markdown.
+
+Antes de escribir el código, analiza nuestro proyecto actual y dime cómo vas a integrar estos 4 módulos:
+
+1. El Receptor y Parser de Markdown (Vista del Profesor):
+Al crear o editar una actividad de tipo "Evaluación Online", necesito:
+
+Un campo de texto grande (o carga de archivo .md) donde yo pegue mi banco de preguntas (ej. 60 preguntas).
+
+Un campo numérico para definir "Cantidad de preguntas a mostrar por estudiante" (ej. 15 de las 60).
+
+Un campo para el "Puntaje máximo de la evaluación" (o que use el peso de la actividad actual).
+
+El Parser: Debes crear una función que lea el Markdown siguiendo esta estructura estricta y lo convierta en un arreglo JSON para guardarlo en la base de datos:
+
+Separador de preguntas: ---
+
+Enunciado de la pregunta: ## Texto de la pregunta (puede incluir bloques de código o texto adicional debajo).
+
+Opciones falsas: - [ ] Texto de la opción
+
+Opción verdadera: - [x] Texto de la opción
+
+Explicación / Feedback de cada opción (línea inmediatamente inferior a la opción):   > Texto explicando por qué es correcta o incorrecta.
+
+(Opcional pero ideal): Una vista previa rápida al pegar el Markdown que me diga: "Se detectaron X preguntas válidas" antes de guardar, por si cometí algún error de sintaxis.
+
+2. Motor de Sorteo Seguro (Backend / Servidor):
+Cuando un estudiante abra la evaluación:
+
+El sistema debe tomar el banco completo (ej. las 60 preguntas) y seleccionar de forma 100% aleatoria la cantidad configurada (ej. 15 preguntas o 10 preguntas y calcular el valor de cada una basado en el total de la evaluacion que la normalidad es que sea en base a 20) para ese estudiante, y también barajar el orden de las opciones de cada pregunta.
+
+Regla crítica de seguridad: El endpoint o consulta que envía las preguntas al navegador del estudiante NUNCA debe incluir cuál opción es isCorrect: true ni los textos de explicación (feedback). Solo debe enviar los IDs de las preguntas, los enunciados y los textos de las opciones.
+
+3. Interfaz de Evaluación (Vista del Estudiante):
+
+Mostrar las preguntas sorteadas con botones de selección única (radio buttons).
+
+Un botón final de "Enviar Evaluación" (bloqueando que pueda enviarla dos veces si ya tiene un intento registrado).
+
+4. Autocalificación, Registro de Nota y Retroalimentación:
+Cuando el estudiante envíe sus respuestas:
+
+El backend recibe los IDs de las opciones seleccionadas, los compara con el JSON real guardado en la base de datos y calcula la calificación automáticamente en base al puntaje máximo.
+
+Integración: Guarda esa nota directamente en el mismo registro de calificaciones donde hoy se guardan las notas de las entregas de PDF/Links, para que mi panel de notas siga funcionando igual.
+
+Pantalla de Resultados: Devuelve al estudiante su calificación final y muéstrale el resumen de su examen indicando en cuáles acertó, en cuáles falló, cuál era la respuesta correcta y mostrándole el bloque de explicación (>) correspondiente para que entienda por qué las otras opciones eran incorrectas.
+
+Primero confírmame si entiendes la estructura de nuestra base de datos actual y propón el plan de cambios antes de modificar los archivos.
