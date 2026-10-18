@@ -3287,7 +3287,7 @@ function renderExtensionTable() {
     $tbody.append(`
       <tr>
         <td><strong>#${p.id}</strong></td>
-        <td><span class="badge bg-light text-navy border fw-bold">${p.cedula}</span></td>
+        <td><span class="badge bg-light text-dark border fw-bold" style="color: #000 !important;">${p.cedula}</span></td>
         <td class="fw-bold text-navy">${p.nombre_completo}</td>
         <td><span class="badge bg-primary-subtle text-primary fw-bold">${p.curso}</span></td>
         <td>${p.banco}</td>

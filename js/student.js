@@ -28,12 +28,42 @@ $(document).ready(function () {
     performStudentSearch(cedulaInput);
   });
 
-  // Detectar si el docente abrió el modo de prueba con ?test_cedula=V-12345
-  const urlParams = new URLSearchParams(window.location.search);
-  const testCedulaParam = urlParams.get('test_cedula');
-  if (testCedulaParam) {
-    $('#sgnSearchCedulaInput').val(testCedulaParam);
-    performStudentSearch(testCedulaParam);
+  // Detectar si estamos en index.html y hay una cédula activa previa o en parámetro URL
+  if ($('#sgnStudentSearchForm').length > 0) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const testCedulaParam = urlParams.get('test_cedula');
+    const activeCedula = testCedulaParam || (typeof sgnGetActiveCedula === 'function' ? sgnGetActiveCedula() : '');
+
+    if (activeCedula) {
+      const cleaned = typeof sgnCleanCedulaInput === 'function' ? sgnCleanCedulaInput(activeCedula) : { number: activeCedula, full: activeCedula };
+      if (cleaned.number) {
+        $('#sgnSearchCedulaInput').val(cleaned.full);
+        if (typeof sgnUpdateNavLinks === 'function') {
+          sgnUpdateNavLinks(cleaned.full);
+        }
+
+        // Si tenemos los datos académicos en caché, renderizarlos de inmediato sin petición
+        const cached = typeof sgnGetActiveStudentSession === 'function' ? sgnGetActiveStudentSession(cleaned.full) : null;
+        if (cached && cached.student && cached.notas) {
+          currentStudentData = cached.student;
+          currentStudentResponse = cached;
+          renderStudentAcademicProfile(cached);
+
+          if (cached.extensionList && cached.bancoList && typeof sgnSaveExtensionCache === 'function') {
+            sgnSaveExtensionCache(cleaned.full, {
+              success: true,
+              registered: true,
+              student: cached.student,
+              extensionList: cached.extensionList,
+              bancoList: cached.bancoList,
+              pagos: cached.extensionPagos || []
+            });
+          }
+        } else {
+          performStudentSearch(cleaned.full);
+        }
+      }
+    }
   }
 
   // Detener temporizador si se cierra el modal de evaluación
@@ -192,6 +222,39 @@ function performStudentSearch(cedula) {
       currentStudentData = res.student;
       currentStudentResponse = res;
       renderStudentAcademicProfile(res);
+
+      // Persistir sesión y caché del estudiante para compartirlo con extension.html
+      if (typeof sgnSaveActiveStudentSession === 'function') {
+        sgnSaveActiveStudentSession(res.student.cedula, res);
+      }
+      if (typeof sgnUpdateNavLinks === 'function') {
+        sgnUpdateNavLinks(res.student.cedula);
+      }
+
+      // Si la respuesta ya incluye datos de extensión (backend optimizado), guardarlos de una vez
+      if (res.extensionList && res.bancoList) {
+        if (typeof sgnSaveExtensionCache === 'function') {
+          sgnSaveExtensionCache(res.student.cedula, {
+            success: true,
+            registered: true,
+            student: res.student,
+            extensionList: res.extensionList,
+            bancoList: res.bancoList,
+            pagos: res.extensionPagos || []
+          });
+        }
+      } else {
+        // Precarga en segundo plano sin bloquear al usuario para que al cambiar a extension.html
+        // ya no tenga que hacer ninguna petición de red adicional
+        sgnApiCall("getStudentExtensionData", { cedula: res.student.cedula }, { showLoading: false })
+          .then(function (extRes) {
+            if (extRes && extRes.success && extRes.student) {
+              if (typeof sgnSaveExtensionCache === 'function') {
+                sgnSaveExtensionCache(res.student.cedula, extRes);
+              }
+            }
+          });
+      }
     }
   });
 }

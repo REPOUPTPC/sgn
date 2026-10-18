@@ -16,7 +16,34 @@ $(document).ready(function () {
   // 1. Obtener tasa oficial del dólar desde DolarApi
   fetchDolarOficialRate();
 
-  // 2. Evento del Buscador de Cédula
+  // 2. Verificar si ya hay una cédula activa o buscada previamente (desde index.html, URL o caché)
+  const activeCedula = typeof sgnGetActiveCedula === 'function' ? sgnGetActiveCedula() : '';
+  if (activeCedula) {
+    const cleaned = typeof sgnCleanCedulaInput === 'function' ? sgnCleanCedulaInput(activeCedula) : { number: activeCedula, full: activeCedula };
+    if (cleaned.number) {
+      $('#sgnSearchCedulaInput').val(cleaned.full);
+      if (typeof sgnUpdateNavLinks === 'function') {
+        sgnUpdateNavLinks(cleaned.full);
+      }
+
+      // Intentar cargar directamente desde el caché de extensión (¡Cero peticiones de red!)
+      const cachedExt = typeof sgnGetExtensionCache === 'function' ? sgnGetExtensionCache(cleaned.full) : null;
+      if (cachedExt && cachedExt.student && cachedExt.extensionList && cachedExt.extensionList.length > 0) {
+        // Carga instantánea manteniendo todos los datos
+        renderEstudianteExtensionData(cachedExt, false);
+      } else {
+        // Si no tenemos los cursos/pagos aún en caché, mostrar al menos los datos del estudiante de inmediato
+        const cachedStudent = typeof sgnGetActiveStudentSession === 'function' ? sgnGetActiveStudentSession(cleaned.full) : null;
+        if (cachedStudent && cachedStudent.student) {
+          mostrarFichaEstudianteParcial(cachedStudent.student);
+        }
+        // Consultar los datos de extensión para completar cursos y pagos
+        consultarEstudianteExtension(cleaned.full);
+      }
+    }
+  }
+
+  // 3. Evento del Buscador de Cédula
   $('#sgnExtensionSearchForm').on('submit', function (e) {
     e.preventDefault();
     const rawVal = $('#sgnSearchCedulaInput').val();
@@ -34,12 +61,12 @@ $(document).ready(function () {
     consultarEstudianteExtension(cleaned.full);
   });
 
-  // 3. Cambio de Selección de Curso / Taller
+  // 4. Cambio de Selección de Curso / Taller
   $(document).on('change', '#extCursoSelect', function () {
     actualizarCalculoMontoCurso();
   });
 
-  // 4. Envío del Formulario de Registro de Pago
+  // 5. Envío del Formulario de Registro de Pago
   $(document).on('submit', '#sgnExtensionPagoForm', function (e) {
     e.preventDefault();
     registrarPagoExtension();
@@ -63,13 +90,70 @@ function fetchDolarOficialRate() {
       } else {
         $badge.html(`<i class="fa-solid fa-coins me-1 text-warning"></i> Tasa Referencial: <strong>Bs. ${sgnExt.dolarRate.toFixed(2)} / USD</strong>`);
       }
-      actualizarCalculoMontoCurso();
+      if (sgnExt.extensionList && sgnExt.extensionList.length > 0) {
+        poblarSelectCursos();
+      } else {
+        actualizarCalculoMontoCurso();
+      }
     })
     .fail(function () {
       console.warn("No se pudo conectar a dolarapi.com, usando tasa referencial.");
       $badge.html(`<i class="fa-solid fa-coins me-1 text-warning"></i> Tasa Referencial: <strong>Bs. ${sgnExt.dolarRate.toFixed(2)} / USD</strong>`);
-      actualizarCalculoMontoCurso();
+      if (sgnExt.extensionList && sgnExt.extensionList.length > 0) {
+        poblarSelectCursos();
+      } else {
+        actualizarCalculoMontoCurso();
+      }
     });
+}
+
+/**
+ * Muestra rápidamente los datos del estudiante de forma parcial
+ */
+function mostrarFichaEstudianteParcial(student) {
+  if (!student) return;
+  sgnExt.currentStudent = student;
+  $('#extStNameDisplay').text(student.nombre_completo || "");
+  $('#extStCedulaDisplay').text(student.cedula || "");
+  $('#extStCorreoDisplay').text(student.correo || "No registrado");
+  $('#extStTelefonoDisplay').text(student.telefono || "No registrado");
+  $('#sgnExtensionResultArea').show();
+}
+
+/**
+ * Renderiza la interfaz completa de extensión a partir de los datos (desde caché o respuesta del servidor)
+ */
+function renderEstudianteExtensionData(res, animate = true) {
+  if (!res || !res.student) return;
+  sgnExt.currentStudent = res.student;
+  sgnExt.extensionList = res.extensionList || [];
+  sgnExt.bancoList = res.bancoList || [];
+  sgnExt.studentPagos = res.pagos || [];
+
+  // Mostrar Ficha del Estudiante
+  $('#extStNameDisplay').text(res.student.nombre_completo);
+  $('#extStCedulaDisplay').text(res.student.cedula);
+  $('#extStCorreoDisplay').text(res.student.correo || "No registrado");
+  $('#extStTelefonoDisplay').text(res.student.telefono || "No registrado");
+
+  // Poblar Select de Cursos/Talleres
+  poblarSelectCursos();
+
+  // Poblar Select de Bancos
+  poblarSelectBancos();
+
+  // Establecer fecha por defecto (Hoy YYYY-MM-DD en el input type="date")
+  const todayStr = new Date().toISOString().slice(0, 10);
+  $('#extFechaTransferencia').val(todayStr);
+
+  // Renderizar tabla de inscripciones del estudiante
+  renderEstudianteInscripcionesTable();
+
+  if (animate) {
+    $('#sgnExtensionResultArea').slideDown(300);
+  } else {
+    $('#sgnExtensionResultArea').show();
+  }
 }
 
 /**
@@ -98,31 +182,28 @@ function consultarEstudianteExtension(cedulaCompleta) {
       }
 
       if (res.success && res.student) {
-        sgnExt.currentStudent = res.student;
-        sgnExt.extensionList = res.extensionList || [];
-        sgnExt.bancoList = res.bancoList || [];
-        sgnExt.studentPagos = res.pagos || [];
+        // Guardar en caché y actualizar enlaces de navegación
+        if (typeof sgnSaveExtensionCache === 'function') {
+          sgnSaveExtensionCache(res.student.cedula, res);
+        }
+        if (typeof sgnUpdateNavLinks === 'function') {
+          sgnUpdateNavLinks(res.student.cedula);
+        }
 
-        // Mostrar Ficha del Estudiante
-        $('#extStNameDisplay').text(res.student.nombre_completo);
-        $('#extStCedulaDisplay').text(res.student.cedula);
-        $('#extStCorreoDisplay').text(res.student.correo || "No registrado");
-        $('#extStTelefonoDisplay').text(res.student.telefono || "No registrado");
+        // Renderizar toda la interfaz de extensión
+        renderEstudianteExtensionData(res, true);
 
-        // Poblar Select de Cursos/Talleres
-        poblarSelectCursos();
-
-        // Poblar Select de Bancos
-        poblarSelectBancos();
-
-        // Establecer fecha por defecto (Hoy YYYY-MM-DD en el input type="date")
-        const todayStr = new Date().toISOString().slice(0, 10);
-        $('#extFechaTransferencia').val(todayStr);
-
-        // Renderizar tabla de inscripciones del estudiante
-        renderEstudianteInscripcionesTable();
-
-        $('#sgnExtensionResultArea').slideDown(300);
+        // Pre-carga silenciosa en segundo plano del perfil académico si no existe en caché
+        if (typeof sgnGetActiveStudentSession === 'function' && !sgnGetActiveStudentSession(res.student.cedula)) {
+          sgnApiCall("getStudentByCedula", { cedula: res.student.cedula, allow_test_student: "FALSE" }, { showLoading: false })
+            .then(function (acadRes) {
+              if (acadRes && acadRes.success && acadRes.student) {
+                if (typeof sgnSaveActiveStudentSession === 'function') {
+                  sgnSaveActiveStudentSession(res.student.cedula, acadRes);
+                }
+              }
+            });
+        }
       } else {
         sgnShowModal({
           title: "Error",
@@ -138,6 +219,7 @@ function consultarEstudianteExtension(cedulaCompleta) {
  */
 function poblarSelectCursos() {
   const $select = $('#extCursoSelect');
+  const currentVal = $select.val();
   $select.empty().append('<option value="">-- Seleccione un Curso o Taller de Extensión --</option>');
 
   sgnExt.extensionList.forEach(item => {
@@ -146,6 +228,9 @@ function poblarSelectCursos() {
     $select.append(`<option value="${item.id}" data-valor="${item.valor}" data-desc="${item.descripcion}">${label}</option>`);
   });
 
+  if (currentVal) {
+    $select.val(currentVal);
+  }
   actualizarCalculoMontoCurso();
 }
 

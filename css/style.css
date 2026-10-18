@@ -340,6 +340,15 @@ body {
   color: #ffffff;
 }
 
+.text-navy {
+  color: var(--navy-blue) !important;
+}
+
+.badge.bg-light.text-dark,
+.badge.bg-white.text-dark {
+  color: #000000 !important;
+}
+
 .max-w-400 {
   max-width: 400px;
 }
