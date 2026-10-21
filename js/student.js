@@ -606,6 +606,22 @@ function renderStudentAcademicProfile(res) {
 
       const descFormatted = sgnFormatTextWithLinks(act.descripcion);
 
+      let comentarioTopDisplay = '';
+      if (act.comentario && String(act.comentario).trim()) {
+        const is20 = (act.nota !== undefined && parseFloat(act.nota) === 20);
+        comentarioTopDisplay = `
+          <div class="alert ${is20 ? 'alert-success border-success-subtle' : 'alert-info border-info-subtle'} p-2 mt-2 mb-1 rounded-2 shadow-xs d-flex align-items-start gap-2">
+            <i class="fa-solid ${is20 ? 'fa-award text-warning' : 'fa-comment-dots text-primary'} fs-5 mt-1 flex-shrink-0"></i>
+            <div>
+              <div class="small fw-bold ${is20 ? 'text-success' : 'text-primary'} mb-1">
+                <i class="fa-solid fa-chalkboard-user me-1"></i> ${is20 ? 'Felicitación del Docente' : 'Observación / Retroalimentación del Docente'}:
+              </div>
+              <div class="text-dark small">${sgnFormatTextWithLinks(act.comentario)}</div>
+            </div>
+          </div>
+        `;
+      }
+
       itemsHtml += `
         <div class="card border-0 shadow-sm mb-3 border-start border-4 ${lapso.vencida ? 'border-danger' : 'border-primary'}">
           <div class="card-body p-3">
@@ -617,6 +633,7 @@ function renderStudentAcademicProfile(res) {
                 <div class="fw-bold text-navy mt-2 fs-6 desc-actividad-box text-break">${descFormatted}</div>
                 <div class="text-muted small mt-2"><i class="fa-solid fa-user-chalkboard me-1"></i> Prof. ${act.profesor}</div>
                 ${barraLapsoHtml}
+                ${comentarioTopDisplay}
               </div>
               <div class="d-flex align-items-center flex-wrap gap-2">
                 ${estadoBadge}
@@ -659,6 +676,21 @@ function renderStudentAcademicProfile(res) {
         const fechaStr = fechaObj ? fechaObj.fecha : 'Pendiente';
         const descStr = fechaObj ? fechaObj.descripcion : 'Sin descripción';
         
+        const evalNumStr = 'e' + i;
+        const actDeEval = (n.actividades || []).find(a => String(a.numero_evaluacion || '').toLowerCase() === evalNumStr);
+        let evalComentarioHtml = '';
+        if (actDeEval && actDeEval.comentario && String(actDeEval.comentario).trim()) {
+          const is20 = (actDeEval.nota !== undefined && parseFloat(actDeEval.nota) === 20);
+          evalComentarioHtml = `
+            <div class="mt-2 pt-2 border-top">
+              <div class="small fw-bold ${is20 ? 'text-success' : 'text-primary'} mb-1">
+                <i class="fa-solid ${is20 ? 'fa-award text-warning' : 'fa-comment-dots'} me-1"></i> ${is20 ? 'Felicitación' : 'Observación'}:
+              </div>
+              <div class="text-secondary small fst-italic">${sgnFormatTextWithLinks(actDeEval.comentario)}</div>
+            </div>
+          `;
+        }
+
         evalsHtml += `
           <div class="col-md-6 col-lg-4 mb-3">
             <div class="border rounded-3 p-3 bg-light h-100">
@@ -668,6 +700,7 @@ function renderStudentAcademicProfile(res) {
               </div>
               <p class="text-muted small mb-1"><i class="fa-regular fa-calendar-check me-1"></i> ${fechaStr}</p>
               <div class="text-secondary small mb-0 desc-actividad-box text-break"><i class="fa-solid fa-info-circle me-1"></i> ${sgnFormatTextWithLinks(descStr)}</div>
+              ${evalComentarioHtml}
             </div>
           </div>
         `;
@@ -779,6 +812,22 @@ function renderStudentAcademicProfile(res) {
 
           const descFormatted = sgnFormatTextWithLinks(act.descripcion);
 
+          let comentarioSubjectDisplay = '';
+          if (act.comentario && String(act.comentario).trim()) {
+            const is20 = (act.nota !== undefined && parseFloat(act.nota) === 20);
+            comentarioSubjectDisplay = `
+              <div class="alert ${is20 ? 'alert-success border-success-subtle' : 'alert-info border-info-subtle'} p-2 mt-2 mb-1 rounded-2 shadow-xs d-flex align-items-start gap-2">
+                <i class="fa-solid ${is20 ? 'fa-award text-warning' : 'fa-comment-dots text-primary'} fs-5 mt-1 flex-shrink-0"></i>
+                <div>
+                  <div class="small fw-bold ${is20 ? 'text-success' : 'text-primary'} mb-1">
+                    <i class="fa-solid fa-chalkboard-user me-1"></i> ${is20 ? 'Felicitación del Docente' : 'Observación / Retroalimentación del Docente'}:
+                  </div>
+                  <div class="text-dark small">${sgnFormatTextWithLinks(act.comentario)}</div>
+                </div>
+              </div>
+            `;
+          }
+
           itemsHtml += `
             <div class="border rounded-3 p-3 bg-white mb-2 shadow-sm border-start border-4 ${lapso.vencida ? 'border-danger' : 'border-primary'}">
               <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
@@ -787,6 +836,7 @@ function renderStudentAcademicProfile(res) {
                   ${tipoTagHtml}
                   <div class="fw-bold text-navy fs-6 mt-1 desc-actividad-box text-break">${descFormatted}</div>
                   ${barraLapsoHtml}
+                  ${comentarioSubjectDisplay}
                 </div>
                 <div class="d-flex align-items-center flex-wrap gap-2">
                   ${estadoBadge}
@@ -1869,6 +1919,22 @@ function renderQuizResultadosModal(res) {
        </div>`
     : '';
 
+  let comentarioQuizHtml = '';
+  if (res.comentario && String(res.comentario).trim()) {
+    const is20 = (parseFloat(nota) === 20);
+    comentarioQuizHtml = `
+      <div class="alert ${is20 ? 'alert-success border-success' : 'alert-info border-info'} shadow-sm mt-3 mb-0 p-3 rounded-3 d-flex align-items-start gap-2">
+        <i class="fa-solid ${is20 ? 'fa-award text-warning' : 'fa-comment-dots text-primary'} fa-lg mt-1 flex-shrink-0"></i>
+        <div>
+          <strong class="${is20 ? 'text-success' : 'text-primary'} d-block mb-1">
+            <i class="fa-solid fa-chalkboard-user me-1"></i> ${is20 ? 'Felicitación del Docente' : 'Observación / Retroalimentación del Docente'}:
+          </strong>
+          <span class="text-dark">${sgnFormatTextWithLinks(res.comentario)}</span>
+        </div>
+      </div>
+    `;
+  }
+
   let html = `
     <div class="card border-2 ${headerBannerClass} shadow-sm mb-4 rounded-3">
       <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -1882,6 +1948,7 @@ function renderQuizResultadosModal(res) {
             Esta calificación ya fue registrada automáticamente en tu historial académico.
           </p>
           ${tiemposRegistroHtml}
+          ${comentarioQuizHtml}
         </div>
         <div class="d-flex gap-2">
           <span class="badge bg-success px-3 py-2 fs-6"><i class="fa-solid fa-check me-1"></i> ${correctas} Aciertos</span>

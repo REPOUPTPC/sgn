@@ -57,6 +57,67 @@ $(document).ready(function () {
     filterTable('#tablaActividades tbody tr', $(this).val());
   });
 
+  // Buscador en tiempo real de estudiantes en el modal de entregas
+  $('#searchEntregasEstudiante').on('keyup input', function () {
+    filterEntregasTable();
+  });
+
+  // Buscador rápido en tiempo real de estudiantes en la pestaña Actividades
+  $('#searchEstudianteEnActividades').on('keyup input', function () {
+    const term = $(this).val().toLowerCase().trim();
+    const $dropdown = $('#dropdownResultadosEstudianteActividades');
+
+    if (!term || term.length < 2) {
+      $dropdown.empty().hide();
+      return;
+    }
+
+    let list = sgnDb.estudiantes || [];
+    if (!sgnAuth.isSuperAdmin()) {
+      const misSecciones = (sgnDb.unidades || [])
+        .filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u))
+        .map(u => String(u.seccion || '').replace(/^'/, '').trim());
+      list = list.filter(e => {
+        let eSec = String(e.seccion || '').replace(/^'/, '').trim();
+        return misSecciones.includes(eSec) || String(e.cedula || '').toUpperCase().trim() === 'V-12345';
+      });
+    }
+
+    const matches = list.filter(e =>
+      (e.nombre_completo || '').toLowerCase().includes(term) ||
+      (e.cedula || '').toLowerCase().includes(term)
+    ).slice(0, 8);
+
+    if (matches.length === 0) {
+      $dropdown.html('<div class="list-group-item text-muted small p-2"><i class="fa-solid fa-circle-xmark me-1 text-danger"></i>No se encontraron estudiantes coincidentes.</div>').show();
+      return;
+    }
+
+    let html = '';
+    matches.forEach(est => {
+      const cleanSec = String(est.seccion || '').replace(/^'/, '');
+      html += `
+        <div class="list-group-item list-group-item-action p-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <strong class="text-navy small d-block">${est.nombre_completo}</strong>
+            <span class="badge bg-navy me-1">${est.cedula}</span>
+            <span class="badge bg-secondary">Sec: ${cleanSec}</span>
+          </div>
+          <button type="button" class="btn btn-sm btn-primary-sgn fw-bold py-1 px-2" onclick="openModalCalificacionesEstudiante(${est.id}); $('#dropdownResultadosEstudianteActividades').hide();">
+            <i class="fa-solid fa-graduation-cap me-1"></i> Ver y Calificar
+          </button>
+        </div>
+      `;
+    });
+    $dropdown.html(html).show();
+  });
+
+  $(document).on('click', function (e) {
+    if (!$(e.target).closest('#searchEstudianteEnActividades, #dropdownResultadosEstudianteActividades').length) {
+      $('#dropdownResultadosEstudianteActividades').hide();
+    }
+  });
+
   $('#searchExtension').on('keyup input', function () {
     filterTable('#tablaExtensionPagos tbody tr', $(this).val());
   });
@@ -415,6 +476,9 @@ function renderEstudiantesTable() {
         </td>
         <td>
           <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-info" onclick="openModalCalificacionesEstudiante(${e.id})" title="Ver Calificaciones y Entregas">
+              <i class="fa-solid fa-graduation-cap"></i>
+            </button>
             <button class="btn btn-outline-primary" onclick="editEstudiante(${e.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-outline-warning" onclick="toggleVoceroRole(${e.id}, '${isVocero ? 'ESTUDIANTE' : 'VOCERO'}')" title="Cambiar Rol Vocero">
               <i class="fa-solid fa-user-gear"></i>
@@ -811,6 +875,446 @@ function downloadCSVTemplate() {
 }
 
 // ==========================================================================
+// 1.1 MODAL DE CALIFICACIONES Y ENTREGAS DEL ESTUDIANTE (REVISIÓN Y CORRECCIÓN)
+// ==========================================================================
+let currentEstudianteModalState = {
+  estudiante: null,
+  unidades: []
+};
+
+function openModalCalificacionesEstudiante(idEstudiante) {
+  const est = (sgnDb.estudiantes || []).find(e => e.id == idEstudiante);
+  if (!est) {
+    sgnShowModal({ title: "Atención", message: "Estudiante no encontrado.", type: "warning" });
+    return;
+  }
+
+  currentEstudianteModalState.estudiante = est;
+  $('#modalEstNombre').text(est.nombre_completo || 'Estudiante');
+  $('#modalEstCedula').text(est.cedula || 'N/A');
+  const prog = (sgnDb.programas || []).find(p => p.id == est.id_programa_formacion);
+  $('#modalEstPrograma').text(prog ? prog.programa : 'No asignado');
+  const cleanSec = String(est.seccion || '170').replace(/^'/, '');
+  $('#modalEstSeccion').text(cleanSec);
+
+  renderModalCalificacionesEstudianteContenido();
+
+  const bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCalificacionesEstudiante'));
+  bsModal.show();
+}
+
+function renderModalCalificacionesEstudianteContenido() {
+  const est = currentEstudianteModalState.estudiante;
+  if (!est) return;
+
+  const $container = $('#modalEstudianteContenido');
+  $container.empty();
+
+  // Filtrar unidades según permisos del usuario logueado
+  let misUnidades = sgnDb.unidades || [];
+  if (!sgnAuth.isSuperAdmin()) {
+    misUnidades = misUnidades.filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u));
+  }
+
+  let estSec = String(est.seccion || '').replace(/^'/, '').trim();
+  let studentUnidades = misUnidades.filter(u => {
+    let uSec = String(u.seccion || '').replace(/^'/, '').trim();
+    const matchSec = (String(u.id_programa_formacion) === String(est.id_programa_formacion) && uSec === estSec);
+    const hasRelacion = (sgnDb.relacionNotas || []).some(r => String(r.id_unidad_curricular) === String(u.id) && String(r.id_estudiante) === String(est.id));
+    return matchSec || hasRelacion;
+  });
+
+  if (studentUnidades.length === 0) {
+    $container.html(`
+      <div class="alert alert-info text-center py-4 rounded-3 shadow-xs">
+        <i class="fa-solid fa-circle-info fa-2x mb-2 text-primary"></i>
+        <p class="mb-0">Este estudiante no tiene Unidades Curriculares asignadas a su sección o a su cargo en este momento.</p>
+      </div>
+    `);
+    return;
+  }
+
+  currentEstudianteModalState.unidades = studentUnidades;
+
+  studentUnidades.forEach(u => {
+    const uSec = String(u.seccion || '170').replace(/^'/, '');
+    const uNombre = u.unidad_curricular || u['unidad curricular'] || 'Unidad Curricular';
+
+    // Obtener relación de notas (E1 a E5)
+    const rn = (sgnDb.relacionNotas || []).find(r => String(r.id_unidad_curricular) === String(u.id) && String(r.id_estudiante) === String(est.id)) || {};
+    const cantEval = parseInt(rn.cantidad_evaluaciones) || 4;
+
+    const e1 = parseFloat(rn.e1) || 0;
+    const e2 = parseFloat(rn.e2) || 0;
+    const e3 = parseFloat(rn.e3) || 0;
+    const e4 = parseFloat(rn.e4) || 0;
+    const e5 = cantEval === 5 ? (parseFloat(rn.e5) || 0) : 0;
+
+    const activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
+    const avgCalculado = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
+    const totalNum = parseFloat(rn.total !== undefined && rn.total !== "" ? rn.total : avgCalculado) || 0;
+
+    // Fechas de evaluación configuradas para este programa y sección
+    const fechas = (sgnDb.fechasNotas || []).filter(fn => {
+      let fnSec = String(fn.seccion || '').replace(/^'/, '').trim();
+      return String(fn.id_programa_formacion) === String(u.id_programa_formacion) && fnSec === uSec;
+    });
+
+    // Construir casillas de corrección de notas E1..E4 (o E5)
+    let evalsInputsHtml = '';
+    for (let i = 1; i <= cantEval; i++) {
+      const val = (rn['e' + i] !== undefined && rn['e' + i] !== "") ? rn['e' + i] : 0;
+      const fnObj = fechas.find(f => (f.evaluacion || '').toLowerCase() === ('e' + i));
+      const fnFecha = fnObj ? fnObj.fecha : 'Sin fecha';
+      const fnDesc = fnObj ? fnObj.descripcion : '';
+
+      evalsInputsHtml += `
+        <div class="col-6 col-md-3 col-lg-${cantEval === 5 ? '2' : '3'}">
+          <div class="border rounded-3 p-2 bg-white text-center h-100 shadow-xs">
+            <span class="fw-bold text-navy small d-block mb-1">E${i}</span>
+            <div class="input-group input-group-sm mb-1">
+              <input type="number" step="0.1" min="0" max="20" class="form-control text-center fw-bold input-est-eval" id="estEvalInput_${u.id}_${i}" value="${val}" oninput="recalcModalEstTotal(${u.id}, ${cantEval})">
+              <span class="input-group-text bg-light text-muted small">/20</span>
+            </div>
+            <div class="text-muted" style="font-size: 0.73rem;">
+              <i class="fa-regular fa-calendar me-1"></i>${fnFecha}
+              ${fnDesc ? `<div class="text-truncate" title="${fnDesc}">${fnDesc}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Actividades asignadas para esta materia
+    const actividades = (sgnDb.actividadesAsignadas || []).filter(a => String(a.id_unidad_curricular) === String(u.id));
+    let actividadesListHtml = '';
+
+    if (actividades.length === 0) {
+      actividadesListHtml = `
+        <div class="text-muted small py-2 px-3 bg-white rounded border">
+          <i class="fa-solid fa-circle-info me-1 text-primary"></i> No hay actividades virtuales asignadas para esta unidad curricular. Las calificaciones se gestionan en las casillas superiores de evaluaciones.
+        </div>
+      `;
+    } else {
+      actividades.forEach(act => {
+        const evalUpper = (act.numero_evaluacion || 'e1').toUpperCase();
+        const tipoAct = String(act.tipo_actividad || 'ENTREGA').toUpperCase();
+        const isQuiz = (tipoAct === 'QUIZ');
+
+        // Buscar entrega del estudiante
+        const ent = (sgnDb.actividadesEntregadas || []).find(e =>
+          String(e.id_actividades_asignadas).trim() === String(act.id).trim() &&
+          String(e.id_estudiante).trim() === String(est.id).trim()
+        );
+
+        const hasEntrega = !!ent;
+        const isEnCurso = isQuiz && ent && String(ent.entrega || '').trim() === 'EN_CURSO';
+        const isCalificado = ent && (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
+        const notaVal = isCalificado ? ent.nota : "";
+        const comentarioVal = (ent && ent.comentario) ? ent.comentario : "";
+
+        let statusBadgeHtml = '';
+        if (isCalificado) {
+          statusBadgeHtml = `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Calificado: ${getGradeBadgeHTML(notaVal)}</span>`;
+        } else if (isEnCurso) {
+          statusBadgeHtml = `<span class="badge bg-info text-dark"><i class="fa-solid fa-stopwatch me-1"></i> En Curso (Quiz)</span>`;
+        } else if (hasEntrega) {
+          statusBadgeHtml = `<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> Entregado (Falta Calificar)</span>`;
+        } else {
+          statusBadgeHtml = `<span class="badge bg-secondary"><i class="fa-solid fa-circle-xmark me-1"></i> Sin Entrega Web</span>`;
+        }
+
+        // Enlace de entrega o detalle de Quiz
+        let entregaDetalleHtml = '';
+        if (ent && ent.entrega) {
+          if (isEnCurso) {
+            entregaDetalleHtml = `<span class="text-muted small"><i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Presentando examen online...</span>`;
+          } else if (String(ent.entrega).startsWith('QUIZ_ONLINE:')) {
+            entregaDetalleHtml = `
+              <div class="d-flex align-items-center gap-2 mt-1">
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-1 px-2">
+                  <i class="fa-solid fa-bolt me-1"></i> ${ent.entrega.replace('QUIZ_ONLINE:', 'Evaluación Online:')}
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold" onclick="openQuizResultadoEstudiante(${act.id}, ${est.id})">
+                  <i class="fa-solid fa-list-check me-1"></i> Ver Respuestas y Aciertos
+                </button>
+              </div>
+            `;
+          } else {
+            entregaDetalleHtml = `
+              <div class="mt-1 d-flex align-items-center gap-2 flex-wrap">
+                <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold py-1 px-2">
+                  <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Abrir Entrega del Estudiante
+                </a>
+                <span class="text-muted small"><i class="fa-regular fa-calendar me-1"></i>Entregado el: ${ent.fecha_entrega || 'N/A'}</span>
+              </div>
+            `;
+          }
+        } else {
+          entregaDetalleHtml = `<div class="text-muted small mt-1"><i class="fa-regular fa-circle-xmark text-danger me-1"></i>El estudiante aún no ha enviado su trabajo por el portal web. Puede calificarlo directamente abajo si realizó la entrega de forma presencial.</div>`;
+        }
+
+        const idEntregaVal = ent ? ent.id : 0;
+
+        actividadesListHtml += `
+          <div class="card border rounded-3 mb-3 bg-white shadow-xs">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                <div>
+                  <span class="badge bg-navy text-white me-1">${evalUpper}</span>
+                  <span class="badge ${isQuiz ? 'bg-purple-subtle text-primary border border-primary-subtle' : 'bg-light text-dark border'} me-1">
+                    <i class="fa-solid ${isQuiz ? 'fa-bolt' : 'fa-file-arrow-up'} me-1"></i> ${isQuiz ? 'Quiz Online' : 'Entrega Digital'}
+                  </span>
+                  <strong class="text-navy">${sgnFormatTextWithLinks(act.descripcion)}</strong>
+                  <div class="text-muted small mt-1">
+                    <i class="fa-regular fa-calendar-check me-1 text-primary"></i> Asignado: ${act.fecha_asignacion || 'N/A'} | Vencimiento: ${act.fecha_limite || 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  ${statusBadgeHtml}
+                </div>
+              </div>
+
+              <!-- Archivo o Enlace entregado -->
+              <div class="bg-light p-2 rounded-2 mb-3 border">
+                ${entregaDetalleHtml}
+              </div>
+
+              <!-- Fila de Corrección: Nota + Observación / Felicitación + Botón -->
+              <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-3">
+                  <label for="modalEstNota_${act.id}" class="form-label small fw-bold text-navy mb-1">
+                    <i class="fa-solid fa-star text-warning me-1"></i> Calificación (0-20):
+                  </label>
+                  <div class="input-group input-group-sm">
+                    <input type="number" step="0.1" min="0" max="20" class="form-control fw-bold" id="modalEstNota_${act.id}" value="${notaVal}" placeholder="0-20" oninput="onModalEstNotaChange(${act.id})">
+                    <span class="input-group-text bg-white">pts</span>
+                  </div>
+                </div>
+                <div class="col-12 col-md-6">
+                  <label for="modalEstComentario_${act.id}" class="form-label small fw-bold text-navy mb-1">
+                    <i class="fa-solid fa-comment-dots text-primary me-1"></i> Observación / Felicitación:
+                  </label>
+                  <input type="text" class="form-control form-control-sm" id="modalEstComentario_${act.id}" value="${comentarioVal}" placeholder="¡Excelente trabajo! o indique motivo si la nota es menor a 20..." oninput="onModalEstComentarioChange(${act.id})">
+                </div>
+                <div class="col-12 col-md-3">
+                  <button type="button" class="btn btn-sm btn-success fw-bold w-100 shadow-sm" id="btnModalEstGuardar_${act.id}" onclick="guardarEntregaEstudianteModal(${act.id}, ${est.id}, ${idEntregaVal})">
+                    <i class="fa-solid fa-check me-1"></i> Guardar y Calificar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    $container.append(`
+      <div class="card card-custom mb-4 border shadow-sm">
+        <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <h6 class="fw-bold text-navy mb-0 fs-6">
+              <i class="fa-solid fa-book-bookmark text-primary me-2"></i> ${uNombre}
+              <span class="badge bg-secondary ms-2">Sección: ${uSec}</span>
+            </h6>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small">Promedio Total:</span>
+            <span class="badge ${totalNum >= 10 ? 'bg-success' : 'bg-danger'} fs-6 px-3 py-2" id="estModalTotalBadge_${u.id}">
+              ${totalNum.toFixed(2)} / 20 pts
+            </span>
+          </div>
+        </div>
+        <div class="card-body p-3 bg-light">
+          <!-- Sección A: Evaluaciones de la Materia -->
+          <div class="bg-white p-3 rounded-3 border mb-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+              <strong class="text-navy small">
+                <i class="fa-solid fa-calculator text-primary me-1"></i> Calificaciones de Evaluaciones (Plan de ${cantEval} Evaluaciones)
+              </strong>
+              <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" onclick="guardarEvaluacionesEstudianteModal(${est.id}, ${u.id}, ${rn.id || 0}, ${cantEval})">
+                <i class="fa-solid fa-floppy-disk me-1"></i> Guardar Notas de Evaluaciones
+              </button>
+            </div>
+            <div class="row g-2 align-items-center">
+              ${evalsInputsHtml}
+            </div>
+          </div>
+
+          <!-- Sección B: Revisar y Corregir Entregas de Actividades -->
+          <div class="mt-3">
+            <h6 class="fw-bold text-navy mb-2 small text-uppercase">
+              <i class="fa-solid fa-file-signature text-primary me-1"></i> Entregas de Actividades y Corrección
+            </h6>
+            ${actividadesListHtml}
+          </div>
+        </div>
+      </div>
+    `);
+  });
+}
+
+function onModalEstNotaChange(idActividad) {
+  const $nota = $(`#modalEstNota_${idActividad}`);
+  const $com = $(`#modalEstComentario_${idActividad}`);
+  const val = parseFloat($nota.val());
+  const currentCom = ($com.val() || "").trim();
+
+  if (!isNaN(val)) {
+    if (val === 20) {
+      if (!currentCom || currentCom === MSG_PREDETERMINADO_20) {
+        $com.val(MSG_PREDETERMINADO_20);
+      }
+    } else if (val < 20) {
+      if (currentCom === MSG_PREDETERMINADO_20) {
+        $com.val("").attr('placeholder', 'Indique al estudiante motivo u observación personalizada...');
+      }
+    }
+  }
+}
+
+function onModalEstComentarioChange(idActividad) {
+  // Manejador opcional para reactividad
+}
+
+function recalcModalEstTotal(idUnidad, cantEval) {
+  let sum = 0;
+  for (let i = 1; i <= cantEval; i++) {
+    const v = parseFloat($(`#estEvalInput_${idUnidad}_${i}`).val()) || 0;
+    sum += Math.min(20, Math.max(0, v));
+  }
+  const avg = (sum / cantEval).toFixed(2);
+  const avgNum = parseFloat(avg) || 0;
+  const $badge = $(`#estModalTotalBadge_${idUnidad}`);
+  $badge.removeClass('bg-success bg-danger')
+        .addClass(avgNum >= 10 ? 'bg-success' : 'bg-danger')
+        .text(`${avg} / 20 pts`);
+}
+
+function guardarEvaluacionesEstudianteModal(idEstudiante, idUnidad, idRel, cantEval) {
+  let e1 = parseFloat($(`#estEvalInput_${idUnidad}_1`).val()) || 0;
+  let e2 = parseFloat($(`#estEvalInput_${idUnidad}_2`).val()) || 0;
+  let e3 = parseFloat($(`#estEvalInput_${idUnidad}_3`).val()) || 0;
+  let e4 = parseFloat($(`#estEvalInput_${idUnidad}_4`).val()) || 0;
+  let e5 = cantEval === 5 ? (parseFloat($(`#estEvalInput_${idUnidad}_5`).val()) || 0) : 0;
+
+  const payload = {
+    id: idRel || "",
+    id_estudiante: idEstudiante,
+    id_unidad_curricular: idUnidad,
+    cantidad_evaluaciones: cantEval,
+    e1: e1,
+    e2: e2,
+    e3: e3,
+    e4: e4,
+    e5: e5
+  };
+
+  sgnApiCall("saveNotas", payload, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      let rn = (sgnDb.relacionNotas || []).find(r => String(r.id_unidad_curricular) === String(idUnidad) && String(r.id_estudiante) === String(idEstudiante));
+      if (rn) {
+        rn.e1 = e1;
+        rn.e2 = e2;
+        rn.e3 = e3;
+        rn.e4 = e4;
+        rn.e5 = e5;
+        rn.total = res.total;
+        rn.cantidad_evaluaciones = cantEval;
+      } else {
+        sgnDb.relacionNotas.push({
+          id: idRel || "",
+          id_estudiante: idEstudiante,
+          id_unidad_curricular: idUnidad,
+          cantidad_evaluaciones: cantEval,
+          e1: e1, e2: e2, e3: e3, e4: e4, e5: e5,
+          total: res.total
+        });
+      }
+
+      sgnShowModal({
+        title: "Notas Guardadas",
+        message: "Las calificaciones de la unidad curricular fueron actualizadas exitosamente.",
+        type: "success"
+      });
+
+      renderModalCalificacionesEstudianteContenido();
+      loadDashboardData();
+    } else {
+      sgnShowModal({ title: "Error", message: (res && res.message) ? res.message : "Error al guardar calificaciones.", type: "danger" });
+    }
+  });
+}
+
+function guardarEntregaEstudianteModal(idActividad, idEstudiante, idEntrega) {
+  const notaVal = $(`#modalEstNota_${idActividad}`).val();
+  const comVal = ($(`#modalEstComentario_${idActividad}`).val() || "").trim();
+
+  if (notaVal === "" || isNaN(parseFloat(notaVal))) {
+    sgnShowModal({ title: "Calificación Requerida", message: "Ingrese una calificación válida de 0 a 20 puntos.", type: "warning" });
+    return;
+  }
+
+  const numVal = Math.min(20, Math.max(0, parseFloat(notaVal) || 0));
+
+  const payload = {
+    id_entrega: idEntrega || 0,
+    nota: numVal,
+    comentario: comVal,
+    id_actividad: idActividad,
+    id_estudiante: idEstudiante
+  };
+
+  sgnApiCall("saveNotaEntrega", payload, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      let target = (sgnDb.actividadesEntregadas || []).find(e =>
+        String(e.id_actividades_asignadas) === String(idActividad) &&
+        String(e.id_estudiante) === String(idEstudiante)
+      );
+
+      if (target) {
+        target.nota = numVal;
+        target.comentario = comVal;
+      } else {
+        sgnDb.actividadesEntregadas.push({
+          id: res.id_entrega || idEntrega || 0,
+          id_actividades_asignadas: idActividad,
+          id_estudiante: idEstudiante,
+          entrega: "CALIFICADO_DIRECTO",
+          fecha_entrega: new Date().toISOString().split('T')[0],
+          nota: numVal,
+          comentario: comVal
+        });
+      }
+
+      // Sincronizar en relacionNotas en memoria
+      const act = (sgnDb.actividadesAsignadas || []).find(a => String(a.id) === String(idActividad));
+      if (act) {
+        const numEval = (act.numero_evaluacion || 'e1').toLowerCase();
+        let rn = (sgnDb.relacionNotas || []).find(r => String(r.id_unidad_curricular) === String(act.id_unidad_curricular) && String(r.id_estudiante) === String(idEstudiante));
+        if (rn) {
+          rn[numEval] = numVal;
+          const cEval = parseInt(rn.cantidad_evaluaciones) || 4;
+          const scores = [rn.e1 || 0, rn.e2 || 0, rn.e3 || 0, rn.e4 || 0, rn.e5 || 0].slice(0, cEval).map(v => parseFloat(v) || 0);
+          rn.total = (scores.reduce((a, b) => a + b, 0) / cEval).toFixed(2);
+        }
+      }
+
+      sgnShowModal({
+        title: "Calificación y Observación Guardadas",
+        message: res.message || "Se guardó la calificación y observación con éxito.",
+        type: "success"
+      });
+
+      renderModalCalificacionesEstudianteContenido();
+      loadDashboardData();
+    } else {
+      sgnShowModal({ title: "Error", message: (res && res.message) ? res.message : "Error al guardar la entrega.", type: "danger" });
+    }
+  });
+}
+
+// ==========================================================================
 // 2. MÓDULO PROFESORES / DOCENTES (SUPER ADMIN ONLY)
 // ==========================================================================
 function renderProfesoresTable() {
@@ -1123,7 +1627,9 @@ function renderNotasTable(keepSelectedCant = false) {
 
   if (!unidadId) {
     $('#containerTablaNotas').hide();
+    $('#containerSearchNotas').hide();
     $('#btnGenerarPDF').hide();
+    $('#btnGenerarNomina').hide();
     $('#containerNoSeleccion').show();
     return;
   }
@@ -1132,6 +1638,7 @@ function renderNotasTable(keepSelectedCant = false) {
   if (!unidad) return;
 
   $('#containerTablaNotas').show();
+  $('#containerSearchNotas').show();
   $('#btnGenerarPDF').show();
   $('#btnGenerarNomina').show();
   $('#containerNoSeleccion').hide();
@@ -1213,6 +1720,12 @@ function renderNotasTable(keepSelectedCant = false) {
     let avg = (sum / currentCant).toFixed(2);
     $row.find('.total-cell').html(getGradeBadgeHTML(avg));
   });
+
+  // Re-aplicar filtro de búsqueda si el docente tiene texto escrito en #searchNotas
+  const searchNotasVal = $('#searchNotas').val();
+  if (searchNotasVal) {
+    filterTable('#tablaNotas tbody tr', searchNotasVal);
+  }
 }
 
 function saveBulkNotasSubmit() {
@@ -2736,6 +3249,7 @@ function openModalEntregas(idActividad) {
 
   // Limpiar campos y filtros previos
   $('#inputNotaMasivaEntregas').val('');
+  $('#searchEntregasEstudiante').val('');
   currentEntregasState.idActividad = idActividad;
   currentEntregasState.filtroActual = 'todos';
   $('#filterEntregasButtonGroup button').removeClass('active');
@@ -2788,7 +3302,7 @@ function renderTablaEntregasActividad() {
   $('#footerSummaryEntregas').html(`<i class="fa-solid fa-list-check me-1"></i> <strong>${total}</strong> entregas registradas: <span class="text-warning-emphasis fw-bold">${pendientes} sin nota (mostradas primero)</span> y <span class="text-success fw-bold">${calificados} calificadas</span>.`);
 
   if (entregas.length === 0) {
-    $tbody.append('<tr><td colspan="7" class="text-center text-muted py-4"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>Aún ningún estudiante ha registrado una entrega para esta actividad.</td></tr>');
+    $tbody.append('<tr><td colspan="8" class="text-center text-muted py-4"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>Aún ningún estudiante ha registrado una entrega para esta actividad.</td></tr>');
     return;
   }
 
@@ -2819,6 +3333,7 @@ function renderTablaEntregasActividad() {
 
     const isCalificado = (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
     const notaVal = isCalificado ? ent.nota : "";
+    const comentarioVal = (ent.comentario !== undefined && ent.comentario !== null) ? ent.comentario : "";
     const rowClass = isCalificado ? 'entrega-row-calificada' : 'entrega-row-pendiente';
 
     let estadoBadgeHtml = '';
@@ -2864,6 +3379,9 @@ function renderTablaEntregasActividad() {
         <td>
           <input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm input-nota-entrega ${isCalificado ? 'nota-lista' : 'nota-vacia'}" id="notaEntrega_${ent.id}" data-id="${ent.id}" data-original="${notaVal}" value="${notaVal}" placeholder="0-20" oninput="onInputNotaEntregaChange(${ent.id})">
         </td>
+        <td>
+          <input type="text" class="form-control form-control-sm input-comentario-entrega" id="comentarioEntrega_${ent.id}" data-id="${ent.id}" data-original="${comentarioVal}" value="${comentarioVal}" placeholder="Observación o felicitación..." oninput="onInputComentarioEntregaChange(${ent.id})">
+        </td>
         <td class="text-center">
           <button class="btn btn-sm ${isCalificado ? 'btn-outline-success' : 'btn-success'} fw-bold" id="btnCalificar_${ent.id}" onclick="saveNotaEntregaSubmit(${ent.id})" title="${isCalificado ? 'Actualizar Nota' : 'Guardar Nota Individual'}">
             <i class="fa-solid ${isCalificado ? 'fa-check-double' : 'fa-check'} me-1"></i> ${isCalificado ? 'Actualizar' : 'Calificar'}
@@ -2872,26 +3390,43 @@ function renderTablaEntregasActividad() {
       </tr>
     `);
 
-    // Respetar filtro activo si es diferente de 'todos'
-    if (currentEntregasState.filtroActual === 'calificados' && !isCalificado) {
-      $row.hide();
-    } else if (currentEntregasState.filtroActual === 'pendientes' && isCalificado) {
-      $row.hide();
-    }
-
     $tbody.append($row);
   });
+
+  // Re-aplicar filtros y búsqueda activa
+  filterEntregasTable();
 }
+
+const MSG_PREDETERMINADO_20 = "¡Excelente trabajo! Felicitaciones por tu desempeño.";
 
 function onInputNotaEntregaChange(idEntrega) {
   const $input = $(`#notaEntrega_${idEntrega}`);
+  const $comentario = $(`#comentarioEntrega_${idEntrega}`);
   const $row = $(`#rowEntrega_${idEntrega}`);
   const $badge = $(`#badgeEstado_${idEntrega}`);
   const $btn = $(`#btnCalificar_${idEntrega}`);
   const currentVal = $input.val();
   const originalVal = $input.attr('data-original');
+  const comVal = ($comentario.val() || '').trim();
+  const comOrig = ($comentario.attr('data-original') || '').trim();
 
-  if (currentVal !== originalVal) {
+  const numVal = parseFloat(currentVal);
+  if (!isNaN(numVal)) {
+    if (numVal === 20) {
+      if (!comVal || comVal === MSG_PREDETERMINADO_20) {
+        $comentario.val(MSG_PREDETERMINADO_20);
+      }
+    } else if (numVal < 20) {
+      if (comVal === MSG_PREDETERMINADO_20) {
+        $comentario.val("").attr('placeholder', 'Indique motivo u observación personalizada...');
+      }
+    }
+  }
+
+  const currentComVal = ($comentario.val() || '').trim();
+  const isChanged = (currentVal !== originalVal) || (currentComVal !== comOrig);
+
+  if (isChanged) {
     $row.removeClass('entrega-row-calificada entrega-row-pendiente').addClass('entrega-row-modificada');
     $badge.removeClass('bg-success-subtle text-success border-success-subtle bg-warning-subtle text-warning-emphasis border-warning-subtle')
           .addClass('bg-primary-subtle text-primary border border-primary-subtle')
@@ -2917,6 +3452,31 @@ function onInputNotaEntregaChange(idEntrega) {
   }
 }
 
+function onInputComentarioEntregaChange(idEntrega) {
+  onInputNotaEntregaChange(idEntrega);
+}
+
+function filterEntregasTable() {
+  const tipo = currentEntregasState.filtroActual || 'todos';
+  const query = ($('#searchEntregasEstudiante').val() || '').toLowerCase().trim();
+
+  $('#tablaEntregasActividad tbody tr').each(function () {
+    const isCalificado = $(this).attr('data-calificado') === 'true';
+    let matchTipo = true;
+    if (tipo === 'calificados') matchTipo = isCalificado;
+    else if (tipo === 'pendientes') matchTipo = !isCalificado;
+
+    const rowText = $(this).text().toLowerCase();
+    const matchSearch = (!query || rowText.indexOf(query) !== -1);
+
+    if (matchTipo && matchSearch) {
+      $(this).show();
+    } else {
+      $(this).hide();
+    }
+  });
+}
+
 function filterEntregas(tipo, btn) {
   currentEntregasState.filtroActual = tipo;
   $('#filterEntregasButtonGroup button').removeClass('active');
@@ -2931,16 +3491,7 @@ function filterEntregas(tipo, btn) {
     $feedback.html('<i class="fa-solid fa-filter me-1 text-warning"></i> Mostrando únicamente estudiantes que faltan por calificar');
   }
 
-  $('#tablaEntregasActividad tbody tr').each(function () {
-    const isCalificado = $(this).attr('data-calificado') === 'true';
-    if (tipo === 'todos') {
-      $(this).show();
-    } else if (tipo === 'calificados') {
-      isCalificado ? $(this).show() : $(this).hide();
-    } else if (tipo === 'pendientes') {
-      !isCalificado ? $(this).show() : $(this).hide();
-    }
-  });
+  filterEntregasTable();
 }
 
 function aplicarNotaMasivaEntregas(modo) {
@@ -3012,10 +3563,12 @@ function guardarTodasNotasEntregasSubmit() {
       if (isNaN(num) || num < 0 || num > 20) {
         conError = true;
       } else {
+        const comVal = ($(`#comentarioEntrega_${ent.id}`).val() || "").trim();
         notasAGuardar.push({
           id_entrega: ent.id,
           id: ent.id,
           nota: num,
+          comentario: comVal,
           id_actividades_asignadas: ent.id_actividades_asignadas,
           id_estudiante: ent.id_estudiante
         });
@@ -3047,15 +3600,21 @@ function guardarTodasNotasEntregasSubmit() {
       // Actualizar estado en memoria
       notasAGuardar.forEach(item => {
         const target = (currentEntregasState.entregas || []).find(e => e.id == item.id_entrega);
-        if (target) target.nota = item.nota;
+        if (target) {
+          target.nota = item.nota;
+          target.comentario = item.comentario;
+        }
         const targetDb = (sgnDb.actividadesEntregadas || []).find(e => e.id == item.id_entrega);
-        if (targetDb) targetDb.nota = item.nota;
+        if (targetDb) {
+          targetDb.nota = item.nota;
+          targetDb.comentario = item.comentario;
+        }
       });
 
       renderTablaEntregasActividad();
       sgnShowModal({
         title: "Calificaciones Guardadas",
-        message: res.message || `Se guardaron las calificaciones de ${notasAGuardar.length} estudiante(s) correctamente.`,
+        message: res.message || `Se guardaron las calificaciones y observaciones de ${notasAGuardar.length} estudiante(s) correctamente.`,
         type: "success"
       });
       loadDashboardData();
@@ -3092,11 +3651,14 @@ function guardarNotasSecuencialFallback(notasAGuardar) {
     }
 
     const item = notasAGuardar[index];
-    sgnApiCall("saveNotaEntrega", { id_entrega: item.id_entrega, nota: item.nota }, { showLoading: false }).then(function (res) {
+    sgnApiCall("saveNotaEntrega", { id_entrega: item.id_entrega, nota: item.nota, comentario: item.comentario }, { showLoading: false }).then(function (res) {
       if (res && res.success) {
         procesadas++;
         const target = (currentEntregasState.entregas || []).find(e => e.id == item.id_entrega);
-        if (target) target.nota = item.nota;
+        if (target) {
+          target.nota = item.nota;
+          target.comentario = item.comentario;
+        }
       } else {
         errores++;
       }
@@ -3116,6 +3678,8 @@ function guardarNotasSecuencialFallback(notasAGuardar) {
 
 function saveNotaEntregaSubmit(idEntrega) {
   const notaVal = $(`#notaEntrega_${idEntrega}`).val();
+  const comVal = ($(`#comentarioEntrega_${idEntrega}`).val() || "").trim();
+
   if (notaVal === "" || isNaN(parseFloat(notaVal))) {
     sgnShowModal({ title: "Atención", message: "Ingrese una calificación válida de 0 a 20 puntos.", type: "warning" });
     return;
@@ -3123,21 +3687,23 @@ function saveNotaEntregaSubmit(idEntrega) {
 
   const numVal = Math.min(20, Math.max(0, parseFloat(notaVal) || 0));
 
-  sgnApiCall("saveNotaEntrega", { id_entrega: idEntrega, nota: numVal }, { showLoading: true }).then(function (res) {
+  sgnApiCall("saveNotaEntrega", { id_entrega: idEntrega, nota: numVal, comentario: comVal }, { showLoading: true }).then(function (res) {
     if (res && res.success) {
       // Actualizar en el estado de memoria de entregas para reactividad inmediata
       const ent = (currentEntregasState.entregas || []).find(e => e.id == idEntrega);
       if (ent) {
         ent.nota = numVal;
+        ent.comentario = comVal;
       }
       const targetDb = (sgnDb.actividadesEntregadas || []).find(e => e.id == idEntrega);
       if (targetDb) {
         targetDb.nota = numVal;
+        targetDb.comentario = comVal;
       }
 
       renderTablaEntregasActividad();
 
-      sgnShowModal({ title: "Calificado", message: res.message || "Calificación guardada correctamente.", type: "success" });
+      sgnShowModal({ title: "Calificado", message: res.message || "Calificación y observación guardadas correctamente.", type: "success" });
       loadDashboardData();
     } else {
       sgnShowModal({ title: "Error", message: (res && res.message) ? res.message : "No se pudo guardar la calificación.", type: "danger" });
@@ -3147,7 +3713,7 @@ function saveNotaEntregaSubmit(idEntrega) {
 
 // Mantener scroll del modal de entregas si se cierra un modal superior de notificación
 $(document).on('hidden.bs.modal', '#sgnUniversalModal', function () {
-  if ($('#modalEntregasActividad').hasClass('show')) {
+  if ($('#modalEntregasActividad').hasClass('show') || $('#modalCalificacionesEstudiante').hasClass('show')) {
     $('body').addClass('modal-open');
   }
 });

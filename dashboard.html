@@ -262,31 +262,40 @@
       <div class="tab-pane fade" id="tab-notas" role="tabpanel">
         <div class="card card-custom">
           <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-              <div class="search-box-group flex-grow-1" style="max-width: 400px;">
-                <label for="selectUnidadGestion" class="fw-bold text-navy mb-1 d-block">
+            <div class="row g-3 align-items-end mb-4">
+              <div class="col-12 col-md-4 col-lg-4">
+                <label for="selectUnidadGestion" class="fw-bold text-navy mb-1 d-block small">
                   <i class="fa-solid fa-book-bookmark text-primary me-2"></i>Seleccione Unidad Curricular a Gestionar
                 </label>
                 <select id="selectUnidadGestion" class="form-select border-primary shadow-sm" onchange="renderNotasTable()">
                   <option value="">-- Seleccione Unidad --</option>
                 </select>
               </div>
-              <div class="d-flex gap-2 align-items-end flex-wrap mt-3 mt-md-0">
+              <div class="col-12 col-md-4 col-lg-4" id="containerSearchNotas">
+                <label for="searchNotas" class="fw-bold text-navy mb-1 d-block small">
+                  <i class="fa-solid fa-magnifying-glass text-primary me-1"></i>Buscar Estudiante en Calificaciones
+                </label>
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchNotas" class="form-control search-box-input" placeholder="Buscar por Nombre o Cédula en tiempo real...">
+                </div>
+              </div>
+              <div class="col-12 col-md-4 col-lg-4 d-flex gap-2 align-items-end justify-content-md-end flex-wrap">
                 <div>
                   <label class="fw-bold text-navy mb-1 small d-block"><i class="fa-solid fa-calculator me-1"></i> Plan Evaluaciones</label>
-                  <select id="selectCantEvalGestion" class="form-select form-select-sm border-primary" style="width: 150px;">
+                  <select id="selectCantEvalGestion" class="form-select form-select-sm border-primary" style="width: 130px;">
                     <option value="4" selected>4 Evaluaciones</option>
                     <option value="5">5 Evaluaciones</option>
                   </select>
                 </div>
-                <button class="btn btn-outline-info" onclick="openGlobalModalFechas()">
-                  <i class="fa-regular fa-calendar-days me-2"></i> Fechas de Evaluación
+                <button class="btn btn-outline-info btn-sm" onclick="openGlobalModalFechas()" title="Configurar Fechas">
+                  <i class="fa-regular fa-calendar-days me-1"></i> Fechas
                 </button>
-                <button class="btn btn-danger" id="btnGenerarPDF" onclick="generarPDF()" style="display: none;">
-                  <i class="fa-solid fa-file-pdf me-2"></i> Generar Planilla PDF
+                <button class="btn btn-danger btn-sm" id="btnGenerarPDF" onclick="generarPDF()" style="display: none;" title="Generar Planilla PDF">
+                  <i class="fa-solid fa-file-pdf me-1"></i> PDF
                 </button>
-                <button class="btn btn-outline-danger" id="btnGenerarNomina" onclick="generarPDFNominaAsistencia()" style="display: none;">
-                  <i class="fa-solid fa-clipboard-user me-2"></i> Nomina Asistencia
+                <button class="btn btn-outline-danger btn-sm" id="btnGenerarNomina" onclick="generarPDFNominaAsistencia()" style="display: none;" title="Nómina Asistencia">
+                  <i class="fa-solid fa-clipboard-user me-1"></i> Asistencia
                 </button>
               </div>
             </div>
@@ -337,28 +346,41 @@
 
             <!-- CONTROLES SUPERIORES: DESPLEGABLE DE UNIDAD CURRICULAR Y BÚSQUEDA -->
             <div class="row g-3 align-items-center mb-4 bg-light p-3 rounded-3 border">
-              <div class="col-md-5">
+              <div class="col-12 col-md-4">
                 <label for="filtroActividadUnidad" class="form-label fw-bold text-navy mb-1">
-                  <i class="fa-solid fa-book-bookmark text-primary me-1"></i> Unidad Curricular a Gestionar
+                  <i class="fa-solid fa-book-bookmark text-primary me-1"></i> Unidad Curricular
                 </label>
                 <select id="filtroActividadUnidad" class="form-select border-primary shadow-sm" onchange="renderActividadesTable()">
                   <option value="">-- Todas las Unidades Curriculares --</option>
                 </select>
               </div>
 
-              <div class="col-md-4">
+              <div class="col-12 col-md-3">
                 <label for="searchActividades" class="form-label fw-bold text-navy mb-1">
-                  <i class="fa-solid fa-magnifying-glass text-primary me-1"></i> Búsqueda Rápida
+                  <i class="fa-solid fa-magnifying-glass text-primary me-1"></i> Buscar Actividad
                 </label>
                 <div class="search-box-group">
                   <i class="fa-solid fa-search"></i>
-                  <input type="text" id="searchActividades" class="form-control search-box-input" placeholder="Buscar por tema, evaluación o instrucción...">
+                  <input type="text" id="searchActividades" class="form-control search-box-input" placeholder="Buscar por tema, evaluación o texto...">
                 </div>
               </div>
 
-              <div class="col-md-3 text-md-end mt-md-4 pt-md-1">
+              <div class="col-12 col-md-3 position-relative">
+                <label for="searchEstudianteEnActividades" class="form-label fw-bold text-navy mb-1">
+                  <i class="fa-solid fa-user-graduate text-primary me-1"></i> Ubicar Estudiante
+                </label>
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchEstudianteEnActividades" class="form-control search-box-input" placeholder="Nombre o Cédula..." autocomplete="off">
+                </div>
+                <div id="dropdownResultadosEstudianteActividades" class="list-group shadow-lg position-absolute w-100 mt-1" style="z-index: 1050; display: none; max-height: 250px; overflow-y: auto;">
+                  <!-- Resultados en tiempo real de búsqueda de estudiantes -->
+                </div>
+              </div>
+
+              <div class="col-12 col-md-2 text-md-end mt-md-4 pt-md-1">
                 <button class="btn btn-primary-sgn w-100" onclick="openModalActividad()">
-                  <i class="fa-solid fa-plus me-1"></i> Asignar Actividad
+                  <i class="fa-solid fa-plus me-1"></i> Asignar
                 </button>
               </div>
             </div>
@@ -1054,8 +1076,8 @@
             </div>
           </div>
 
-          <!-- Barra de Filtros Rápidos -->
-          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+          <!-- Barra de Filtros Rápidos y Buscador en Tiempo Real -->
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
             <div class="btn-group btn-group-sm" role="group" id="filterEntregasButtonGroup">
               <button type="button" class="btn btn-outline-primary active fw-bold" id="btnFilterTodos" onclick="filterEntregas('todos', this)">
                 <i class="fa-solid fa-layer-group me-1"></i> Todos (<span id="filterCountTodos">0</span>)
@@ -1067,6 +1089,12 @@
                 <i class="fa-solid fa-triangle-exclamation me-1"></i> Faltan Calificar (<span id="filterCountPendientes">0</span>)
               </button>
             </div>
+            
+            <div class="search-box-group flex-grow-1" style="max-width: 330px;">
+              <i class="fa-solid fa-search"></i>
+              <input type="text" id="searchEntregasEstudiante" class="form-control form-control-sm search-box-input" placeholder="Buscar estudiante (nombre o cédula)...">
+            </div>
+
             <div class="small text-muted" id="filterFeedbackText">
               <i class="fa-solid fa-circle-info me-1"></i> Mostrando todas las entregas
             </div>
@@ -1078,12 +1106,13 @@
               <thead>
                 <tr>
                   <th width="110px">Cédula</th>
-                  <th>Estudiante</th>
-                  <th width="150px" class="text-center">Estado</th>
-                  <th width="150px">Fecha de Entrega</th>
-                  <th>Archivo / Enlace Enviado</th>
-                  <th width="130px">Nota (0-20)</th>
-                  <th width="130px" class="text-center">Acción</th>
+                  <th width="180px">Estudiante</th>
+                  <th width="115px" class="text-center">Estado</th>
+                  <th width="125px">Fecha</th>
+                  <th width="135px">Entrega</th>
+                  <th width="110px">Nota (0-20)</th>
+                  <th>Observación / Felicitación</th>
+                  <th width="110px" class="text-center">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -1100,6 +1129,57 @@
               <i class="fa-solid fa-floppy-disk me-1"></i> Guardar Todas las Notas
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Ver Calificaciones, Entregas y Corregir Evaluaciones del Estudiante -->
+  <div class="modal fade" id="modalCalificacionesEstudiante" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content shadow-lg border-0">
+        <div class="modal-header modal-header-blue py-3">
+          <h5 class="modal-title fw-bold" id="modalCalificacionesEstudianteTitle">
+            <i class="fa-solid fa-graduation-cap me-2"></i> Gestión Integral de Calificaciones y Entregas
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-4">
+          <!-- Tarjeta de Identificación del Estudiante -->
+          <div class="card border-0 bg-light mb-4 shadow-sm rounded-3">
+            <div class="card-body p-3">
+              <div class="row g-3 align-items-center">
+                <div class="col-12 col-md-4">
+                  <span class="text-muted small d-block mb-1"><i class="fa-solid fa-user me-1 text-primary"></i> Estudiante</span>
+                  <strong class="text-navy fs-6" id="modalEstNombre">Estudiante</strong>
+                </div>
+                <div class="col-6 col-md-2">
+                  <span class="text-muted small d-block mb-1"><i class="fa-solid fa-id-card me-1 text-primary"></i> Cédula</span>
+                  <span class="badge bg-navy px-2 py-2 fs-6" id="modalEstCedula">V-00000000</span>
+                </div>
+                <div class="col-12 col-md-4">
+                  <span class="text-muted small d-block mb-1"><i class="fa-solid fa-sitemap me-1 text-primary"></i> Programa de Formación</span>
+                  <span class="fw-semibold text-dark small" id="modalEstPrograma">Programa</span>
+                </div>
+                <div class="col-6 col-md-2">
+                  <span class="text-muted small d-block mb-1"><i class="fa-solid fa-users-rectangle me-1 text-primary"></i> Sección</span>
+                  <span class="badge bg-secondary px-2 py-2" id="modalEstSeccion">170</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contenido Dinámico: Unidades Curriculares, Evaluaciones y Entregas -->
+          <div id="modalEstudianteContenido">
+            <!-- Renderizado dinámico desde dashboard.js -->
+          </div>
+        </div>
+        <div class="modal-footer bg-light d-flex justify-content-between align-items-center">
+          <span class="text-muted small">
+            <i class="fa-solid fa-circle-info text-primary me-1"></i>
+            Desde este panel puede revisar entregas, corregir notas de evaluaciones y registrar observaciones o felicitaciones.
+          </span>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
         </div>
       </div>
     </div>

@@ -546,4 +546,35 @@ body {
   }
 }
 
+.shadow-xs {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.input-comentario-entrega {
+  font-size: 0.85rem;
+  border-color: #cbd5e1;
+  transition: all 0.2s ease-in-out;
+}
+
+.input-comentario-entrega:focus {
+  border-color: var(--primary-blue) !important;
+  box-shadow: 0 0 0 0.15rem rgba(37, 99, 235, 0.15) !important;
+}
+
+.input-est-eval:focus {
+  border-color: var(--primary-blue) !important;
+  box-shadow: 0 0 0 0.15rem rgba(37, 99, 235, 0.15) !important;
+}
+
+#dropdownResultadosEstudianteActividades .list-group-item {
+  border-left: 3px solid transparent;
+  transition: all 0.15s ease-in-out;
+}
+
+#dropdownResultadosEstudianteActividades .list-group-item:hover {
+  background-color: #f1f5f9;
+  border-left-color: var(--primary-blue);
+}
+
+
 
