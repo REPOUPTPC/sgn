@@ -932,7 +932,7 @@
                 <input type="date" id="actividadFechaLimite" class="form-control border-danger fw-semibold" onchange="onActividadLapsoChange('limite')" required>
                 <div class="form-text small">Al vencer se bloquean entregas.</div>
               </div>
-              <!-- SWITCH DE AUTOEVALUACIÓN CON IA (GEMINI) -->
+              <!-- SWITCH DE AUTOEVALUACIÓN CON IA (DEEPSEEK) -->
               <div class="col-md-12">
                 <div class="card border border-primary-subtle bg-light p-3 rounded-3 shadow-xs">
                   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -942,10 +942,10 @@
                       </div>
                       <div>
                         <label class="form-check-label fw-bold text-navy mb-0 cursor-pointer" for="actividadIaEvaluar">
-                          <i class="fa-solid fa-robot text-primary me-1"></i> Autoevaluación con Inteligencia Artificial (Gemini)
+                          <i class="fa-solid fa-robot text-primary me-1"></i> Autoevaluación con Inteligencia Artificial (DeepSeek)
                         </label>
                         <div class="text-muted small">
-                          Al activar este switch, Gemini evaluará automáticamente cada entrega de los estudiantes según la pauta y rúbrica configurada abajo (Calificación 1-20 y retroalimentación inmediata).
+                          Al activar este switch, DeepSeek evaluará automáticamente cada entrega de los estudiantes según la pauta y rúbrica configurada abajo (Calificación 1-20 y retroalimentación inmediata).
                         </div>
                       </div>
                     </div>
@@ -1095,7 +1095,7 @@
                   <button type="button" class="btn btn-sm btn-outline-warning fw-bold text-dark px-2" onclick="aplicarNotaMasivaEntregas('pendientes')" title="Asignar solo a los estudiantes que aún no tienen nota">
                     <i class="fa-solid fa-user-clock me-1"></i> Solo a los que Faltan
                   </button>
-                  <button type="button" class="btn btn-sm btn-outline-primary fw-bold px-2 shadow-sm" onclick="evaluarPendientesConIAModal()" title="Evaluar automáticamente con Gemini todas las entregas pendientes">
+                  <button type="button" class="btn btn-sm btn-outline-primary fw-bold px-2 shadow-sm" onclick="evaluarPendientesConIAModal()" title="Evaluar automáticamente con DeepSeek todas las entregas pendientes">
                     <i class="fa-solid fa-robot me-1"></i> Autoevaluar con IA
                   </button>
                 </div>

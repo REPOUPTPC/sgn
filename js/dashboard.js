@@ -2560,7 +2560,7 @@ function renderActividadesTable() {
             <i class="fa-solid fa-file-arrow-up me-1"></i> Entrega PDF / Enlace
           </span>
           ${(a.ia_evaluacion === 'SI' || a.ia_evaluacion === true || a.ia_evaluacion == '1') ? `
-            <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold" title="Autoevaluación con Inteligencia Artificial Gemini activada">
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold" title="Autoevaluación con Inteligencia Artificial DeepSeek activada">
               <i class="fa-solid fa-robot me-1"></i> IA Evaluador
             </span>
           ` : ''}
@@ -3435,7 +3435,7 @@ function renderTablaEntregasActividad() {
             <button class="btn btn-sm ${isCalificado ? 'btn-outline-success' : 'btn-success'} fw-bold" id="btnCalificar_${ent.id}" onclick="saveNotaEntregaSubmit(${ent.id})" title="${isCalificado ? 'Actualizar Nota' : 'Guardar Nota Individual'}">
               <i class="fa-solid ${isCalificado ? 'fa-check-double' : 'fa-check'}"></i>
             </button>
-            <button class="btn btn-sm btn-outline-primary fw-bold" id="btnIaEval_${ent.id}" onclick="autoevaluarEntregaIndividualDocente(${ent.id})" title="Autoevaluar esta entrega con Gemini IA">
+            <button class="btn btn-sm btn-outline-primary fw-bold" id="btnIaEval_${ent.id}" onclick="autoevaluarEntregaIndividualDocente(${ent.id})" title="Autoevaluar esta entrega con DeepSeek IA">
               <i class="fa-solid fa-robot"></i>
             </button>
           </div>
@@ -3816,14 +3816,14 @@ function autoevaluarEntregaIndividualDocente(idEntrega) {
     } else {
       sgnShowModal({
         title: "Error en Evaluación IA",
-        message: (res && res.message) || "No se pudo completar la autoevaluación con Gemini.",
+        message: (res && res.message) || "No se pudo completar la autoevaluación con DeepSeek.",
         type: "danger"
       });
     }
   }).catch(function (err) {
     sgnShowModal({
       title: "Error de Conexión",
-      message: "Ocurrió un error al comunicarse con la API de Gemini: " + err,
+      message: "Ocurrió un error al comunicarse con la API de DeepSeek: " + err,
       type: "danger"
     });
   }).always(function () {
@@ -3852,7 +3852,7 @@ function evaluarPendientesConIAModal() {
 
   sgnShowConfirm({
     title: "Autoevaluación Masiva con IA",
-    message: `¿Desea autoevaluar con Gemini las <strong>${pendientes.length}</strong> entregas pendientes de esta actividad?<br><small class="text-muted">La IA evaluará los trabajos uno a uno según la rúbrica configurada y guardará las notas automáticamente.</small>`,
+    message: `¿Desea autoevaluar con DeepSeek las <strong>${pendientes.length}</strong> entregas pendientes de esta actividad?<br><small class="text-muted">La IA evaluará los trabajos uno a uno según la rúbrica configurada y guardará las notas automáticamente.</small>`,
     confirmText: `Evaluar ${pendientes.length} Entregas`,
     onConfirm: function () {
       let index = 0;
@@ -3862,7 +3862,7 @@ function evaluarPendientesConIAModal() {
         if (index >= pendientes.length) {
           sgnShowModal({
             title: "Proceso Finalizado",
-            message: `Se autoevaluaron exitosamente <strong>${exitosos}</strong> de <strong>${pendientes.length}</strong> entregas con la IA de Gemini.`,
+            message: `Se autoevaluaron exitosamente <strong>${exitosos}</strong> de <strong>${pendientes.length}</strong> entregas con la IA de DeepSeek.`,
             type: "success"
           });
           openModalEntregas(currentEntregasState.idActividad);
@@ -3888,7 +3888,7 @@ function evaluarPendientesConIAModal() {
 
       sgnShowModal({
         title: "Procesando con IA...",
-        message: `<div class="text-center py-3"><i class="fa-solid fa-robot fa-bounce fa-2x text-primary mb-3"></i><p>Evaluando entregas con Gemini, por favor espere...</p></div>`,
+        message: `<div class="text-center py-3"><i class="fa-solid fa-robot fa-bounce fa-2x text-primary mb-3"></i><p>Evaluando entregas con DeepSeek, por favor espere...</p></div>`,
         type: "info"
       });
 
