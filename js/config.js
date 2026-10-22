@@ -154,7 +154,8 @@ function sgnNormalizeCedulaKey(cedula) {
 }
 
 /**
- * Guarda la sesión activa del estudiante y su perfil académico en caché (sessionStorage + localStorage)
+ * Guarda la sesión activa del estudiante y su perfil académico en memoria de sesión (sessionStorage únicamente)
+ * Se elimina la persistencia en localStorage para evitar que la última consulta quede atrapada en caché.
  */
 function sgnSaveActiveStudentSession(cedula, data) {
   if (!cedula) return;
@@ -163,10 +164,11 @@ function sgnSaveActiveStudentSession(cedula, data) {
   const key = sgnNormalizeCedulaKey(targetCed);
   try {
     sessionStorage.setItem('sgn_active_cedula', targetCed);
-    localStorage.setItem('sgn_active_cedula', targetCed);
+    // Limpieza de cualquier residuo previo en localStorage
+    localStorage.removeItem('sgn_active_cedula');
+    localStorage.removeItem('sgn_student_data_' + key);
     if (data) {
       sessionStorage.setItem('sgn_student_data_' + key, JSON.stringify(data));
-      localStorage.setItem('sgn_student_data_' + key, JSON.stringify(data));
     }
   } catch (e) {
     console.warn("Error guardando sesión de estudiante:", e);
@@ -174,14 +176,14 @@ function sgnSaveActiveStudentSession(cedula, data) {
 }
 
 /**
- * Obtiene los datos académicos del estudiante desde el caché
+ * Obtiene los datos académicos del estudiante desde el caché de sesión
  */
 function sgnGetActiveStudentSession(cedula) {
   const targetCed = cedula || sgnGetActiveCedula();
   if (!targetCed) return null;
   const key = sgnNormalizeCedulaKey(targetCed);
   try {
-    const raw = sessionStorage.getItem('sgn_student_data_' + key) || localStorage.getItem('sgn_student_data_' + key);
+    const raw = sessionStorage.getItem('sgn_student_data_' + key);
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
@@ -189,7 +191,7 @@ function sgnGetActiveStudentSession(cedula) {
 }
 
 /**
- * Guarda los datos del módulo de extensión en el caché
+ * Guarda los datos del módulo de extensión en el caché de sesión
  */
 function sgnSaveExtensionCache(cedula, data) {
   if (!cedula || !data) return;
@@ -198,23 +200,23 @@ function sgnSaveExtensionCache(cedula, data) {
   const key = sgnNormalizeCedulaKey(targetCed);
   try {
     sessionStorage.setItem('sgn_active_cedula', targetCed);
-    localStorage.setItem('sgn_active_cedula', targetCed);
+    localStorage.removeItem('sgn_active_cedula');
+    localStorage.removeItem('sgn_extension_data_' + key);
     sessionStorage.setItem('sgn_extension_data_' + key, JSON.stringify(data));
-    localStorage.setItem('sgn_extension_data_' + key, JSON.stringify(data));
   } catch (e) {
     console.warn("Error guardando caché de extensión:", e);
   }
 }
 
 /**
- * Obtiene los datos de extensión desde el caché
+ * Obtiene los datos de extensión desde el caché de sesión
  */
 function sgnGetExtensionCache(cedula) {
   const targetCed = cedula || sgnGetActiveCedula();
   if (!targetCed) return null;
   const key = sgnNormalizeCedulaKey(targetCed);
   try {
-    const raw = sessionStorage.getItem('sgn_extension_data_' + key) || localStorage.getItem('sgn_extension_data_' + key);
+    const raw = sessionStorage.getItem('sgn_extension_data_' + key);
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
@@ -222,16 +224,20 @@ function sgnGetExtensionCache(cedula) {
 }
 
 /**
- * Obtiene la cédula activa actual (desde URL o almacenamiento local)
+ * Obtiene la cédula activa actual (sin exponerla ni depender de almacenamiento permanente)
  */
 function sgnGetActiveCedula() {
   const urlParams = new URLSearchParams(window.location.search);
-  const fromUrl = urlParams.get('cedula') || urlParams.get('test_cedula');
-  if (fromUrl) {
-    const clean = sgnCleanCedulaInput(fromUrl);
+  const testParam = urlParams.get('test_cedula');
+  if (testParam) {
+    const clean = sgnCleanCedulaInput(testParam);
     if (clean.number) return clean.full;
   }
-  const fromStorage = sessionStorage.getItem('sgn_active_cedula') || localStorage.getItem('sgn_active_cedula');
+  // Limpieza inmediata de cualquier GET 'cedula' residual en la barra de direcciones
+  if (urlParams.get('cedula')) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+  const fromStorage = sessionStorage.getItem('sgn_active_cedula');
   if (fromStorage) {
     const clean = sgnCleanCedulaInput(fromStorage);
     if (clean.number) return clean.full;
@@ -240,38 +246,66 @@ function sgnGetActiveCedula() {
 }
 
 /**
- * Actualiza los enlaces de navegación entre index.html y extension.html para preservar la cédula activa
+ * Mantiene limpios los enlaces de navegación entre index.html y extension.html (SIN parámetros GET)
  */
 function sgnUpdateNavLinks(cedula) {
-  if (!cedula) return;
-  const clean = sgnCleanCedulaInput(cedula);
-  const cedParam = encodeURIComponent(clean.full || cedula);
-
   $('a[href^="extension.html"]').each(function() {
-    $(this).attr('href', 'extension.html?cedula=' + cedParam);
+    $(this).attr('href', 'extension.html');
   });
   $('a[href^="index.html"]').each(function() {
-    const currentHref = $(this).attr('href');
-    if (currentHref === 'index.html' || currentHref.startsWith('index.html?')) {
-      $(this).attr('href', 'index.html?cedula=' + cedParam);
-    }
+    $(this).attr('href', 'index.html');
   });
+}
+
+/**
+ * Limpia totalmente la consulta cargada y los datos del estudiante en memoria,
+ * permitiendo al estudiante o usuario comenzar desde cero o moverse libremente sin datos cacheados.
+ */
+function sgnLimpiarDatosEstudiante() {
+  try {
+    sessionStorage.removeItem('sgn_active_cedula');
+    localStorage.removeItem('sgn_active_cedula');
+    Object.keys(sessionStorage).forEach(function(k) {
+      if (k.startsWith('sgn_student_data_') || k.startsWith('sgn_extension_data_') || k === 'sgn_active_cedula') {
+        sessionStorage.removeItem(k);
+      }
+    });
+    Object.keys(localStorage).forEach(function(k) {
+      if (k.startsWith('sgn_student_data_') || k.startsWith('sgn_extension_data_') || k === 'sgn_active_cedula') {
+        localStorage.removeItem(k);
+      }
+    });
+  } catch (e) {}
+
+  if (window.location.search) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  $('#sgnSearchCedulaInput').val('');
+  $('#btnLimpiarConsulta, #btnLimpiarConsultaExt').hide();
+
+  if ($('#sgnStudentResultArea').length) {
+    $('#sgnStudentResultArea').slideUp(200);
+    $('#stActividadesIndependienteContainer').hide();
+    $('#stSubjectsContainer').empty();
+  }
+  if ($('#sgnExtensionResultArea').length) {
+    $('#sgnExtensionResultArea').slideUp(200);
+  }
+
+  sgnUpdateNavLinks();
 }
 
 // Inicialización Global de UI y Eventos de Sanitización
 $(document).ready(function() {
-  // Mantener enlaces sincronizados al hacer clic si existe una cédula activa
-  $(document).on('click', 'a[href^="extension.html"], a[href^="index.html"]', function() {
-    const activeCed = sgnGetActiveCedula();
-    if (activeCed) {
-      const clean = sgnCleanCedulaInput(activeCed);
-      if (clean.full) {
-        let currentHref = $(this).attr('href') || '';
-        let base = currentHref.split('?')[0];
-        $(this).attr('href', base + '?cedula=' + encodeURIComponent(clean.full));
-      }
-    }
-  });
+  // Limpiar cualquier residuo previo en localStorage al iniciar
+  try {
+    localStorage.removeItem('sgn_active_cedula');
+  } catch (e) {}
+
+  // Garantizar que todos los enlaces entre index.html y extension.html sean limpios (SIN parámetros GET)
+  $('a[href*="extension.html"]').attr('href', 'extension.html');
+  $('a[href*="index.html"]').attr('href', 'index.html');
 
   // Toggle Mostrar/Ocultar Contraseña
   $(document).on('click', '.toggle-password', function() {

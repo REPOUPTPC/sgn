@@ -70,6 +70,9 @@
               <input type="text" id="sgnSearchCedulaInput" class="form-control form-control-lg search-box-input" placeholder="Ej: V-12345678 o 12345678" required>
             </div>
             <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+              <button type="button" class="btn btn-outline-secondary px-4 fw-bold" id="btnLimpiarConsulta" onclick="sgnLimpiarDatosEstudiante()" style="display: none;">
+                <i class="fa-solid fa-eraser me-2"></i> Limpiar Consulta
+              </button>
               <button type="submit" class="btn btn-primary-sgn px-5">
                 <i class="fa-solid fa-search me-2"></i> Buscar Mis Calificaciones
               </button>
@@ -94,6 +97,9 @@
             <div id="voceroActionsContainer" class="d-flex gap-2"></div>
             <button type="button" class="btn btn-light btn-sm text-navy fw-bold" onclick="openEditProfileModal()">
               <i class="fa-solid fa-user-pen me-1"></i> Editar Mis Datos
+            </button>
+            <button type="button" class="btn btn-outline-light btn-sm fw-bold" onclick="sgnLimpiarDatosEstudiante()" title="Limpiar los datos del estudiante cargados y realizar una nueva consulta">
+              <i class="fa-solid fa-arrow-right-from-bracket me-1"></i> Cerrar / Limpiar Consulta
             </button>
           </div>
         </div>

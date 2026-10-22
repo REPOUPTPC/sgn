@@ -16,28 +16,29 @@ $(document).ready(function () {
   // 1. Obtener tasa oficial del dólar desde DolarApi
   fetchDolarOficialRate();
 
-  // 2. Verificar si ya hay una cédula activa o buscada previamente (desde index.html, URL o caché)
+  // Limpiar cualquier residuo de parámetro GET en la URL
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('cedula')) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  // 2. Verificar si hay una sesión activa de estudiante (procedente de sessionStorage, sin exponer en URL)
   const activeCedula = typeof sgnGetActiveCedula === 'function' ? sgnGetActiveCedula() : '';
   if (activeCedula) {
     const cleaned = typeof sgnCleanCedulaInput === 'function' ? sgnCleanCedulaInput(activeCedula) : { number: activeCedula, full: activeCedula };
     if (cleaned.number) {
       $('#sgnSearchCedulaInput').val(cleaned.full);
-      if (typeof sgnUpdateNavLinks === 'function') {
-        sgnUpdateNavLinks(cleaned.full);
-      }
+      $('#btnLimpiarConsultaExt').show();
 
-      // Intentar cargar directamente desde el caché de extensión (¡Cero peticiones de red!)
+      // Intentar cargar directamente desde el caché de sesión de extensión
       const cachedExt = typeof sgnGetExtensionCache === 'function' ? sgnGetExtensionCache(cleaned.full) : null;
       if (cachedExt && cachedExt.student && cachedExt.extensionList && cachedExt.extensionList.length > 0) {
-        // Carga instantánea manteniendo todos los datos
         renderEstudianteExtensionData(cachedExt, false);
       } else {
-        // Si no tenemos los cursos/pagos aún en caché, mostrar al menos los datos del estudiante de inmediato
         const cachedStudent = typeof sgnGetActiveStudentSession === 'function' ? sgnGetActiveStudentSession(cleaned.full) : null;
         if (cachedStudent && cachedStudent.student) {
           mostrarFichaEstudianteParcial(cachedStudent.student);
         }
-        // Consultar los datos de extensión para completar cursos y pagos
         consultarEstudianteExtension(cleaned.full);
       }
     }
@@ -129,6 +130,7 @@ function renderEstudianteExtensionData(res, animate = true) {
   sgnExt.extensionList = res.extensionList || [];
   sgnExt.bancoList = res.bancoList || [];
   sgnExt.studentPagos = res.pagos || [];
+  $('#btnLimpiarConsultaExt').show();
 
   // Mostrar Ficha del Estudiante
   $('#extStNameDisplay').text(res.student.nombre_completo);

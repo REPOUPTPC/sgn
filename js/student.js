@@ -28,41 +28,30 @@ $(document).ready(function () {
     performStudentSearch(cedulaInput);
   });
 
-  // Detectar si estamos en index.html y hay una cédula activa previa o en parámetro URL
+  // Detectar si estamos en index.html
   if ($('#sgnStudentSearchForm').length > 0) {
     const urlParams = new URLSearchParams(window.location.search);
     const testCedulaParam = urlParams.get('test_cedula');
-    const activeCedula = testCedulaParam || (typeof sgnGetActiveCedula === 'function' ? sgnGetActiveCedula() : '');
 
-    if (activeCedula) {
-      const cleaned = typeof sgnCleanCedulaInput === 'function' ? sgnCleanCedulaInput(activeCedula) : { number: activeCedula, full: activeCedula };
+    // Limpiar cualquier parámetro GET residual de la URL para evitar navegación insegura por GET
+    if (urlParams.get('cedula')) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // ÚNICAMENTE auto-consultar si se invocó expresamente con test_cedula desde el dashboard docente
+    if (testCedulaParam) {
+      const cleaned = typeof sgnCleanCedulaInput === 'function' ? sgnCleanCedulaInput(testCedulaParam) : { number: testCedulaParam, full: testCedulaParam };
       if (cleaned.number) {
         $('#sgnSearchCedulaInput').val(cleaned.full);
-        if (typeof sgnUpdateNavLinks === 'function') {
-          sgnUpdateNavLinks(cleaned.full);
-        }
-
-        // Si tenemos los datos académicos en caché, renderizarlos de inmediato sin petición
-        const cached = typeof sgnGetActiveStudentSession === 'function' ? sgnGetActiveStudentSession(cleaned.full) : null;
-        if (cached && cached.student && cached.notas) {
-          currentStudentData = cached.student;
-          currentStudentResponse = cached;
-          renderStudentAcademicProfile(cached);
-
-          if (cached.extensionList && cached.bancoList && typeof sgnSaveExtensionCache === 'function') {
-            sgnSaveExtensionCache(cleaned.full, {
-              success: true,
-              registered: true,
-              student: cached.student,
-              extensionList: cached.extensionList,
-              bancoList: cached.bancoList,
-              pagos: cached.extensionPagos || []
-            });
-          }
-        } else {
-          performStudentSearch(cleaned.full);
-        }
+        $('#btnLimpiarConsulta').show();
+        performStudentSearch(cleaned.full);
       }
+    } else {
+      // Iniciar siempre limpio: no abrir automáticamente consultas previas ni forzar renderizado
+      $('#sgnStudentResultArea').hide();
+      $('#stActividadesIndependienteContainer').hide();
+      $('#stSubjectsContainer').empty();
+      $('#btnLimpiarConsulta').hide();
     }
   }
 
@@ -221,6 +210,7 @@ function performStudentSearch(cedula) {
       // Estudiante Encontrado -> Renderizar Desempeño Académico
       currentStudentData = res.student;
       currentStudentResponse = res;
+      $('#btnLimpiarConsulta').show();
       renderStudentAcademicProfile(res);
 
       // Persistir sesión y caché del estudiante para compartirlo con extension.html
