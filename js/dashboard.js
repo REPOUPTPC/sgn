@@ -2555,10 +2555,15 @@ function renderActividadesTable() {
       `;
     } else {
       tipoBadgeHtml = `
-        <div class="mb-1">
+        <div class="mb-1 d-flex flex-wrap gap-1 align-items-center">
           <span class="badge bg-light text-secondary border">
             <i class="fa-solid fa-file-arrow-up me-1"></i> Entrega PDF / Enlace
           </span>
+          ${(a.ia_evaluacion === 'SI' || a.ia_evaluacion === true || a.ia_evaluacion == '1') ? `
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold" title="Autoevaluación con Inteligencia Artificial Gemini activada">
+              <i class="fa-solid fa-robot me-1"></i> IA Evaluador
+            </span>
+          ` : ''}
         </div>
       `;
     }
@@ -3066,6 +3071,7 @@ function openModalActividad() {
   $('#quizTiempoMinutos').val(30);
   $('#quizMarkdownInput').val('');
   $('#quizConfigSection').hide();
+  $('#actividadIaEvaluar').prop('checked', false);
   updateQuizMarkdownPreview();
   $('#modalActividadTitle').text('Asignar Nueva Actividad / Evaluación');
   
@@ -3093,6 +3099,7 @@ function editActividad(id) {
   const diffDays = (!isNaN(startMs) && !isNaN(endMs)) ? Math.max(0, Math.round((endMs - startMs) / 86400000)) : lapsoInfo.dias_totales;
   $('#actividadDiasLapso').val(diffDays);
   $('#actividadDesc').val(a.descripcion);
+  $('#actividadIaEvaluar').prop('checked', a.ia_evaluacion === 'SI' || a.ia_evaluacion === true || a.ia_evaluacion == '1');
 
   const tipoAct = String(a.tipo_actividad || "ENTREGA").toUpperCase();
   $('#actividadTipo').val(tipoAct === 'QUIZ' ? 'QUIZ' : 'ENTREGA');
@@ -3125,6 +3132,44 @@ function editActividad(id) {
   $('#modalActividadTitle').text('Editar Actividad Asignada');
   const bsModal = new bootstrap.Modal(document.getElementById('modalActividad'));
   bsModal.show();
+}
+
+function insertarPlantillaRubrica() {
+  const rubricaPlantilla = `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+
+1. Dominio de Contenidos (Unidad 1) [25% - 5.0 pts]:
+   Diferenciación clara entre datos maestros y transaccionales. Correcta aplicación de los atributos de calidad de los datos.
+
+2. Metodología PHVA y 5W2H [25% - 5.0 pts]:
+   Correcta articulación de las herramientas para la recolección y aseguramiento de la información en mantenimiento.
+
+3. Análisis Crítico y Sesgo (Humano vs. IA) [20% - 4.0 pts]:
+   Capacidad demostrada para auditar los resultados de la IA, identificando errores, omisiones o sesgos con criterio de ingeniería.
+
+4. Capacidad de Síntesis y Redacción [15% - 3.0 pts]:
+   Cumplimiento estricto del límite de extensión (máx. 3 páginas), redacción técnica fluida, concisa y estructurada.
+
+5. Referenciación Bibliográfica [15% - 3.0 pts]:
+   Citación formal y correcta de fuentes académicas e industriales de respaldo (Normas APA / IEEE).
+
+Enlace de la Asignación / Guía Docente (Google Drive opcional):
+https://drive.google.com/file/d/TU_ID_AQUI/view`;
+
+  const actual = $('#actividadDesc').val().trim();
+  if (actual && actual.length > 5) {
+    sgnShowConfirm({
+      title: "Insertar Rúbrica de Ejemplo",
+      message: "¿Desea reemplazar el texto actual de la descripción con la pauta de evaluación y ponderaciones estándar (25-25-20-15-15%)?",
+      confirmText: "Sí, insertar rúbrica",
+      onConfirm: function () {
+        $('#actividadDesc').val(rubricaPlantilla);
+        $('#actividadIaEvaluar').prop('checked', true);
+      }
+    });
+  } else {
+    $('#actividadDesc').val(rubricaPlantilla);
+    $('#actividadIaEvaluar').prop('checked', true);
+  }
 }
 
 function saveActividadSubmit() {
@@ -3200,6 +3245,7 @@ function saveActividadSubmit() {
     fecha_limite: fechaLimite,
     descripcion: desc,
     tipo_actividad: tipoActividad,
+    ia_evaluacion: $('#actividadIaEvaluar').is(':checked') ? "SI" : "NO",
     quiz_config_json: quizConfigJson,
     quiz_preguntas_json: quizPreguntasJson,
     tiempo_minutos: tiempoMinutos
@@ -3337,11 +3383,13 @@ function renderTablaEntregasActividad() {
     const rowClass = isCalificado ? 'entrega-row-calificada' : 'entrega-row-pendiente';
 
     let estadoBadgeHtml = '';
+    const isIaEval = comentarioVal.includes('EVALUACIÓN AUTOMÁTICA CON IA');
     if (isCalificado) {
       estadoBadgeHtml = `
         <span class="badge bg-success-subtle text-success border border-success-subtle badge-status-entrega" id="badgeEstado_${ent.id}">
           <i class="fa-solid fa-circle-check"></i> Calificado
         </span>
+        ${isIaEval ? '<div class="mt-1"><span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.68rem;"><i class="fa-solid fa-robot me-1"></i>IA</span></div>' : ''}
       `;
     } else if (isEnCurso) {
       estadoBadgeHtml = `
@@ -3383,9 +3431,14 @@ function renderTablaEntregasActividad() {
           <input type="text" class="form-control form-control-sm input-comentario-entrega" id="comentarioEntrega_${ent.id}" data-id="${ent.id}" data-original="${comentarioVal}" value="${comentarioVal}" placeholder="Observación o felicitación..." oninput="onInputComentarioEntregaChange(${ent.id})">
         </td>
         <td class="text-center">
-          <button class="btn btn-sm ${isCalificado ? 'btn-outline-success' : 'btn-success'} fw-bold" id="btnCalificar_${ent.id}" onclick="saveNotaEntregaSubmit(${ent.id})" title="${isCalificado ? 'Actualizar Nota' : 'Guardar Nota Individual'}">
-            <i class="fa-solid ${isCalificado ? 'fa-check-double' : 'fa-check'} me-1"></i> ${isCalificado ? 'Actualizar' : 'Calificar'}
-          </button>
+          <div class="d-flex justify-content-center align-items-center gap-1">
+            <button class="btn btn-sm ${isCalificado ? 'btn-outline-success' : 'btn-success'} fw-bold" id="btnCalificar_${ent.id}" onclick="saveNotaEntregaSubmit(${ent.id})" title="${isCalificado ? 'Actualizar Nota' : 'Guardar Nota Individual'}">
+              <i class="fa-solid ${isCalificado ? 'fa-check-double' : 'fa-check'}"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-primary fw-bold" id="btnIaEval_${ent.id}" onclick="autoevaluarEntregaIndividualDocente(${ent.id})" title="Autoevaluar esta entrega con Gemini IA">
+              <i class="fa-solid fa-robot"></i>
+            </button>
+          </div>
         </td>
       </tr>
     `);
@@ -3707,6 +3760,139 @@ function saveNotaEntregaSubmit(idEntrega) {
       loadDashboardData();
     } else {
       sgnShowModal({ title: "Error", message: (res && res.message) ? res.message : "No se pudo guardar la calificación.", type: "danger" });
+    }
+  });
+}
+
+/**
+ * Autoevaluación individual bajo demanda activada por el Docente desde el Modal de Entregas
+ */
+function autoevaluarEntregaIndividualDocente(idEntrega) {
+  const ent = (currentEntregasState.entregas || []).find(e => e.id == idEntrega);
+  if (!ent) return;
+
+  if (!ent.entrega || String(ent.entrega).trim() === '' || String(ent.entrega).trim() === 'EN_CURSO') {
+    sgnShowModal({
+      title: "Sin Archivo Entregado",
+      message: "Este estudiante aún no ha enviado un archivo o enlace accesible para ser evaluado.",
+      type: "warning"
+    });
+    return;
+  }
+
+  const $btn = $(`#btnIaEval_${idEntrega}`);
+  $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i>');
+
+  sgnApiCall("evaluarEntregaConIA", {
+    id_entrega: idEntrega,
+    id_estudiante: ent.id_estudiante,
+    entregaUrl: ent.entrega
+  }, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      $(`#notaEntrega_${idEntrega}`).val(res.nota).trigger('input');
+      $(`#comentarioEntrega_${idEntrega}`).val(res.comentario).trigger('input');
+
+      ent.nota = res.nota;
+      ent.comentario = res.comentario;
+
+      sgnShowModal({
+        title: "¡Autoevaluación con IA Completada!",
+        message: `
+          <div class="text-center my-2">
+            <span class="badge bg-success-subtle text-success fs-5 px-3 py-2 border border-success-subtle rounded-pill">
+              <i class="fa-solid fa-robot me-2"></i> Calificación Asignada: <strong>${res.nota} / 20</strong>
+            </span>
+          </div>
+          <div class="alert alert-light border small text-start mt-3 mb-0" style="max-height: 250px; overflow-y: auto;">
+            <strong>Detalle de la Evaluación y Criterios:</strong><br>
+            ${sgnFormatTextWithLinks(res.comentario)}
+          </div>
+        `,
+        type: "success"
+      });
+
+      renderEntregasModalContent();
+      loadDashboardData(true);
+    } else {
+      sgnShowModal({
+        title: "Error en Evaluación IA",
+        message: (res && res.message) || "No se pudo completar la autoevaluación con Gemini.",
+        type: "danger"
+      });
+    }
+  }).catch(function (err) {
+    sgnShowModal({
+      title: "Error de Conexión",
+      message: "Ocurrió un error al comunicarse con la API de Gemini: " + err,
+      type: "danger"
+    });
+  }).always(function () {
+    $btn.prop('disabled', false).html('<i class="fa-solid fa-robot"></i>');
+  });
+}
+
+/**
+ * Autoevaluación en lote de todas las entregas que faltan por calificar
+ */
+function evaluarPendientesConIAModal() {
+  const pendientes = (currentEntregasState.entregas || []).filter(e => {
+    const isCalificado = (e.nota !== undefined && e.nota !== "" && e.nota !== null);
+    const hasEntrega = e.entrega && String(e.entrega).trim() !== '' && String(e.entrega).trim() !== 'EN_CURSO';
+    return !isCalificado && hasEntrega;
+  });
+
+  if (pendientes.length === 0) {
+    sgnShowModal({
+      title: "No Hay Entregas Pendientes",
+      message: "Todas las entregas disponibles ya tienen calificación asignada o aún no han subido archivos.",
+      type: "info"
+    });
+    return;
+  }
+
+  sgnShowConfirm({
+    title: "Autoevaluación Masiva con IA",
+    message: `¿Desea autoevaluar con Gemini las <strong>${pendientes.length}</strong> entregas pendientes de esta actividad?<br><small class="text-muted">La IA evaluará los trabajos uno a uno según la rúbrica configurada y guardará las notas automáticamente.</small>`,
+    confirmText: `Evaluar ${pendientes.length} Entregas`,
+    onConfirm: function () {
+      let index = 0;
+      let exitosos = 0;
+
+      function procesarSiguiente() {
+        if (index >= pendientes.length) {
+          sgnShowModal({
+            title: "Proceso Finalizado",
+            message: `Se autoevaluaron exitosamente <strong>${exitosos}</strong> de <strong>${pendientes.length}</strong> entregas con la IA de Gemini.`,
+            type: "success"
+          });
+          openModalEntregas(currentEntregasState.idActividad);
+          loadDashboardData(true);
+          return;
+        }
+
+        const e = pendientes[index];
+        index++;
+
+        sgnApiCall("evaluarEntregaConIA", {
+          id_entrega: e.id,
+          id_estudiante: e.id_estudiante,
+          entregaUrl: e.entrega
+        }, { showLoading: false }).then(function (res) {
+          if (res && res.success) {
+            exitosos++;
+          }
+        }).always(function () {
+          procesarSiguiente();
+        });
+      }
+
+      sgnShowModal({
+        title: "Procesando con IA...",
+        message: `<div class="text-center py-3"><i class="fa-solid fa-robot fa-bounce fa-2x text-primary mb-3"></i><p>Evaluando entregas con Gemini, por favor espere...</p></div>`,
+        type: "info"
+      });
+
+      procesarSiguiente();
     }
   });
 }

@@ -932,9 +932,38 @@
                 <input type="date" id="actividadFechaLimite" class="form-control border-danger fw-semibold" onchange="onActividadLapsoChange('limite')" required>
                 <div class="form-text small">Al vencer se bloquean entregas.</div>
               </div>
+              <!-- SWITCH DE AUTOEVALUACIÓN CON IA (GEMINI) -->
               <div class="col-md-12">
-                <label class="form-label fw-bold">Descripción / Instrucciones *</label>
-                <textarea id="actividadDesc" class="form-control" rows="2" placeholder="Ej. Trabajo escrito en PDF sobre Estructuras de Datos, Enlace de Canva o Evaluación Online Parcial..." required></textarea>
+                <div class="card border border-primary-subtle bg-light p-3 rounded-3 shadow-xs">
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="actividadIaEvaluar" style="width: 2.8em; height: 1.4em; cursor: pointer;">
+                      </div>
+                      <div>
+                        <label class="form-check-label fw-bold text-navy mb-0 cursor-pointer" for="actividadIaEvaluar">
+                          <i class="fa-solid fa-robot text-primary me-1"></i> Autoevaluación con Inteligencia Artificial (Gemini)
+                        </label>
+                        <div class="text-muted small">
+                          Al activar este switch, Gemini evaluará automáticamente cada entrega de los estudiantes según la pauta y rúbrica configurada abajo (Calificación 1-20 y retroalimentación inmediata).
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="insertarPlantillaRubrica()" title="Insertar rúbrica de ejemplo con porcentajes y criterios en la descripción">
+                        <i class="fa-solid fa-table-list me-1"></i> Insertar Rúbrica de Ejemplo (20 pts)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="col-md-12">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label class="form-label fw-bold mb-0">Descripción / Instrucciones y Rúbrica *</label>
+                  <span class="small text-muted"><i class="fa-solid fa-circle-info me-1"></i> Puedes detallar los criterios y/o pegar el enlace de Drive al PDF de la asignación.</span>
+                </div>
+                <textarea id="actividadDesc" class="form-control font-monospace small" rows="5" placeholder="Ej. Pauta de evaluación, desglose porcentual (Dominio 25%, Metodología 25%, etc.) o enlace al PDF de la asignación en Google Drive..." required></textarea>
               </div>
             </div>
 
@@ -1065,6 +1094,9 @@
                   </button>
                   <button type="button" class="btn btn-sm btn-outline-warning fw-bold text-dark px-2" onclick="aplicarNotaMasivaEntregas('pendientes')" title="Asignar solo a los estudiantes que aún no tienen nota">
                     <i class="fa-solid fa-user-clock me-1"></i> Solo a los que Faltan
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-primary fw-bold px-2 shadow-sm" onclick="evaluarPendientesConIAModal()" title="Evaluar automáticamente con Gemini todas las entregas pendientes">
+                    <i class="fa-solid fa-robot me-1"></i> Autoevaluar con IA
                   </button>
                 </div>
                 <div class="col-lg-5 col-12 d-flex justify-content-lg-end justify-content-start align-items-center gap-2">

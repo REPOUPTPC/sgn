@@ -1310,6 +1310,10 @@ function handleEntregaSuccess(res) {
   if (currentEntregaActivity) {
     currentEntregaActivity.entrega = res.entrega || currentEntregaActivity.entrega || "";
     currentEntregaActivity.fecha_entrega = res.fecha_entrega || new Date().toLocaleDateString('es-VE');
+    if (res.evaluado_por_ia && res.nota !== undefined) {
+      currentEntregaActivity.nota = res.nota;
+      currentEntregaActivity.comentario = res.comentario || "";
+    }
   }
 
   if (currentStudentResponse && currentStudentResponse.notas) {
@@ -1320,6 +1324,10 @@ function handleEntregaSuccess(res) {
           if (String(act.id) === String(actId)) {
             act.entrega = res.entrega || act.entrega || "";
             act.fecha_entrega = res.fecha_entrega || new Date().toLocaleDateString('es-VE');
+            if (res.evaluado_por_ia && res.nota !== undefined) {
+              act.nota = res.nota;
+              act.comentario = res.comentario || "";
+            }
           }
         });
       }
@@ -1409,11 +1417,31 @@ function submitEstudianteEntrega() {
         if (res && res.success) {
           bootstrap.Modal.getInstance(document.getElementById('sgnEntregaModal')).hide();
           handleEntregaSuccess(res);
-          sgnShowModal({
-            title: "¡Entrega Realizada!",
-            message: "Su trabajo ha sido subido con éxito a la carpeta oficial de Google Drive y registrado para el docente.",
-            type: "success"
-          });
+          if (res.evaluado_por_ia) {
+            sgnShowModal({
+              title: "¡Entrega Recibida y Calificada por IA!",
+              message: `
+                <div class="text-center my-3">
+                  <div class="d-inline-flex align-items-center gap-2 bg-success-subtle text-success px-4 py-2 rounded-pill border border-success-subtle shadow-xs">
+                    <i class="fa-solid fa-robot fa-lg"></i>
+                    <span class="fs-5 fw-bold">Calificación Obtenida: ${res.nota} / 20</span>
+                  </div>
+                </div>
+                <div class="alert alert-light border small text-start my-2 p-3 rounded-3" style="max-height: 250px; overflow-y: auto;">
+                  <strong class="text-navy d-block mb-1"><i class="fa-solid fa-comment-dots text-primary me-1"></i> Retroalimentación de la IA:</strong>
+                  ${sgnFormatTextWithLinks(res.comentario)}
+                </div>
+                <p class="text-muted small text-center mb-0 mt-2">Esta nota y retroalimentación ya han sido registradas en tu historial académico.</p>
+              `,
+              type: "success"
+            });
+          } else {
+            sgnShowModal({
+              title: "¡Entrega Realizada!",
+              message: "Su trabajo ha sido subido con éxito a la carpeta oficial de Google Drive y registrado para el docente.",
+              type: "success"
+            });
+          }
         } else {
           sgnShowModal({ title: "Error en Entrega", message: (res && res.message) || "No se pudo procesar la entrega.", type: "danger" });
         }
@@ -1452,11 +1480,31 @@ function submitEstudianteEntrega() {
       if (res && res.success) {
         bootstrap.Modal.getInstance(document.getElementById('sgnEntregaModal')).hide();
         handleEntregaSuccess(res);
-        sgnShowModal({
-          title: "¡Entrega Registrada!",
-          message: "El enlace de su actividad ha sido verificado como público y guardado exitosamente.",
-          type: "success"
-        });
+        if (res.evaluado_por_ia) {
+          sgnShowModal({
+            title: "¡Entrega Recibida y Calificada por IA!",
+            message: `
+              <div class="text-center my-3">
+                <div class="d-inline-flex align-items-center gap-2 bg-success-subtle text-success px-4 py-2 rounded-pill border border-success-subtle shadow-xs">
+                  <i class="fa-solid fa-robot fa-lg"></i>
+                  <span class="fs-5 fw-bold">Calificación Obtenida: ${res.nota} / 20</span>
+                </div>
+              </div>
+              <div class="alert alert-light border small text-start my-2 p-3 rounded-3" style="max-height: 250px; overflow-y: auto;">
+                <strong class="text-navy d-block mb-1"><i class="fa-solid fa-comment-dots text-primary me-1"></i> Retroalimentación de la IA:</strong>
+                ${sgnFormatTextWithLinks(res.comentario)}
+              </div>
+              <p class="text-muted small text-center mb-0 mt-2">Esta nota y retroalimentación ya han sido registradas en tu historial académico.</p>
+            `,
+            type: "success"
+          });
+        } else {
+          sgnShowModal({
+            title: "¡Entrega Registrada!",
+            message: "El enlace de su actividad ha sido verificado como público y guardado exitosamente.",
+            type: "success"
+          });
+        }
       } else {
         sgnShowModal({ title: "Verificación de Entrega", message: (res && res.message) || "No se pudo registrar la entrega.", type: "danger" });
       }
