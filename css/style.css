@@ -516,36 +516,6 @@ body {
   box-sizing: border-box;
 }
 
-/* Prevención global de desbordamiento horizontal en móviles */
-@media (max-width: 768px) {
-  .sgn-link-card {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.6rem;
-  }
-  
-  .sgn-link-info {
-    width: calc(100% - 48px);
-  }
-
-  .sgn-link-btn {
-    width: 100%;
-    text-align: center;
-    justify-content: center;
-    margin-top: 0.25rem;
-  }
-
-  .modal-dialog {
-    margin: 0.5rem;
-    max-width: calc(100% - 1rem);
-  }
-
-  .modal-body {
-    overflow-x: hidden;
-    word-break: break-word;
-  }
-}
-
 .shadow-xs {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
@@ -574,6 +544,281 @@ body {
 #dropdownResultadosEstudianteActividades .list-group-item:hover {
   background-color: #f1f5f9;
   border-left-color: var(--primary-blue);
+}
+
+/* ==========================================================================
+   SISTEMA DE DISEÑO RESPONSIVO INTEGRAL (MÓVILES, TABLETS & ESCRITORIOS)
+   ========================================================================== */
+
+/* 1. Prevención Global contra Desbordamiento Horizontal */
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 2. Scrollbars táctiles optimizados para contenedores desplazables */
+.table-responsive {
+  width: 100%;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.table-responsive::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* 3. Reglas para Pantallas Medianas (Tablets <= 991px) */
+@media (max-width: 991px) {
+  .sgn-navbar {
+    padding: 0.6rem 1rem;
+  }
+}
+
+/* 4. Reglas Principales para Móviles y Smartphones (<= 768px) */
+@media (max-width: 768px) {
+  /* Contenedores principales y espacios */
+  main.container, main.container-fluid {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    padding-top: 1rem !important;
+  }
+
+  .card-body {
+    padding: 1rem !important;
+  }
+
+  .card-header-blue {
+    padding: 0.85rem 1rem !important;
+  }
+
+  /* Pestañas de navegación con scroll horizontal táctil (Swipeable Pills) */
+  .sgn-nav-pills {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.4rem !important;
+    padding: 0.4rem 0.5rem !important;
+    white-space: nowrap !important;
+    border-radius: var(--radius-md) !important;
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .sgn-nav-pills::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
+  .sgn-nav-link {
+    flex: 0 0 auto !important;
+    font-size: 0.82rem !important;
+    padding: 0.45rem 0.8rem !important;
+  }
+
+  /* Header y Logo institucional */
+  .brand-logo-img {
+    height: 40px;
+  }
+
+  .sgn-brand-title {
+    font-size: 1.15rem !important;
+  }
+
+  .sgn-brand-subtitle {
+    font-size: 0.65rem !important;
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Acciones del encabezado */
+  .sgn-header-actions {
+    width: 100%;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+    margin-top: 0.25rem;
+  }
+
+  .sgn-header-actions > .btn {
+    flex: 1 1 auto;
+    font-size: 0.78rem !important;
+    padding: 0.35rem 0.55rem !important;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  /* Grupos de botones que normalmente desbordan en horizontal */
+  .btn-group:not(.btn-group-dropdown):not(.dropdown):not(.btn-group-vertical) {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+  }
+
+  .btn-group:not(.btn-group-dropdown):not(.dropdown):not(.btn-group-vertical) > .btn {
+    flex: 1 1 auto !important;
+    border-radius: var(--radius-md) !important;
+    margin: 2px !important;
+    font-size: 0.78rem !important;
+    padding: 0.4rem 0.6rem !important;
+    white-space: normal !important;
+    text-align: center !important;
+  }
+
+  /* Modales en teléfonos: pantalla completa fluida */
+  .modal-dialog {
+    margin: 0.5rem auto !important;
+    width: calc(100% - 1rem) !important;
+    max-width: calc(100% - 1rem) !important;
+  }
+
+  .modal-header {
+    padding: 0.75rem 1rem !important;
+  }
+
+  .modal-body {
+    padding: 1rem !important;
+    max-height: calc(100vh - 130px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    word-break: break-word;
+  }
+
+  .modal-footer {
+    padding: 0.75rem 1rem !important;
+    flex-direction: column-reverse !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+  }
+
+  .modal-footer > * {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .modal-footer .d-flex {
+    width: 100% !important;
+    flex-direction: column !important;
+  }
+
+  /* Botones generales: permitir wrap si el texto es extenso */
+  .btn-primary-sgn, .btn-outline-sgn, .btn {
+    word-break: break-word;
+  }
+
+  /* Tarjetas de enlaces adjuntos */
+  .sgn-link-card {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.6rem;
+  }
+  
+  .sgn-link-info {
+    width: calc(100% - 48px);
+  }
+
+  .sgn-link-btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+    margin-top: 0.25rem;
+  }
+
+  /* Tablas responsivas en móvil */
+  .sgn-table th {
+    font-size: 0.75rem;
+    padding: 0.65rem 0.5rem;
+    white-space: nowrap;
+  }
+
+  .sgn-table td {
+    padding: 0.65rem 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .input-nota-entrega {
+    font-size: 0.9rem !important;
+    padding: 0.25rem 0.4rem !important;
+    min-width: 65px;
+  }
+
+  .input-comentario-entrega {
+    min-width: 140px;
+    font-size: 0.8rem !important;
+  }
+}
+
+/* 5. Reglas para Pantallas Muy Pequeñas (<= 576px / Dispositivos estrechos) */
+@media (max-width: 576px) {
+  .sgn-brand-subtitle {
+    display: none !important;
+  }
+
+  .search-box-input {
+    padding-left: 2.75rem !important;
+    font-size: 0.95rem !important;
+  }
+
+  .search-box-group > i {
+    left: 1rem;
+    font-size: 0.95rem;
+  }
+
+  /* Botones de acción en tarjetas de actividades estudiantiles */
+  .actividad-action-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .actividad-action-container .btn {
+    width: 100% !important;
+    margin-bottom: 0.35rem;
+  }
+
+  /* Botones de preguntas y opciones del Quiz */
+  .quiz-option-card {
+    padding: 0.75rem !important;
+    min-height: 44px;
+    font-size: 0.9rem !important;
+  }
+
+  /* Asegurar que las alertas estadísticas de entregas se apilen verticalmente */
+  #boxEstadisticasEntregas {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  #boxEstadisticasEntregas .badge {
+    flex: 1 1 auto;
+    text-align: center;
+  }
 }
 
 

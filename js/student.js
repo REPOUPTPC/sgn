@@ -547,25 +547,25 @@ function renderStudentAcademicProfile(res) {
           actionButtonsHtml = `
             <span class="text-success small fw-semibold me-2"><i class="fa-solid fa-lock me-1"></i> Intento registrado ${act.hora_inicio ? `(Inicio: ${act.hora_inicio})` : ''}</span>
             ${btnResetTest}
-            <button type="button" class="btn btn-sm btn-outline-primary fw-bold text-nowrap" onclick="openQuizResultadoEstudiante(${act.id}, ${student.id})">
+            <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="openQuizResultadoEstudiante(${act.id}, ${student.id})">
               <i class="fa-solid fa-list-check me-1"></i> Ver Resultados y Retroalimentación
             </button>
           `;
         } else if (isQuizEnCurso) {
           actionButtonsHtml = `
-            <button type="button" class="btn btn-sm btn-warning text-dark fw-bold text-nowrap shadow-sm" onclick="iniciarQuizEstudiante(${act.id}, ${student.id})">
+            <button type="button" class="btn btn-sm btn-warning text-dark fw-bold shadow-sm" onclick="iniciarQuizEstudiante(${act.id}, ${student.id})">
               <i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Continuar Evaluación en Curso (Duración: ${tiempoMin} min)
             </button>
           `;
         } else if (lapso.vencida) {
           actionButtonsHtml = `
-            <button type="button" class="btn btn-sm btn-secondary fw-bold text-nowrap" disabled title="El lapso de entrega se ha cumplido. No se reciben más evaluaciones.">
+            <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se reciben más evaluaciones.">
               <i class="fa-solid fa-lock me-1"></i> Recepción Cerrada (Lapso Vencido el ${lapso.fecha_limite})
             </button>
           `;
         } else {
           actionButtonsHtml = `
-            <button type="button" class="btn btn-sm btn-primary-sgn fw-bold text-nowrap shadow-sm" onclick="confirmarInicioQuizEstudiante(${act.id}, ${student.id}, ${tiempoMin})">
+            <button type="button" class="btn btn-sm btn-primary-sgn fw-bold shadow-sm" onclick="confirmarInicioQuizEstudiante(${act.id}, ${student.id}, ${tiempoMin})">
               <i class="fa-solid fa-stopwatch me-1"></i> Iniciar Evaluación Online (Duración: ${tiempoMin} min)
             </button>
           `;
@@ -579,7 +579,7 @@ function renderStudentAcademicProfile(res) {
         if (lapso.vencida) {
           actionButtonsHtml = `
             ${linkBtn}
-            <button type="button" class="btn btn-sm btn-secondary fw-bold text-nowrap" disabled title="El lapso de entrega se ha cumplido. No se permite la recepción de más trabajos.">
+            <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se permite la recepción de más trabajos.">
               <i class="fa-solid fa-lock me-1"></i> Recepción de Trabajos Cerrada (Venció: ${lapso.fecha_limite})
             </button>
           `;
@@ -587,7 +587,7 @@ function renderStudentAcademicProfile(res) {
           const jsonActStr = JSON.stringify(act).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
           actionButtonsHtml = `
             ${linkBtn}
-            <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold text-nowrap" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
+            <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
               <i class="fa-solid ${hasEntrega ? 'fa-pen' : 'fa-upload'} me-1"></i> ${hasEntrega ? 'Modificar Entrega' : 'Entregar Actividad'}
             </button>
           `;
@@ -753,25 +753,25 @@ function renderStudentAcademicProfile(res) {
               actionButtonsHtml = `
                 <span class="text-success small fw-semibold me-2"><i class="fa-solid fa-lock me-1"></i> Intento registrado ${act.hora_inicio ? `(Inicio: ${act.hora_inicio})` : ''}</span>
                 ${btnResetTest}
-                <button type="button" class="btn btn-sm btn-outline-primary fw-bold text-nowrap" onclick="openQuizResultadoEstudiante(${act.id}, ${student.id})">
+                <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="openQuizResultadoEstudiante(${act.id}, ${student.id})">
                   <i class="fa-solid fa-list-check me-1"></i> Ver Resultados y Retroalimentación
                 </button>
               `;
             } else if (isQuizEnCurso) {
               actionButtonsHtml = `
-                <button type="button" class="btn btn-sm btn-warning text-dark fw-bold text-nowrap shadow-sm" onclick="iniciarQuizEstudiante(${act.id}, ${student.id})">
+                <button type="button" class="btn btn-sm btn-warning text-dark fw-bold shadow-sm" onclick="iniciarQuizEstudiante(${act.id}, ${student.id})">
                   <i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Continuar Evaluación en Curso (Duración: ${tiempoMin} min)
                 </button>
               `;
             } else if (lapso.vencida) {
               actionButtonsHtml = `
-                <button type="button" class="btn btn-sm btn-secondary fw-bold text-nowrap" disabled title="El lapso de entrega se ha cumplido. No se reciben más evaluaciones.">
+                <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se reciben más evaluaciones.">
                   <i class="fa-solid fa-lock me-1"></i> Recepción Cerrada (Lapso Vencido el ${lapso.fecha_limite})
                 </button>
               `;
             } else {
               actionButtonsHtml = `
-                <button type="button" class="btn btn-sm btn-primary-sgn fw-bold text-nowrap shadow-sm" onclick="confirmarInicioQuizEstudiante(${act.id}, ${student.id}, ${tiempoMin})">
+                <button type="button" class="btn btn-sm btn-primary-sgn fw-bold shadow-sm" onclick="confirmarInicioQuizEstudiante(${act.id}, ${student.id}, ${tiempoMin})">
                   <i class="fa-solid fa-stopwatch me-1"></i> Iniciar Evaluación Online (Duración: ${tiempoMin} min)
                 </button>
               `;
@@ -785,7 +785,7 @@ function renderStudentAcademicProfile(res) {
             if (lapso.vencida) {
               actionButtonsHtml = `
                 ${linkBtn}
-                <button type="button" class="btn btn-sm btn-secondary fw-bold text-nowrap" disabled title="El lapso de entrega se ha cumplido. No se permite la recepción de más trabajos.">
+                <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se permite la recepción de más trabajos.">
                   <i class="fa-solid fa-lock me-1"></i> Recepción de Trabajos Cerrada (Venció: ${lapso.fecha_limite})
                 </button>
               `;
@@ -793,7 +793,7 @@ function renderStudentAcademicProfile(res) {
               const jsonActStr = JSON.stringify(act).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
               actionButtonsHtml = `
                 ${linkBtn}
-                <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold text-nowrap" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
+                <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
                   <i class="fa-solid ${hasEntrega ? 'fa-pen' : 'fa-upload'} me-1"></i> ${hasEntrega ? 'Modificar Entrega' : 'Entregar Actividad'}
                 </button>
               `;
