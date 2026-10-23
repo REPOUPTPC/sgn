@@ -3134,32 +3134,67 @@ function editActividad(id) {
   bsModal.show();
 }
 
-function insertarPlantillaRubrica() {
-  const rubricaPlantilla = `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+const SGN_PLANTILLAS_RUBRICA = {
+  general: {
+    nombre: "General / Estándar",
+    texto: `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
 
-1. Dominio de Contenidos (Unidad 1) [25% - 5.0 pts]:
-   Diferenciación clara entre datos maestros y transaccionales. Correcta aplicación de los atributos de calidad de los datos.
-
-2. Metodología PHVA y 5W2H [25% - 5.0 pts]:
-   Correcta articulación de las herramientas para la recolección y aseguramiento de la información en mantenimiento.
-
-3. Análisis Crítico y Sesgo (Humano vs. IA) [20% - 4.0 pts]:
-   Capacidad demostrada para auditar los resultados de la IA, identificando errores, omisiones o sesgos con criterio de ingeniería.
-
-4. Capacidad de Síntesis y Redacción [15% - 3.0 pts]:
-   Cumplimiento estricto del límite de extensión (máx. 3 páginas), redacción técnica fluida, concisa y estructurada.
-
-5. Referenciación Bibliográfica [15% - 3.0 pts]:
-   Citación formal y correcta de fuentes académicas e industriales de respaldo (Normas APA / IEEE).
+Puntos Solicitados en la asignación 25%
+Estructura definida del trabajo 25%
+Referencias Bibliográficas 25%
+Redacción de Introducción y Conclusión 25%
 
 Enlace de la Asignación / Guía Docente (Google Drive opcional):
-https://drive.google.com/file/d/TU_ID_AQUI/view`;
+https://drive.google.com/file/d/TU_ID_AQUI/view`
+  },
+  tecnica: {
+    nombre: "Evaluación Técnica",
+    texto: `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+
+Resolución Técnica y Exactitud 35%
+Aplicación de Procedimientos y Normas 25%
+Interpretación de Resultados y Datos 20%
+Calidad de Conclusiones y Presentación 20%
+
+Enlace de la Asignación / Guía Docente (Google Drive opcional):
+https://drive.google.com/file/d/TU_ID_AQUI/view`
+  },
+  analitica: {
+    nombre: "Evaluación Analítica",
+    texto: `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+
+Análisis Crítico y Postura Fundamentada 30%
+Identificación de Causas y Relaciones 25%
+Propuesta de Solución o Criterio Propio 25%
+Coherencia Argumentativa y Bibliografía 20%
+
+Enlace de la Asignación / Guía Docente (Google Drive opcional):
+https://drive.google.com/file/d/TU_ID_AQUI/view`
+  },
+  teorica: {
+    nombre: "Evaluación Teórica",
+    texto: `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+
+Dominio de Conceptos Fundamentales 30%
+Precisión y Claridad en Definiciones 25%
+Capacidad de Síntesis y Organización 25%
+Sustento Bibliográfico y Citas Formales 20%
+
+Enlace de la Asignación / Guía Docente (Google Drive opcional):
+https://drive.google.com/file/d/TU_ID_AQUI/view`
+  }
+};
+
+function insertarPlantillaRubrica(tipo) {
+  const clave = tipo || 'general';
+  const plantillaObj = SGN_PLANTILLAS_RUBRICA[clave] || SGN_PLANTILLAS_RUBRICA.general;
+  const rubricaPlantilla = plantillaObj.texto;
 
   const actual = $('#actividadDesc').val().trim();
   if (actual && actual.length > 5) {
     sgnShowConfirm({
-      title: "Insertar Rúbrica de Ejemplo",
-      message: "¿Desea reemplazar el texto actual de la descripción con la pauta de evaluación y ponderaciones estándar (25-25-20-15-15%)?",
+      title: "Insertar Rúbrica: " + plantillaObj.nombre,
+      message: `¿Desea reemplazar el texto actual de la descripción con la plantilla <strong>${plantillaObj.nombre}</strong> (Escala 1 a 20 pts)?`,
       confirmText: "Sí, insertar rúbrica",
       onConfirm: function () {
         $('#actividadDesc').val(rubricaPlantilla);
@@ -3804,7 +3839,7 @@ function autoevaluarEntregaIndividualDocente(idEntrega) {
             </span>
           </div>
           <div class="alert alert-light border small text-start mt-3 mb-0" style="max-height: 250px; overflow-y: auto;">
-            <strong>Detalle de la Evaluación y Criterios:</strong><br>
+            <strong>Retroalimentación (IA):</strong><br>
             ${sgnFormatTextWithLinks(res.comentario)}
           </div>
         `,

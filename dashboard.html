@@ -949,10 +949,20 @@
                         </div>
                       </div>
                     </div>
-                    <div>
-                      <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="insertarPlantillaRubrica()" title="Insertar rúbrica de ejemplo con porcentajes y criterios en la descripción">
-                        <i class="fa-solid fa-table-list me-1"></i> Insertar Rúbrica de Ejemplo (20 pts)
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="insertarPlantillaRubrica('general')" title="Insertar rúbrica general estándar de ejemplo (20 pts)">
+                        <i class="fa-solid fa-table-list me-1"></i> Insertar Rúbrica de Ejemplo
                       </button>
+                      <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" title="Seleccionar tipo de rúbrica">
+                        <span class="visually-hidden">Toggle Dropdown</span>
+                      </button>
+                      <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li><h6 class="dropdown-header text-navy"><i class="fa-solid fa-sliders me-1"></i> Rúbricas de Ejemplo (20 pts)</h6></li>
+                        <li><a class="dropdown-item py-2" href="javascript:void(0)" onclick="insertarPlantillaRubrica('general')"><i class="fa-solid fa-list-check text-primary me-2"></i><strong>General / Estándar</strong> (4 criterios x 25%)</a></li>
+                        <li><a class="dropdown-item py-2" href="javascript:void(0)" onclick="insertarPlantillaRubrica('tecnica')"><i class="fa-solid fa-gears text-success me-2"></i><strong>Evaluación Técnica</strong> (Procedimientos y Resultados)</a></li>
+                        <li><a class="dropdown-item py-2" href="javascript:void(0)" onclick="insertarPlantillaRubrica('analitica')"><i class="fa-solid fa-brain text-warning me-2"></i><strong>Evaluación Analítica</strong> (Análisis Crítico y Propuestas)</a></li>
+                        <li><a class="dropdown-item py-2" href="javascript:void(0)" onclick="insertarPlantillaRubrica('teorica')"><i class="fa-solid fa-book-open text-info me-2"></i><strong>Evaluación Teórica</strong> (Conceptos y Sustento)</a></li>
+                      </ul>
                     </div>
                   </div>
                 </div>
