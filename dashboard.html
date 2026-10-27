@@ -453,15 +453,21 @@
                 <i class="fa-solid fa-graduation-cap text-primary me-2"></i> Gestión de Pagos de Extensión Universitaria
               </h4>
               <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button type="button" class="btn btn-primary-sgn fw-bold" onclick="openPagoExtensionModal()" title="Registrar una nueva declaración de pago manualmente">
+                  <i class="fa-solid fa-plus me-1"></i> Nueva Declaración
+                </button>
                 <button type="button" class="btn btn-outline-primary fw-bold" onclick="bulkMarcarPagoEstado('TRUE')" title="Marcar todos los estudiantes de la vista como Visto / Impartido">
                   <i class="fa-solid fa-check-double me-1"></i> Marcar Bloque Visto
                 </button>
-                <button type="button" class="btn btn-success text-white fw-bold px-3" onclick="exportExtensionCSV()" title="Exportar solo los estudiantes que aún no han visto el curso (FALSE)">
-                  <i class="fa-solid fa-file-csv me-1"></i> Exportar CSV (Pendientes)
+                <button type="button" class="btn btn-success text-white fw-bold px-3" onclick="exportExtensionCSV('todos')" title="Exportar todos los registros existentes del filtro actual en formato CSV">
+                  <i class="fa-solid fa-file-csv me-1"></i> Exportar CSV
+                </button>
+                <button type="button" class="btn btn-outline-success fw-bold px-3" onclick="exportExtensionCSV('pendientes')" title="Exportar solo los estudiantes que aún no han visto el curso (FALSE)">
+                  <i class="fa-solid fa-filter-circle-dollar me-1"></i> CSV (Solo Pendientes)
                 </button>
               </div>
             </div>
-            <p class="text-muted mb-4">Seleccione la Unidad Curricular / Taller de Extensión para consultar las personas inscritas. Al exportar CSV solo se incluirán los estudiantes con estado <strong>POR VER / PENDIENTE</strong>.</p>
+            <p class="text-muted mb-4">Administre, cree, edite o elimine las declaraciones de pago de Extensión Universitaria y exporte los registros en formato CSV (<code>cedula, curso_ofertado, referencia, monto, banco_origen, capture, fecha</code>).</p>
 
             <div class="row g-3 align-items-center mb-4 bg-light p-3 rounded-3 border">
               <div class="col-md-6">
@@ -1231,6 +1237,100 @@
           </span>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Crear / Editar Declaración de Pago de Extensión -->
+  <div class="modal fade" id="modalPagoExtension" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content shadow-lg border-0">
+        <div class="modal-header modal-header-blue">
+          <h5 class="modal-title fw-bold" id="modalPagoExtensionTitle">
+            <i class="fa-solid fa-money-check-dollar me-2"></i> Declaración de Pago de Extensión
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="formPagoExtension" onsubmit="event.preventDefault(); savePagoExtensionSubmit();">
+          <input type="hidden" id="pagoExtId">
+          <div class="modal-body p-4">
+            <div class="row g-3">
+              <!-- Estudiante -->
+              <div class="col-12">
+                <label class="form-label fw-bold text-navy mb-1">Estudiante *</label>
+                <div class="input-group mb-1">
+                  <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass text-primary"></i></span>
+                  <input type="text" id="pagoExtFiltroEstudiante" class="form-control form-control-sm" placeholder="Filtrar estudiante por cédula o nombre..." oninput="filtrarSelectEstudiantePagoExt(this.value)">
+                </div>
+                <select id="pagoExtUsuarioId" class="form-select" required>
+                  <option value="">-- Seleccione Estudiante --</option>
+                </select>
+              </div>
+
+              <!-- Curso / Taller Ofertado -->
+              <div class="col-md-6">
+                <label class="form-label fw-bold text-navy">Curso / Taller Ofertado *</label>
+                <select id="pagoExtCursoId" class="form-select" required>
+                  <option value="">-- Seleccione Curso o Taller --</option>
+                </select>
+              </div>
+
+              <!-- Banco de Origen -->
+              <div class="col-md-6">
+                <label class="form-label fw-bold text-navy">Banco de Origen *</label>
+                <select id="pagoExtBancoId" class="form-select" required>
+                  <option value="">-- Seleccione Banco --</option>
+                </select>
+              </div>
+
+              <!-- Número de Referencia -->
+              <div class="col-md-4">
+                <label class="form-label fw-bold text-navy">Nº de Referencia *</label>
+                <input type="text" id="pagoExtReferencia" class="form-control" required placeholder="Ej: 984572">
+              </div>
+
+              <!-- Monto (Bs.) -->
+              <div class="col-md-4">
+                <label class="form-label fw-bold text-navy">Monto (Bs.) *</label>
+                <input type="number" step="0.01" min="0" id="pagoExtMonto" class="form-control" required placeholder="Ej: 350.50">
+              </div>
+
+              <!-- Fecha de Transferencia -->
+              <div class="col-md-4">
+                <label class="form-label fw-bold text-navy">Fecha de Transferencia *</label>
+                <input type="date" id="pagoExtFecha" class="form-control" required>
+              </div>
+
+              <!-- Estado del Estudiante en el Curso -->
+              <div class="col-md-6">
+                <label class="form-label fw-bold text-navy">Estado del Registro *</label>
+                <select id="pagoExtEstado" class="form-select" required>
+                  <option value="FALSE">POR VER / PENDIENTE (FALSE)</option>
+                  <option value="TRUE">VISTO / IMPARTIDO (TRUE)</option>
+                </select>
+              </div>
+
+              <!-- URL del Comprobante (Capture) -->
+              <div class="col-md-6">
+                <label class="form-label fw-bold text-navy">Enlace del Comprobante (Capture)</label>
+                <input type="text" id="pagoExtCaptureUrl" class="form-control" placeholder="https://pub-...r2.dev/pagos/...">
+              </div>
+
+              <!-- Subir Nuevo Archivo de Comprobante (Opcional) -->
+              <div class="col-12">
+                <label class="form-label fw-bold text-navy">Subir / Reemplazar Archivo de Comprobante (Opcional - R2)</label>
+                <input type="file" id="pagoExtCaptureFile" class="form-control" accept="image/*,.pdf">
+                <small class="text-muted">Si selecciona un archivo aquí, se subirá a Cloudflare R2 y reemplazará automáticamente el enlace del comprobante.</small>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary-sgn fw-bold">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Guardar Declaración
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

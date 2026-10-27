@@ -74,7 +74,10 @@ function sgnFormatTextWithLinks(text) {
     let serviceLabel = "Enlace Web";
     let iconClass = "fa-solid fa-arrow-up-right-from-square text-primary";
     
-    if (lowerUrl.includes("drive.google.com") || lowerUrl.includes("docs.google.com")) {
+    if (lowerUrl.includes("r2.dev")) {
+      serviceLabel = "Repositorio Institucional (Cloudflare R2)";
+      iconClass = "fa-solid fa-file-shield text-primary";
+    } else if (lowerUrl.includes("drive.google.com") || lowerUrl.includes("docs.google.com")) {
       serviceLabel = "Google Drive / Documento Oficial";
       iconClass = "fa-brands fa-google-drive text-primary";
     } else if (lowerUrl.includes("canva.com") || lowerUrl.includes("canva.site")) {

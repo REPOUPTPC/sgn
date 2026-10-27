@@ -1829,19 +1829,37 @@ module.exports = async function handler(req, res) {
         });
       }
 
+      case "savePago":
+      case "updatePagoExtension":
       case "savePagoExtension": {
-        const { id_usuario, id_extension, id_banco, numero_transferencia, fecha_transferencia, monto } = params;
-        if (!id_usuario || !id_extension || !id_banco || !numero_transferencia) {
-          return res.status(200).json({ success: false, message: "Por favor complete todos los campos obligatorios del pago." });
+        const idPago = params.id || params.id_pago;
+        let idUsuario = params.id_usuario || params.id_estudiante;
+        const { id_extension, id_banco, numero_transferencia, fecha_transferencia, monto } = params;
+
+        // Si se envió cédula en vez de id_usuario, resolver el id del estudiante
+        if (!idUsuario && params.cedula) {
+          const cleanCed = cleanCedula(params.cedula);
+          const digitsOnly = cleanCed.replace(/^[VE]-/, "");
+          const stRows = await query(
+            "SELECT id FROM estudiantes WHERE cedula IN (?, ?) OR REPLACE(REPLACE(cedula, 'V-', ''), 'E-', '') = ?",
+            [cleanCed, digitsOnly, digitsOnly]
+          );
+          if (stRows[0]) {
+            idUsuario = stRows[0].id;
+          }
         }
 
-        let captureUrl = params.captureUrl || params.capture || "";
+        if (!idUsuario || !id_extension || !id_banco || !numero_transferencia) {
+          return res.status(200).json({ success: false, message: "Por favor complete todos los campos obligatorios del pago (Estudiante, Curso, Banco y Referencia)." });
+        }
+
+        let captureUrl = params.captureUrl !== undefined ? params.captureUrl : (params.capture !== undefined ? params.capture : "");
 
         // Si se envió archivo de captura en base64, subir a Cloudflare R2
         if (params.fileData) {
           try {
             const folder = "pagos";
-            const fileName = params.fileName || `pago_${id_usuario}_capture.png`;
+            const fileName = params.fileName || `pago_${idUsuario}_capture.png`;
             const uploadRes = await uploadBase64(folder, fileName, params.fileData);
             captureUrl = uploadRes.publicUrl;
           } catch (eUpload) {
@@ -1858,17 +1876,53 @@ module.exports = async function handler(req, res) {
           }
         }
 
-        const newId = await getNextId("pagos");
-        await execute(
-          "INSERT INTO pagos (id, id_usuario, id_extension, id_banco, monto, numero_transferencia, fecha_transferencia, capture, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          [newId, id_usuario, id_extension, id_banco, parseFloat(monto) || 0, numero_transferencia.toString().trim(), fechaFormateada, captureUrl, "FALSE"]
-        );
+        const estadoFinal = params.estado !== undefined && params.estado !== null && params.estado !== ""
+          ? (String(params.estado).toUpperCase() === "TRUE" || params.estado === true ? "TRUE" : "FALSE")
+          : "FALSE";
 
+        if (idPago) {
+          // Si estamos editando y no se envió un nuevo capture ni se pidió limpiarlo explícitamente, conservar el actual si captureUrl vino vacío y no se pasó params.capture
+          if (!params.fileData && params.capture === undefined && params.captureUrl === undefined) {
+            const currentRows = await query("SELECT capture FROM pagos WHERE id = ?", [idPago]);
+            if (currentRows[0]) {
+              captureUrl = currentRows[0].capture || "";
+            }
+          }
+          await execute(
+            "UPDATE pagos SET id_usuario = ?, id_extension = ?, id_banco = ?, monto = ?, numero_transferencia = ?, fecha_transferencia = ?, capture = ?, estado = ? WHERE id = ?",
+            [idUsuario, id_extension, id_banco, parseFloat(monto) || 0, numero_transferencia.toString().trim(), fechaFormateada, captureUrl, estadoFinal, idPago]
+          );
+          return res.status(200).json({
+            success: true,
+            message: `Declaración de pago #${idPago} actualizada exitosamente.`,
+            id: idPago,
+            capture: captureUrl
+          });
+        } else {
+          const newId = await getNextId("pagos");
+          await execute(
+            "INSERT INTO pagos (id, id_usuario, id_extension, id_banco, monto, numero_transferencia, fecha_transferencia, capture, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [newId, idUsuario, id_extension, id_banco, parseFloat(monto) || 0, numero_transferencia.toString().trim(), fechaFormateada, captureUrl, estadoFinal]
+          );
+          return res.status(200).json({
+            success: true,
+            message: "Inscripción y pago declarados exitosamente.",
+            id: newId,
+            capture: captureUrl
+          });
+        }
+      }
+
+      case "deletePago":
+      case "deletePagoExtension": {
+        const idPago = params.id_pago || params.id;
+        if (!idPago) {
+          return res.status(200).json({ success: false, message: "ID de declaración de pago requerido para eliminar." });
+        }
+        await execute("DELETE FROM pagos WHERE id = ?", [idPago]);
         return res.status(200).json({
           success: true,
-          message: "Inscripción y pago declarados exitosamente.",
-          id: newId,
-          capture: captureUrl
+          message: `Declaración de pago #${idPago} eliminada correctamente.`
         });
       }
 

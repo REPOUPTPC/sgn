@@ -1361,7 +1361,8 @@ function isValidDriveOrCanvaUrl(url) {
   return clean.includes("drive.google.com") || 
          clean.includes("docs.google.com") || 
          clean.includes("canva.com") || 
-         clean.includes("canva.site");
+         clean.includes("canva.site") ||
+         clean.includes("r2.dev");
 }
 
 function submitEstudianteEntrega() {

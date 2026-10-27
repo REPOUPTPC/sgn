@@ -4068,8 +4068,11 @@ function renderExtensionTable() {
       : `<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> POR VER (FALSE)</span>`;
 
     const btnToggleAction = isVisto
-      ? `<button class="btn btn-sm btn-outline-secondary fw-bold" onclick="togglePagoEstado(${p.id}, 'FALSE')" title="Cambiar a Por Ver (FALSE)"><i class="fa-solid fa-rotate-left me-1"></i> Reabrir</button>`
-      : `<button class="btn btn-sm btn-outline-success fw-bold" onclick="togglePagoEstado(${p.id}, 'TRUE')" title="Marcar como Visto (TRUE)"><i class="fa-solid fa-check me-1"></i> Marcar Visto</button>`;
+      ? `<button class="btn btn-sm btn-outline-secondary fw-bold" onclick="togglePagoEstado(${p.id}, 'FALSE')" title="Cambiar a Por Ver (FALSE)"><i class="fa-solid fa-rotate-left"></i></button>`
+      : `<button class="btn btn-sm btn-outline-success fw-bold" onclick="togglePagoEstado(${p.id}, 'TRUE')" title="Marcar como Visto (TRUE)"><i class="fa-solid fa-check"></i></button>`;
+
+    const btnEditAction = `<button class="btn btn-sm btn-outline-primary" onclick="openPagoExtensionModal(${p.id})" title="Editar Declaración de Pago"><i class="fa-solid fa-pen"></i></button>`;
+    const btnDeleteAction = `<button class="btn btn-sm btn-outline-danger" onclick="deletePagoExtension(${p.id})" title="Eliminar Declaración de Pago"><i class="fa-solid fa-trash"></i></button>`;
 
     $tbody.append(`
       <tr>
@@ -4083,9 +4086,248 @@ function renderExtensionTable() {
         <td><i class="fa-regular fa-calendar-check text-primary me-1"></i> ${p.fecha_transferencia}</td>
         <td>${captureHTML}</td>
         <td>${estadoBadge}</td>
-        <td>${btnToggleAction}</td>
+        <td>
+          <div class="d-flex align-items-center gap-1 flex-nowrap">
+            ${btnToggleAction}
+            ${btnEditAction}
+            ${btnDeleteAction}
+          </div>
+        </td>
       </tr>
     `);
+  });
+}
+
+/**
+ * Convierte fechas DD/MM/YYYY a YYYY-MM-DD para inputs date y exportación CSV
+ */
+function normalizeFechaPagoYMD(rawFecha) {
+  if (!rawFecha) return new Date().toISOString().slice(0, 10);
+  const str = rawFecha.toString().trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+      if (parts[0].length === 4) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+    }
+  }
+  return str;
+}
+
+/**
+ * Filtra y puebla el selector de estudiantes en el modal de Pago de Extensión
+ */
+function filtrarSelectEstudiantePagoExt(queryText = "", selectedId = null) {
+  const $select = $('#pagoExtUsuarioId');
+  const currentVal = selectedId !== null ? String(selectedId) : ($select.val() || "");
+  const q = (queryText || "").toString().trim().toLowerCase();
+
+  $select.empty().append('<option value="">-- Seleccione Estudiante --</option>');
+
+  const estudiantes = (sgnDb.estudiantes || []).slice().sort((a, b) => {
+    return (a.nombre_completo || "").localeCompare(b.nombre_completo || "");
+  });
+
+  estudiantes.forEach(st => {
+    const label = `${st.cedula} — ${st.nombre_completo}`;
+    if (!q || label.toLowerCase().includes(q) || String(st.id) === currentVal) {
+      $select.append(`<option value="${st.id}">${label}</option>`);
+    }
+  });
+
+  if (currentVal) {
+    $select.val(currentVal);
+  }
+}
+
+/**
+ * Abre el modal para Crear o Editar una Declaración de Pago de Extensión
+ */
+function openPagoExtensionModal(idPago = null) {
+  $('#pagoExtFiltroEstudiante').val('');
+
+  // Poblar cursos
+  const $selectCurso = $('#pagoExtCursoId');
+  $selectCurso.empty().append('<option value="">-- Seleccione Curso o Taller --</option>');
+  (sgnDb.extension || []).forEach(ext => {
+    $selectCurso.append(`<option value="${ext.id}">${ext.taller} ($${ext.valor} USD)</option>`);
+  });
+
+  // Poblar bancos
+  const $selectBanco = $('#pagoExtBancoId');
+  $selectBanco.empty().append('<option value="">-- Seleccione Banco --</option>');
+  (sgnDb.banco || []).forEach(b => {
+    $selectBanco.append(`<option value="${b.id}">${b.banco}</option>`);
+  });
+
+  const fileInput = document.getElementById('pagoExtCaptureFile');
+  if (fileInput) fileInput.value = '';
+
+  if (idPago) {
+    const pago = (sgnDb.pagosExtJoined || []).find(p => p.id == idPago) || (sgnDb.pagos || []).find(p => p.id == idPago);
+    if (!pago) {
+      sgnShowModal({ title: "Error", message: "No se encontró el registro de pago solicitado.", type: "danger" });
+      return;
+    }
+
+    $('#modalPagoExtensionTitle').html(`<i class="fa-solid fa-pen-to-square me-2"></i> Editar Declaración de Pago #${pago.id}`);
+    $('#pagoExtId').val(pago.id);
+    filtrarSelectEstudiantePagoExt("", pago.id_usuario);
+    $('#pagoExtCursoId').val(pago.id_extension);
+    $('#pagoExtBancoId').val(pago.id_banco);
+    $('#pagoExtReferencia').val(pago.numero_transferencia || "");
+    $('#pagoExtMonto').val(parseFloat(pago.monto || 0).toFixed(2));
+    $('#pagoExtFecha').val(normalizeFechaPagoYMD(pago.fecha_transferencia));
+    $('#pagoExtEstado').val((String(pago.estado).toUpperCase() === "TRUE") ? "TRUE" : "FALSE");
+    $('#pagoExtCaptureUrl').val(pago.capture || "");
+  } else {
+    const selectedCursoFiltro = $('#selectExtensionGestion').val() || "";
+    $('#modalPagoExtensionTitle').html(`<i class="fa-solid fa-plus-circle me-2"></i> Nueva Declaración de Pago de Extensión`);
+    $('#pagoExtId').val("");
+    filtrarSelectEstudiantePagoExt("", "");
+    $('#pagoExtCursoId').val(selectedCursoFiltro);
+    $('#pagoExtBancoId').val("");
+    $('#pagoExtReferencia').val("");
+    $('#pagoExtMonto').val("");
+    $('#pagoExtFecha').val(new Date().toISOString().slice(0, 10));
+    $('#pagoExtEstado').val("FALSE");
+    $('#pagoExtCaptureUrl').val("");
+  }
+
+  const modalEl = document.getElementById('modalPagoExtension');
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+}
+
+/**
+ * Guarda (Crea o Actualiza) una Declaración de Pago de Extensión desde el Dashboard
+ */
+function savePagoExtensionSubmit() {
+  const idPago = $('#pagoExtId').val();
+  const idUsuario = $('#pagoExtUsuarioId').val();
+  const idExtension = $('#pagoExtCursoId').val();
+  const idBanco = $('#pagoExtBancoId').val();
+  const referencia = $('#pagoExtReferencia').val().trim();
+  const monto = $('#pagoExtMonto').val();
+  const rawFecha = $('#pagoExtFecha').val();
+  const estado = $('#pagoExtEstado').val();
+  const captureUrl = $('#pagoExtCaptureUrl').val().trim();
+
+  if (!idUsuario || !idExtension || !idBanco || !referencia || !rawFecha) {
+    sgnShowModal({
+      title: "Campos Requeridos",
+      message: "Por favor complete todos los campos obligatorios (Estudiante, Curso, Banco, Referencia y Fecha).",
+      type: "warning"
+    });
+    return;
+  }
+
+  // Formatear fecha a DD/MM/YYYY para consistencia en BD
+  let fechaFormateada = rawFecha;
+  if (rawFecha.includes('-')) {
+    const parts = rawFecha.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      fechaFormateada = `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+    }
+  }
+
+  const fileInput = document.getElementById('pagoExtCaptureFile');
+  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+
+  const enviarDatos = function (fileData, fileName) {
+    const payload = {
+      id: idPago || "",
+      id_usuario: idUsuario,
+      id_extension: idExtension,
+      id_banco: idBanco,
+      numero_transferencia: referencia,
+      monto: parseFloat(monto) || 0,
+      fecha_transferencia: fechaFormateada,
+      estado: estado || "FALSE",
+      capture: captureUrl,
+      fileData: fileData || "",
+      fileName: fileName || ""
+    };
+
+    sgnApiCall("savePagoExtension", payload, { showLoading: true })
+      .then(function (res) {
+        if (res && res.success) {
+          const modalEl = document.getElementById('modalPagoExtension');
+          const modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+
+          sgnShowModal({
+            title: "Éxito",
+            message: res.message || "Declaración de pago guardada correctamente.",
+            type: "success"
+          });
+          loadDashboardData();
+        } else {
+          sgnShowModal({
+            title: "Error",
+            message: (res && res.message) ? res.message : "No se pudo guardar la declaración de pago.",
+            type: "danger"
+          });
+        }
+      });
+  };
+
+  if (file) {
+    if (file.size > 10 * 1024 * 1024) {
+      sgnShowModal({ title: "Archivo Muy Grande", message: "El tamaño máximo permitido para el comprobante es 10MB.", type: "warning" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      enviarDatos(e.target.result, file.name);
+    };
+    reader.onerror = function () {
+      sgnShowModal({ title: "Error de Lectura", message: "No se pudo leer el archivo seleccionado.", type: "danger" });
+    };
+    reader.readAsDataURL(file);
+  } else {
+    enviarDatos("", "");
+  }
+}
+
+/**
+ * Elimina una Declaración de Pago de Extensión
+ */
+function deletePagoExtension(idPago) {
+  const pago = (sgnDb.pagosExtJoined || []).find(p => p.id == idPago);
+  const desc = pago
+    ? `del estudiante <strong>${pago.nombre_completo} (${pago.cedula})</strong> en el curso <strong>${pago.curso}</strong> (Ref: <code>${pago.numero_transferencia}</code>)`
+    : `#${idPago}`;
+
+  sgnShowConfirm({
+    title: "Eliminar Declaración de Pago",
+    message: `¿Está seguro de eliminar permanentemente la declaración de pago <strong>#${idPago}</strong> ${desc}?<br><small class="text-danger">Esta acción no se puede deshacer.</small>`,
+    confirmText: "Sí, Eliminar",
+    type: "danger",
+    onConfirm: function () {
+      sgnApiCall("deletePagoExtension", { id_pago: idPago }, { showLoading: true })
+        .then(function (res) {
+          if (res && res.success) {
+            sgnShowModal({
+              title: "Registro Eliminado",
+              message: res.message || "La declaración de pago fue eliminada exitosamente.",
+              type: "success"
+            });
+            loadDashboardData();
+          } else {
+            sgnShowModal({
+              title: "Error al Eliminar",
+              message: (res && res.message) ? res.message : "No se pudo eliminar la declaración de pago.",
+              type: "danger"
+            });
+          }
+        });
+    }
   });
 }
 
@@ -4117,7 +4359,7 @@ function bulkMarcarPagoEstado(nuevoEstado) {
 
   sgnShowConfirm({
     title: "Actualización Masiva en Bloque",
-    message: `¿Está seguro de marcar como <strong>${estadoTxt}</strong> a TODOS los estudiantes inscritos en: <br><strong class="text-primary">${nombreCurso}</strong>?<br><small class="text-muted">Los estudiantes marcados con estado TRUE seguirán visibles en el panel pero quedarán excluidos de las futuras descargas en CSV.</small>`,
+    message: `¿Está seguro de marcar como <strong>${estadoTxt}</strong> a TODOS los estudiantes inscritos en: <br><strong class="text-primary">${nombreCurso}</strong>?<br><small class="text-muted">Los estudiantes marcados con estado TRUE seguirán visibles en el panel pero quedarán excluidos de las descargas filtradas por pendientes.</small>`,
     confirmText: "Sí, Actualizar Bloque",
     onConfirm: function () {
       sgnApiCall("bulkUpdatePagoEstado", { id_extension: selectedCursoId || "", estado: nuevoEstado }, { showLoading: true })
@@ -4162,43 +4404,57 @@ function toggleEstadoCurso(idExtension, nuevoEstado) {
   });
 }
 
-function exportExtensionCSV() {
+/**
+ * Exporta las declaraciones de pago existentes en formato CSV con las columnas:
+ * cedula, curso_ofertado, referencia, monto, banco_origen, capture, fecha
+ */
+function exportExtensionCSV(modo = 'todos') {
   const selectedCursoId = $('#selectExtensionGestion').val();
+  const searchQuery = ($('#searchExtension').val() || "").toString().trim().toLowerCase();
   
-  let list = sgnDb.pagosExtJoined || [];
+  let list = (sgnDb.pagosExtJoined || []).slice();
   if (selectedCursoId) {
     list = list.filter(p => p.id_extension == selectedCursoId);
   }
 
-  // EXCLUIR los que ya fueron vistos / impartidos (estado === "TRUE")
-  list = list.filter(p => p.estado !== "TRUE");
+  if (searchQuery) {
+    list = list.filter(p => {
+      const hay = `${p.cedula} ${p.nombre_completo} ${p.curso} ${p.banco} ${p.numero_transferencia} ${p.fecha_transferencia}`.toLowerCase();
+      return hay.includes(searchQuery);
+    });
+  }
+
+  if (modo === 'pendientes') {
+    list = list.filter(p => p.estado !== "TRUE");
+  }
 
   if (list.length === 0) {
     sgnShowModal({
-      title: "Sin Registros Pendientes",
-      message: "No existen personas pendientes (FALSE) por exportar para el filtro seleccionado. Todos los inscritos ya tienen el estado 'Visto / Impartido' (TRUE) y fueron excluidos del CSV.",
+      title: "Sin Registros para Exportar",
+      message: modo === 'pendientes'
+        ? "No existen declaraciones de pago pendientes (FALSE) para el filtro seleccionado."
+        : "No existen declaraciones de pago registradas para el filtro seleccionado.",
       type: "info"
     });
     return;
   }
 
-  const headers = ["id", "cedula", "nombre_completo", "curso", "banco", "monto", "numero_transferencia", "fecha_transferencia", "capture", "estado"];
+  const headers = ["cedula", "curso_ofertado", "referencia", "monto", "banco_origen", "capture", "fecha"];
   
   let csvRows = [];
   csvRows.push(headers.join(","));
 
   list.forEach(item => {
+    const montoFormatted = (parseFloat(item.monto) || 0).toFixed(2);
+    const fechaYMD = normalizeFechaPagoYMD(item.fecha_transferencia);
     const row = [
-      escapeCsvField(item.id),
       escapeCsvField(item.cedula),
-      escapeCsvField(item.nombre_completo),
       escapeCsvField(item.curso),
-      escapeCsvField(item.banco),
-      escapeCsvField(item.monto),
       escapeCsvField(item.numero_transferencia),
-      escapeCsvField(item.fecha_transferencia),
-      escapeCsvField(item.capture),
-      escapeCsvField(item.estado || "FALSE")
+      escapeCsvField(montoFormatted),
+      escapeCsvField(item.banco),
+      escapeCsvField(item.capture || ""),
+      escapeCsvField(fechaYMD)
     ];
     csvRows.push(row.join(","));
   });
@@ -4210,7 +4466,8 @@ function exportExtensionCSV() {
   const a = document.createElement("a");
   a.href = url;
   const filterName = selectedCursoId ? "curso_" + selectedCursoId : "todos";
-  a.download = `extension_pagos_pendientes_${filterName}_${new Date().toISOString().slice(0,10)}.csv`;
+  const suffixModo = modo === 'pendientes' ? "pendientes" : "declaraciones";
+  a.download = `extension_${suffixModo}_${filterName}_${new Date().toISOString().slice(0,10)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
