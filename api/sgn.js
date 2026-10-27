@@ -218,7 +218,8 @@ module.exports = async function handler(req, res) {
 
         const notasDetalle = studentUnidades.map(uc => {
           const prof = profesores.find(p => p.id == uc.id_prof);
-          const rn = relacionNotas.find(r => r.id_unidad_curricular == uc.id) || {};
+          const rnMatches = relacionNotas.filter(r => r.id_unidad_curricular == uc.id);
+          const rn = rnMatches[0] || {};
 
           let ucSec = (uc.seccion || "").toString().trim().replace(/^'/, "");
           const fechas = fechasNotas.filter(fn => {
@@ -226,19 +227,46 @@ module.exports = async function handler(req, res) {
             return fn.id_programa_formacion == uc.id_programa_formacion && fnSec === ucSec;
           });
 
-          const cantEval = parseInt(rn.cantidad_evaluaciones) || 4;
-          let e1 = parseFloat(rn.e1) || 0;
-          let e2 = parseFloat(rn.e2) || 0;
-          let e3 = parseFloat(rn.e3) || 0;
-          let e4 = parseFloat(rn.e4) || 0;
-          let e5 = cantEval === 5 ? (parseFloat(rn.e5) || 0) : 0;
+          const cantEval = rnMatches.reduce((maxC, r) => Math.max(maxC, parseInt(r.cantidad_evaluaciones) || 4), 4);
+          const actividadesDeUc = actividadesAll.filter(a => a.id_unidad_curricular == uc.id);
+
+          // Unificar E1..E5 tomando siempre el MAYOR valor entre relacion_programa_notas y actividades_entregadas
+          const evalScores = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0 };
+          ["e1", "e2", "e3", "e4", "e5"].forEach(evKey => {
+            let maxVal = 0;
+            rnMatches.forEach(r => {
+              const v = parseFloat(r[evKey]);
+              if (!isNaN(v) && v > maxVal) maxVal = v;
+            });
+            actividadesDeUc.forEach(act => {
+              const actEv = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
+              if (actEv === evKey) {
+                const matchingEnts = entregasAll.filter(e => String(e.id_actividades_asignadas).trim() === String(act.id).trim());
+                matchingEnts.forEach(ent => {
+                  const vEnt = parseFloat(ent.nota);
+                  if (!isNaN(vEnt) && vEnt > maxVal) maxVal = vEnt;
+                });
+              }
+            });
+            evalScores[evKey] = Math.min(20, Math.max(0, maxVal));
+          });
+
+          let e1 = evalScores.e1;
+          let e2 = evalScores.e2;
+          let e3 = evalScores.e3;
+          let e4 = evalScores.e4;
+          let e5 = cantEval === 5 ? evalScores.e5 : 0;
 
           let activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
           let calcTotal = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
 
-          const actividadesDeUc = actividadesAll.filter(a => a.id_unidad_curricular == uc.id);
           const actividadesConEntrega = actividadesDeUc.map(act => {
-            const ent = entregasAll.find(e => String(e.id_actividades_asignadas).trim() === String(act.id).trim());
+            // Si existen múltiples entregas para la misma actividad, priorizar la de mayor nota o más reciente
+            const matchingEnts = entregasAll.filter(e => String(e.id_actividades_asignadas).trim() === String(act.id).trim());
+            const ent = matchingEnts.sort((a, b) => (parseFloat(b.nota) || 0) - (parseFloat(a.nota) || 0) || (Number(b.id) - Number(a.id)))[0];
+
+            const numEvalKey = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
+            const unifiedEvalScore = evalScores[numEvalKey] !== undefined ? evalScores[numEvalKey] : 0;
 
             const tipoAct = (act.tipo_actividad || "ENTREGA").toString().toUpperCase().trim() || "ENTREGA";
             let quizConfigSafe = null;
@@ -256,7 +284,13 @@ module.exports = async function handler(req, res) {
             }
 
             const isEnCurso = tipoAct === "QUIZ" && ent && String(ent.entrega || "").trim() === "EN_CURSO";
-            const hasQuizAttempt = tipoAct === "QUIZ" && ent && !isEnCurso && (ent.quiz_detalle_json || ent.entrega || (ent.nota !== undefined && ent.nota !== null && ent.nota !== ""));
+            const hasEntGrade = ent && ent.nota !== undefined && ent.nota !== null && ent.nota !== "";
+            const hasUnifiedGrade = hasEntGrade || unifiedEvalScore > 0;
+            const finalActNota = hasUnifiedGrade
+              ? Math.max(hasEntGrade ? (parseFloat(ent.nota) || 0) : 0, unifiedEvalScore)
+              : "";
+
+            const hasQuizAttempt = tipoAct === "QUIZ" && ent && !isEnCurso && (ent.quiz_detalle_json || ent.entrega || hasUnifiedGrade);
             const lapsoInfo = evaluateLapsoActividad(act);
 
             return {
@@ -269,7 +303,7 @@ module.exports = async function handler(req, res) {
               porcentaje_restante: lapsoInfo.porcentaje_restante,
               vence_hoy: lapsoInfo.vence_hoy,
               lapso_vencido: lapsoInfo.vencida,
-              numero_evaluacion: (act.numero_evaluacion || "e1").toString().toLowerCase(),
+              numero_evaluacion: numEvalKey,
               descripcion: act.descripcion,
               tipo_actividad: tipoAct,
               tiempo_minutos: quizConfigSafe ? quizConfigSafe.tiempo_minutos : (parseInt(act.tiempo_minutos) || 0),
@@ -280,7 +314,7 @@ module.exports = async function handler(req, res) {
               hora_fin: ent ? (ent.hora_fin || "") : "",
               entrega: (ent && !isEnCurso) ? ent.entrega : "",
               fecha_entrega: (ent && !isEnCurso) ? ent.fecha_entrega : "",
-              nota: ent && ent.nota !== undefined && ent.nota !== null && ent.nota !== "" ? parseFloat(ent.nota) : "",
+              nota: finalActNota,
               comentario: ent ? (ent.comentario || "") : ""
             };
           });
@@ -814,6 +848,11 @@ module.exports = async function handler(req, res) {
             [newId, idEstudiante, idUnidadCurricular, cantEval, e1, e2, e3, e4, e5, totalCalculado]
           );
         }
+
+        if (idEstudiante && idUnidadCurricular) {
+          await syncRelacionToEntregasSql(idEstudiante, idUnidadCurricular, { e1, e2, e3, e4, e5 });
+        }
+
         return res.status(200).json({ success: true, message: "Calificaciones guardadas con éxito.", total: totalCalculado });
       }
 
@@ -826,7 +865,11 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ success: false, message: "No se proporcionaron notas para guardar." });
         }
 
-        const existingRows = await query("SELECT id, id_estudiante, id_unidad_curricular FROM relacion_programa_notas");
+        const [existingRows, allActs, allEnts] = await Promise.all([
+          query("SELECT id, id_estudiante, id_unidad_curricular FROM relacion_programa_notas"),
+          query("SELECT id, id_unidad_curricular, numero_evaluacion FROM actividades_asignadas"),
+          query("SELECT id, id_actividades_asignadas, id_estudiante, nota FROM actividades_entregadas")
+        ]);
         const keyMap = new Map();
         const idSet = new Set();
         let maxId = 0;
@@ -883,6 +926,27 @@ module.exports = async function handler(req, res) {
               args: [maxId, idEstudiante, idUnidadCurricular, cantEval, e1, e2, e3, e4, e5, totalCalculado]
             });
             addedCount++;
+          }
+
+          // Sincronizar también con actividades_entregadas si existen entregas para este estudiante y unidad curricular
+          if (idEstudiante && idUnidadCurricular) {
+            const evalMap = { e1, e2, e3, e4, e5 };
+            const uActs = allActs.filter(a => String(a.id_unidad_curricular) === String(idUnidadCurricular));
+            uActs.forEach(act => {
+              const evKey = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
+              const newScore = evalMap[evKey];
+              if (newScore !== undefined && newScore > 0) {
+                const matchingEnts = allEnts.filter(en => String(en.id_actividades_asignadas) === String(act.id) && String(en.id_estudiante) === String(idEstudiante));
+                matchingEnts.forEach(en => {
+                  if (parseFloat(en.nota) !== newScore) {
+                    stmts.push({
+                      sql: "UPDATE actividades_entregadas SET nota = ? WHERE id = ?",
+                      args: [newScore, en.id]
+                    });
+                  }
+                });
+              }
+            });
           }
         }
 
@@ -998,14 +1062,25 @@ module.exports = async function handler(req, res) {
         const idAct = params.id_actividades_asignadas || params.id;
         const batchResults = await batch([
           { sql: "SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ?", args: [idAct] },
-          { sql: "SELECT id, cedula, nombre_completo FROM estudiantes", args: [] }
+          { sql: "SELECT id, cedula, nombre_completo FROM estudiantes", args: [] },
+          { sql: "SELECT id, id_unidad_curricular, numero_evaluacion FROM actividades_asignadas WHERE id = ?", args: [idAct] },
+          { sql: "SELECT * FROM relacion_programa_notas WHERE id_unidad_curricular IN (SELECT id_unidad_curricular FROM actividades_asignadas WHERE id = ?)", args: [idAct] }
         ], "read");
 
         const entregas = batchResults[0]?.rows || [];
         const estudiantes = batchResults[1]?.rows || [];
+        const actObj = (batchResults[2]?.rows || [])[0] || null;
+        const relNotas = batchResults[3]?.rows || [];
+        const evKey = actObj ? (actObj.numero_evaluacion || "e1").toString().toLowerCase().trim() : "e1";
 
         const detalle = entregas.map(ent => {
           const est = estudiantes.find(s => s.id == ent.id_estudiante);
+          const relEst = relNotas.filter(r => String(r.id_estudiante) === String(ent.id_estudiante));
+          const maxRelVal = relEst.reduce((m, r) => Math.max(m, parseFloat(r[evKey]) || 0), 0);
+          const hasEntNota = ent.nota !== undefined && ent.nota !== null && ent.nota !== "";
+          const entVal = hasEntNota ? (parseFloat(ent.nota) || 0) : 0;
+          const finalNota = (hasEntNota || maxRelVal > 0) ? Math.max(entVal, maxRelVal) : "";
+
           return {
             id: ent.id,
             id_actividades_asignadas: ent.id_actividades_asignadas,
@@ -1014,7 +1089,7 @@ module.exports = async function handler(req, res) {
             nombre_estudiante: est ? est.nombre_completo : "Estudiante",
             entrega: ent.entrega,
             fecha_entrega: ent.fecha_entrega,
-            nota: ent.nota !== undefined && ent.nota !== null && ent.nota !== "" ? parseFloat(ent.nota) : "",
+            nota: finalNota,
             comentario: ent.comentario || "",
             quiz_detalle_json: ent.quiz_detalle_json || "",
             hora_inicio: ent.hora_inicio || "",
@@ -2070,6 +2145,31 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
       "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, total) VALUES (?, ?, ?, 4, ?, ?, ?, ?, ?, ?)",
       [newId, idEstudiante, idUnidad, e1, e2, e3, e4, e5, total]
     );
+  }
+}
+
+/**
+ * Helper: Sincroniza las notas E1..E5 de relacion_programa_notas hacia actividades_entregadas
+ */
+async function syncRelacionToEntregasSql(idEstudiante, idUnidadCurricular, evalScores = {}) {
+  const actRows = await query("SELECT id, numero_evaluacion FROM actividades_asignadas WHERE id_unidad_curricular = ?", [idUnidadCurricular]);
+  if (!actRows || actRows.length === 0) return;
+
+  for (const act of actRows) {
+    const evKey = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
+    const score = evalScores[evKey];
+    if (score !== undefined && score !== null && score !== "") {
+      const cleanScore = Math.min(20, Math.max(0, parseFloat(score) || 0));
+      const entRows = await query(
+        "SELECT id, nota FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?",
+        [act.id, idEstudiante]
+      );
+      for (const ent of entRows) {
+        if (cleanScore > 0 || (ent.nota !== undefined && ent.nota !== null && ent.nota !== "")) {
+          await execute("UPDATE actividades_entregadas SET nota = ? WHERE id = ?", [cleanScore, ent.id]);
+        }
+      }
+    }
   }
 }
 

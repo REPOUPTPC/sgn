@@ -940,19 +940,43 @@ function renderModalCalificacionesEstudianteContenido() {
     const uSec = String(u.seccion || '170').replace(/^'/, '');
     const uNombre = u.unidad_curricular || u['unidad curricular'] || 'Unidad Curricular';
 
-    // Obtener relación de notas (E1 a E5)
-    const rn = (sgnDb.relacionNotas || []).find(r => String(r.id_unidad_curricular) === String(u.id) && String(r.id_estudiante) === String(est.id)) || {};
-    const cantEval = parseInt(rn.cantidad_evaluaciones) || 4;
+    // Obtener relación de notas (E1 a E5) y actividades de la materia para unificar siempre la nota de mayor valor
+    const rnMatches = (sgnDb.relacionNotas || []).filter(r => String(r.id_unidad_curricular) === String(u.id) && String(r.id_estudiante) === String(est.id));
+    const rn = rnMatches[0] || {};
+    const cantEval = rnMatches.reduce((maxC, r) => Math.max(maxC, parseInt(r.cantidad_evaluaciones) || 4), 4);
+    const actividades = (sgnDb.actividadesAsignadas || []).filter(a => String(a.id_unidad_curricular) === String(u.id));
 
-    const e1 = parseFloat(rn.e1) || 0;
-    const e2 = parseFloat(rn.e2) || 0;
-    const e3 = parseFloat(rn.e3) || 0;
-    const e4 = parseFloat(rn.e4) || 0;
-    const e5 = cantEval === 5 ? (parseFloat(rn.e5) || 0) : 0;
+    const unifiedEval = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0 };
+    ['e1', 'e2', 'e3', 'e4', 'e5'].forEach(evKey => {
+      let maxVal = 0;
+      rnMatches.forEach(r => {
+        const v = parseFloat(r[evKey]);
+        if (!isNaN(v) && v > maxVal) maxVal = v;
+      });
+      actividades.forEach(act => {
+        if ((act.numero_evaluacion || 'e1').toString().toLowerCase().trim() === evKey) {
+          const matchingEnts = (sgnDb.actividadesEntregadas || []).filter(e =>
+            String(e.id_actividades_asignadas).trim() === String(act.id).trim() &&
+            String(e.id_estudiante).trim() === String(est.id).trim()
+          );
+          matchingEnts.forEach(ent => {
+            const vEnt = parseFloat(ent.nota);
+            if (!isNaN(vEnt) && vEnt > maxVal) maxVal = vEnt;
+          });
+        }
+      });
+      unifiedEval[evKey] = Math.min(20, Math.max(0, maxVal));
+    });
+
+    const e1 = unifiedEval.e1;
+    const e2 = unifiedEval.e2;
+    const e3 = unifiedEval.e3;
+    const e4 = unifiedEval.e4;
+    const e5 = cantEval === 5 ? unifiedEval.e5 : 0;
 
     const activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
     const avgCalculado = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
-    const totalNum = parseFloat(rn.total !== undefined && rn.total !== "" ? rn.total : avgCalculado) || 0;
+    const totalNum = parseFloat(avgCalculado) || 0;
 
     // Fechas de evaluación configuradas para este programa y sección
     const fechas = (sgnDb.fechasNotas || []).filter(fn => {
@@ -963,7 +987,7 @@ function renderModalCalificacionesEstudianteContenido() {
     // Construir casillas de corrección de notas E1..E4 (o E5)
     let evalsInputsHtml = '';
     for (let i = 1; i <= cantEval; i++) {
-      const val = (rn['e' + i] !== undefined && rn['e' + i] !== "") ? rn['e' + i] : 0;
+      const val = unifiedEval['e' + i] !== undefined ? unifiedEval['e' + i] : 0;
       const fnObj = fechas.find(f => (f.evaluacion || '').toLowerCase() === ('e' + i));
       const fnFecha = fnObj ? fnObj.fecha : 'Sin fecha';
       const fnDesc = fnObj ? fnObj.descripcion : '';
@@ -986,7 +1010,6 @@ function renderModalCalificacionesEstudianteContenido() {
     }
 
     // Actividades asignadas para esta materia
-    const actividades = (sgnDb.actividadesAsignadas || []).filter(a => String(a.id_unidad_curricular) === String(u.id));
     let actividadesListHtml = '';
 
     if (actividades.length === 0) {
@@ -997,20 +1020,24 @@ function renderModalCalificacionesEstudianteContenido() {
       `;
     } else {
       actividades.forEach(act => {
-        const evalUpper = (act.numero_evaluacion || 'e1').toUpperCase();
+        const evalKeyLower = (act.numero_evaluacion || 'e1').toString().toLowerCase().trim();
+        const evalUpper = evalKeyLower.toUpperCase();
         const tipoAct = String(act.tipo_actividad || 'ENTREGA').toUpperCase();
         const isQuiz = (tipoAct === 'QUIZ');
 
-        // Buscar entrega del estudiante
-        const ent = (sgnDb.actividadesEntregadas || []).find(e =>
+        // Buscar entrega del estudiante (si hay varias, priorizar la de mayor nota)
+        const matchingEnts = (sgnDb.actividadesEntregadas || []).filter(e =>
           String(e.id_actividades_asignadas).trim() === String(act.id).trim() &&
           String(e.id_estudiante).trim() === String(est.id).trim()
         );
+        const ent = matchingEnts.sort((a, b) => (parseFloat(b.nota) || 0) - (parseFloat(a.nota) || 0) || (Number(b.id) - Number(a.id)))[0];
 
         const hasEntrega = !!ent;
         const isEnCurso = isQuiz && ent && String(ent.entrega || '').trim() === 'EN_CURSO';
-        const isCalificado = ent && (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
-        const notaVal = isCalificado ? ent.nota : "";
+        const hasEntNota = ent && (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
+        const unifiedScore = unifiedEval[evalKeyLower] || 0;
+        const isCalificado = hasEntNota || unifiedScore > 0;
+        const notaVal = isCalificado ? Math.max(hasEntNota ? (parseFloat(ent.nota) || 0) : 0, unifiedScore) : "";
         const comentarioVal = (ent && ent.comentario) ? ent.comentario : "";
 
         let statusBadgeHtml = '';
@@ -1231,6 +1258,21 @@ function guardarEvaluacionesEstudianteModal(idEstudiante, idUnidad, idRel, cantE
           total: res.total
         });
       }
+
+      // Sincronizar también en memoria local las entregas de actividades asociadas a E1..E5
+      const evalMapLocal = { e1: e1, e2: e2, e3: e3, e4: e4, e5: e5 };
+      const uActsLocal = (sgnDb.actividadesAsignadas || []).filter(a => String(a.id_unidad_curricular) === String(idUnidad));
+      uActsLocal.forEach(act => {
+        const evKey = (act.numero_evaluacion || 'e1').toString().toLowerCase().trim();
+        const scoreVal = evalMapLocal[evKey];
+        if (scoreVal !== undefined) {
+          (sgnDb.actividadesEntregadas || []).forEach(ent => {
+            if (String(ent.id_actividades_asignadas) === String(act.id) && String(ent.id_estudiante) === String(idEstudiante)) {
+              ent.nota = scoreVal;
+            }
+          });
+        }
+      });
 
       sgnShowModal({
         title: "Notas Guardadas",
