@@ -1,17 +1,17 @@
 /**
  * CONFIGURACIÓN GLOBAL Y HELPER DE API AJAX - SGN
- * Apps Script URL: https://script.google.com/macros/s/AKfycbx_8nk6DvGAfGoMbtxNRON02M3nezHbGjBG6HF6xriBkkrTiF7Kek0KkqdUVopqFGI/exec
+ * Backend: Vercel Serverless + Turso SQLite + Cloudflare R2
  */
 
 const SGN_CONFIG = {
-  // URL oficial de Google Apps Script backend
-  API_URL: "https://script.google.com/macros/s/AKfycbx_8nk6DvGAfGoMbtxNRON02M3nezHbGjBG6HF6xriBkkrTiF7Kek0KkqdUVopqFGI/exec",
+  // Endpoint unificado de alta velocidad en Vercel / Turso
+  API_URL: "/api/sgn",
   APP_NAME: "Sistema de Gestión de Notas (SGN)",
   SECRET_SUPERADMIN: "CYT_01012023"
 };
 
 /**
- * Petición AJAX unificada al backend Apps Script
+ * Petición AJAX unificada al backend de alta velocidad
  * Soporta formateo automático JSON y manejo de errores CORS/red
  */
 function sgnApiCall(action, data = {}, options = {}) {
@@ -27,13 +27,13 @@ function sgnApiCall(action, data = {}, options = {}) {
     type: "POST",
     dataType: "json",
     data: JSON.stringify(payload),
-    contentType: "text/plain;charset=utf-8" // Requerido para evitar problemas CORS con Apps Script
+    contentType: "application/json;charset=utf-8"
   }).fail(function (xhr, status, error) {
     console.error("API Call Error:", status, error);
     if (typeof sgnShowModal === 'function') {
       sgnShowModal({
         title: "Error de Conexión",
-        message: "No se pudo conectar con el servidor de Google Apps Script. Por favor verifique su conexión a Internet.",
+        message: "No se pudo conectar con el servidor SGN. Por favor verifique su conexión a Internet.",
         type: "danger"
       });
     }

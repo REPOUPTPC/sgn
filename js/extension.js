@@ -32,14 +32,17 @@ $(document).ready(function () {
 
       // Intentar cargar directamente desde el caché de sesión de extensión
       const cachedExt = typeof sgnGetExtensionCache === 'function' ? sgnGetExtensionCache(cleaned.full) : null;
-      if (cachedExt && cachedExt.student && cachedExt.extensionList && cachedExt.extensionList.length > 0) {
+      if (cachedExt && cachedExt.student && Array.isArray(cachedExt.extensionList)) {
         renderEstudianteExtensionData(cachedExt, false);
+        consultarEstudianteExtension(cleaned.full, { showLoading: false });
       } else {
         const cachedStudent = typeof sgnGetActiveStudentSession === 'function' ? sgnGetActiveStudentSession(cleaned.full) : null;
         if (cachedStudent && cachedStudent.student) {
           mostrarFichaEstudianteParcial(cachedStudent.student);
+          consultarEstudianteExtension(cleaned.full, { showLoading: false });
+        } else {
+          consultarEstudianteExtension(cleaned.full, { showLoading: true });
         }
-        consultarEstudianteExtension(cleaned.full);
       }
     }
   }
@@ -161,8 +164,9 @@ function renderEstudianteExtensionData(res, animate = true) {
 /**
  * Consulta los Datos del Estudiante y sus Inscripciones de Extensión por Cédula
  */
-function consultarEstudianteExtension(cedulaCompleta) {
-  sgnApiCall("getStudentExtensionData", { cedula: cedulaCompleta }, { showLoading: true })
+function consultarEstudianteExtension(cedulaCompleta, options = {}) {
+  const showLoading = options.showLoading !== undefined ? options.showLoading : true;
+  sgnApiCall("getStudentExtensionData", { cedula: cedulaCompleta }, { showLoading: showLoading })
     .then(function (res) {
       if (!res.success && res.registered === false) {
         $('#sgnExtensionResultArea').hide();
@@ -193,7 +197,7 @@ function consultarEstudianteExtension(cedulaCompleta) {
         }
 
         // Renderizar toda la interfaz de extensión
-        renderEstudianteExtensionData(res, true);
+        renderEstudianteExtensionData(res, showLoading);
 
         // Pre-carga silenciosa en segundo plano del perfil académico si no existe en caché
         if (typeof sgnGetActiveStudentSession === 'function' && !sgnGetActiveStudentSession(res.student.cedula)) {
@@ -206,7 +210,7 @@ function consultarEstudianteExtension(cedulaCompleta) {
               }
             });
         }
-      } else {
+      } else if (showLoading) {
         sgnShowModal({
           title: "Error",
           message: res.message || "No se pudo obtener la información.",
@@ -331,7 +335,7 @@ function registrarPagoExtension() {
         if (res.success) {
           sgnShowModal({
             title: "Declaración Guardada",
-            message: "Su declaración de pago e inscripción ha sido guardada exitosamente y el comprobante fue alojado en la carpeta segura de Google Drive.",
+            message: "Su declaración de pago e inscripción ha sido guardada exitosamente y el comprobante fue alojado de forma segura.",
             type: "success"
           });
 

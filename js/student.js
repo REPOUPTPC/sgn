@@ -38,16 +38,31 @@ $(document).ready(function () {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-    // ÚNICAMENTE auto-consultar si se invocó expresamente con test_cedula desde el dashboard docente
-    if (testCedulaParam) {
-      const cleaned = typeof sgnCleanCedulaInput === 'function' ? sgnCleanCedulaInput(testCedulaParam) : { number: testCedulaParam, full: testCedulaParam };
+    const activeCedula = testCedulaParam || (typeof sgnGetActiveCedula === 'function' ? sgnGetActiveCedula() : '');
+
+    if (activeCedula) {
+      const cleaned = typeof sgnCleanCedulaInput === 'function' ? sgnCleanCedulaInput(activeCedula) : { number: activeCedula, full: activeCedula };
       if (cleaned.number) {
         $('#sgnSearchCedulaInput').val(cleaned.full);
         $('#btnLimpiarConsulta').show();
-        performStudentSearch(cleaned.full);
+
+        // Si ya tenemos los datos en el caché de sesión (ej. al volver desde extension.html), renderizar al instante en 0ms
+        const cachedStudent = (!testCedulaParam && typeof sgnGetActiveStudentSession === 'function')
+          ? sgnGetActiveStudentSession(cleaned.full)
+          : null;
+
+        if (cachedStudent && cachedStudent.student && Array.isArray(cachedStudent.notas)) {
+          currentStudentData = cachedStudent.student;
+          currentStudentResponse = cachedStudent;
+          renderStudentAcademicProfile(cachedStudent);
+          // Sincronizar en segundo plano sin mostrar overlay de carga
+          performStudentSearch(cleaned.full, { showLoading: false });
+        } else {
+          performStudentSearch(cleaned.full);
+        }
       }
     } else {
-      // Iniciar siempre limpio: no abrir automáticamente consultas previas ni forzar renderizado
+      // Iniciar limpio si no hay sesión activa en la pestaña
       $('#sgnStudentResultArea').hide();
       $('#stActividadesIndependienteContainer').hide();
       $('#stSubjectsContainer').empty();
@@ -151,7 +166,7 @@ function onProgramaChange() {
 /**
  * Buscar Estudiante por Cédula
  */
-function performStudentSearch(cedula) {
+function performStudentSearch(cedula, options = {}) {
   let cleaned = sgnCleanCedulaInput(cedula);
   if (!cleaned.number) {
     sgnShowModal({
@@ -163,11 +178,12 @@ function performStudentSearch(cedula) {
   }
 
   const isDocenteLogged = (typeof sgnAuth !== 'undefined' && sgnAuth.isLoggedIn());
+  const showLoading = options.showLoading !== false;
 
   sgnApiCall("getStudentByCedula", {
     cedula: cleaned.full,
     allow_test_student: isDocenteLogged ? "TRUE" : "FALSE"
-  }).then(function (res) {
+  }, { showLoading: showLoading }).then(function (res) {
     if (!res) return;
 
     if (!res.success && res.restricted_test_user) {
@@ -1326,7 +1342,7 @@ function handleEntregaSuccess(res) {
   }
 
   if (currentStudentData && currentStudentData.cedula) {
-    performStudentSearch(currentStudentData.cedula);
+    performStudentSearch(currentStudentData.cedula, { showLoading: false });
   }
 }
 
@@ -1387,7 +1403,7 @@ function submitEstudianteEntrega() {
       return;
     }
 
-    $('#btnEnviarEntregaSubmit').prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Subiendo a Google Drive...');
+    $('#btnEnviarEntregaSubmit').prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Subiendo archivo...');
 
     const reader = new FileReader();
     reader.onerror = function () {
@@ -1428,7 +1444,7 @@ function submitEstudianteEntrega() {
           } else {
             sgnShowModal({
               title: "¡Entrega Realizada!",
-              message: "Su trabajo ha sido subido con éxito a la carpeta oficial de Google Drive y registrado para el docente.",
+              message: "Su trabajo ha sido subido con éxito y registrado para el docente.",
               type: "success"
             });
           }

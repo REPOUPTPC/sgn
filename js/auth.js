@@ -10,7 +10,7 @@ const sgnAuth = {
     return sgnApiCall("login", {
       email_cedula: emailCedula,
       password_secret: passwordSecret
-    }).then(function (res) {
+    }, { showLoading: false }).then(function (res) {
       if (res && res.success) {
         sessionStorage.setItem("sgn_user", JSON.stringify(res.user));
         return res;

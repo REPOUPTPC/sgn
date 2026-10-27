@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SGN - Extensión Universitaria | Cursos y Talleres UPTPC</title>
   
+  <script>
+    // Redirección canónica automática desde la web vieja a la nueva
+    if (window.location.hostname === 'cyt.uptpc.edu.ve') {
+      var p = window.location.pathname.replace(/^\/sgn\/?/, '/');
+      window.location.replace('https://sgn.cyt.uptpc.edu.ve' + p + window.location.search + window.location.hash);
+    }
+  </script>
+  
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
   
@@ -230,7 +238,7 @@
                 </label>
                 <input type="file" id="extCaptureFileInput" class="form-control" accept="image/*,.pdf">
                 <div class="form-text">
-                  Seleccione directamente el archivo de imagen (PNG, JPG, JPEG) o PDF de su comprobante de pago. El archivo se alojará en la carpeta institucional de Google Drive.
+                  Seleccione directamente el archivo de imagen (PNG, JPG, JPEG) o PDF de su comprobante de pago. El archivo se alojará de forma segura en la nube institucional (Cloudflare R2).
                 </div>
               </div>
 
@@ -395,23 +403,23 @@
   <script src="js/extension.js?v=1.2"></script>
   
   <script>
-    // Evento Formulario Login
+    // Evento Formulario Login Optimizado (Ultra Rápido con Turso)
     $('#sgnLoginForm').on('submit', function(e) {
       e.preventDefault();
+      const $btn = $(this).find('button[type="submit"]');
+      const originalHtml = $btn.html();
       const user = $('#loginUserInput').val().trim();
       const pass = $('#loginPassInput').val().trim();
+
+      $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Verificando credenciales...');
       
       sgnAuth.login(user, pass).then(function(res) {
-        bootstrap.Modal.getInstance(document.getElementById('sgnLoginModal')).hide();
-        sgnShowModal({
-          title: "Acceso Concedido",
-          message: `Bienvenido(a), ${res.user.nombre}. Redirigiendo al panel de control...`,
-          type: "success",
-          onConfirm: function() {
-            window.location.href = "dashboard.html";
-          }
-        });
+        $btn.removeClass('btn-primary-sgn btn-primary').addClass('btn-success').html('<i class="fa-solid fa-circle-check me-2"></i> ¡Acceso Concedido! Redirigiendo...');
+        setTimeout(function() {
+          window.location.href = "dashboard.html";
+        }, 250);
       }).catch(function(err) {
+        $btn.prop('disabled', false).html(originalHtml);
         sgnShowModal({
           title: "Error de Autenticación",
           message: err.message || "Usuario o clave/secreto incorrectos.",

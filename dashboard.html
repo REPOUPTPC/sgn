@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SGN - Panel de Control & Gestión - Unidad de Ciencia y Tecnología UPTPC</title>
   
+  <script>
+    // Redirección canónica automática desde la web vieja a la nueva
+    if (window.location.hostname === 'cyt.uptpc.edu.ve') {
+      var p = window.location.pathname.replace(/^\/sgn\/?/, '/');
+      window.location.replace('https://sgn.cyt.uptpc.edu.ve' + p + window.location.search + window.location.hash);
+    }
+  </script>
+  
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
   
