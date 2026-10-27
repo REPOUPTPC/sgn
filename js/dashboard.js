@@ -2845,9 +2845,11 @@ function onActividadLapsoChange(source) {
 function onTipoActividadChange() {
   const tipo = $('#actividadTipo').val();
   if (tipo === 'QUIZ') {
+    $('#iaEvaluacionSection').slideUp(200);
     $('#quizConfigSection').slideDown(200);
     updateQuizMarkdownPreview();
   } else {
+    $('#iaEvaluacionSection').slideDown(200);
     $('#quizConfigSection').slideUp(200);
   }
 }
@@ -3113,6 +3115,7 @@ function openModalActividad() {
   $('#quizTiempoMinutos').val(30);
   $('#quizMarkdownInput').val('');
   $('#quizConfigSection').hide();
+  $('#iaEvaluacionSection').show();
   $('#actividadIaEvaluar').prop('checked', false);
   updateQuizMarkdownPreview();
   $('#modalActividadTitle').text('Asignar Nueva Actividad / Evaluación');
@@ -3161,6 +3164,7 @@ function editActividad(id) {
     $('#quizPuntajeMaximo').val(cfg.puntaje_maximo || 20);
     $('#quizTiempoMinutos').val(tiempoMin);
     $('#quizMarkdownInput').val(serializeQuizBankToMarkdown(bank));
+    $('#iaEvaluacionSection').hide();
     $('#quizConfigSection').show();
     updateQuizMarkdownPreview();
   } else {
@@ -3168,6 +3172,7 @@ function editActividad(id) {
     $('#quizPuntajeMaximo').val(20);
     $('#quizTiempoMinutos').val(30);
     $('#quizMarkdownInput').val('');
+    $('#iaEvaluacionSection').show();
     $('#quizConfigSection').hide();
   }
 
@@ -3322,7 +3327,7 @@ function saveActividadSubmit() {
     fecha_limite: fechaLimite,
     descripcion: desc,
     tipo_actividad: tipoActividad,
-    ia_evaluacion: $('#actividadIaEvaluar').is(':checked') ? "SI" : "NO",
+    ia_evaluacion: (tipoActividad !== 'QUIZ' && $('#actividadIaEvaluar').is(':checked')) ? "SI" : "NO",
     quiz_config_json: quizConfigJson,
     quiz_preguntas_json: quizPreguntasJson,
     tiempo_minutos: tiempoMinutos
