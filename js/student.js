@@ -698,7 +698,7 @@ function renderStudentAcademicProfile(res) {
         }
 
         evalsHtml += `
-          <div class="col-md-6 col-lg-4 mb-3">
+          <div class="col-md-6 col-lg-${cant > 6 ? '3' : '4'} mb-3">
             <div class="border rounded-3 p-3 bg-light h-100">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-bold text-navy">Evaluación ${i}</span>
@@ -1070,20 +1070,35 @@ function openVoceroRoster(cedula, seccion, idPrograma, idUnidadCurricular) {
         $('#voceroRosterSubtitle').text(`Unidad Curricular: ${matTxt}${profTxt}`);
       }
 
+      let maxCant = 4;
+      roster.forEach(r => {
+        const c = parseInt(r.cantidad_evaluaciones) || 4;
+        if (c > maxCant) maxCant = c;
+      });
+      maxCant = Math.min(8, Math.max(4, maxCant));
+
+      let theadHtml = '<tr><th>#</th><th>Cédula</th><th>Estudiante</th><th>Rol</th>';
+      for (let i = 1; i <= maxCant; i++) {
+        theadHtml += `<th>E${i}</th>`;
+      }
+      theadHtml += '<th>Total Acumulado</th></tr>';
+      $('#voceroRosterTable thead').html(theadHtml);
+
       if (roster.length === 0) {
-        $tbody.append(`<tr><td colspan="9" class="text-center py-4 text-muted">No hay estudiantes registrados en esta sección.</td></tr>`);
+        $tbody.append(`<tr><td colspan="${maxCant + 5}" class="text-center py-4 text-muted">No hay estudiantes registrados en esta sección.</td></tr>`);
       } else {
         roster.forEach((r, idx) => {
+          let evalCells = '';
+          for (let i = 1; i <= maxCant; i++) {
+            evalCells += `<td>${r['e' + i] !== undefined ? r['e' + i] : 0}</td>`;
+          }
           $tbody.append(`
             <tr>
               <td>${idx + 1}</td>
               <td class="fw-bold">${r.cedula}</td>
               <td>${r.nombre_completo}</td>
               <td>${r.rol === 'VOCERO' ? '<span class="badge bg-warning text-dark">VOCERO</span>' : 'Estudiante'}</td>
-              <td>${r.e1 || 0}</td>
-              <td>${r.e2 || 0}</td>
-              <td>${r.e3 || 0}</td>
-              <td>${r.e4 || 0}</td>
+              ${evalCells}
               <td>${getGradeBadgeHTML(r.total)}</td>
             </tr>
           `);

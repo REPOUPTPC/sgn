@@ -61,6 +61,9 @@ async function migrate() {
       e3 REAL DEFAULT 0,
       e4 REAL DEFAULT 0,
       e5 REAL DEFAULT 0,
+      e6 REAL DEFAULT 0,
+      e7 REAL DEFAULT 0,
+      e8 REAL DEFAULT 0,
       total REAL DEFAULT 0
     );`,
     `CREATE INDEX IF NOT EXISTS idx_relacion_estudiante ON relacion_programa_notas(id_estudiante);`,
@@ -164,7 +167,7 @@ async function migrate() {
     ...prepareStatements("estudiantes", data.estudiantes, ["id", "cedula", "nombre_completo", "correo", "telefono", "id_programa_formacion", "seccion", "rol"]),
     ...prepareStatements("profesor", data.profesores, ["id", "nombre_profesor", "cedula", "telefono", "clave", "rol", "activo"]),
     ...prepareStatements("unidad_curricular", data.unidades, ["id", "id_prof", "id_programa_formacion", "unidad_curricular", "seccion", "status"]),
-    ...prepareStatements("relacion_programa_notas", data.relacionNotas, ["id", "id_estudiante", "id_unidad_curricular", "cantidad_evaluaciones", "e1", "e2", "e3", "e4", "e5", "total"]),
+    ...prepareStatements("relacion_programa_notas", data.relacionNotas, ["id", "id_estudiante", "id_unidad_curricular", "cantidad_evaluaciones", "e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "total"]),
     ...prepareStatements("fecha_relacion_nota", data.fechasNotas, ["id", "id_programa_formacion", "seccion", "evaluacion", "fecha", "descripcion"]),
     ...prepareStatements("actividades_asignadas", data.actividadesAsignadas, ["id", "id_unidad_curricular", "fecha_asignacion", "numero_evaluacion", "descripcion", "tipo_actividad", "quiz_config_json", "quiz_preguntas_json", "tiempo_minutos", "fecha_limite", "ia_evaluacion"]),
     ...prepareStatements("actividades_entregadas", data.actividadesEntregadas, ["id", "id_actividades_asignadas", "id_estudiante", "entrega", "fecha_entrega", "nota", "quiz_detalle_json", "hora_inicio", "hora_fin", "comentario"]),

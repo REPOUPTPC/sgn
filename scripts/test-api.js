@@ -78,7 +78,7 @@ async function runTests() {
   const sampleBase64 = "data:application/pdf;base64," + Buffer.from("PDF TEST SGN R2 MIGRATION").toString("base64");
   const t6 = createMockReqRes({
     action: "uploadEntregaEstudiante",
-    id_actividades_asignadas: 1,
+    id_actividades_asignadas: 5,
     id_estudiante: 1,
     fileName: "prueba_r2.pdf",
     fileData: sampleBase64

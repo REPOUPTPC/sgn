@@ -176,8 +176,26 @@ async function getCatalogData(forceRefresh = false) {
   return catalog;
 }
 
+// Garantizar que existan las columnas e6, e7, e8 en relacion_programa_notas
+let schemaVerified = false;
+async function ensureSchemaColumns() {
+  if (schemaVerified) return;
+  try {
+    const info = await query("PRAGMA table_info(relacion_programa_notas)");
+    const colNames = (info || []).map(c => c.name);
+    for (const col of ["e6", "e7", "e8"]) {
+      if (!colNames.includes(col)) {
+        await execute(`ALTER TABLE relacion_programa_notas ADD COLUMN ${col} REAL DEFAULT 0`);
+      }
+    }
+    schemaVerified = true;
+  } catch (err) {}
+}
+
 // Pre-calentar conexión TLS y caché en segundo plano al iniciar el módulo
-getCatalogData().catch(() => {});
+getCatalogData()
+  .then(() => ensureSchemaColumns())
+  .catch(() => {});
 
 module.exports = {
   client,
@@ -186,7 +204,9 @@ module.exports = {
   batch,
   getNextId,
   getCatalogData,
+  ensureSchemaColumns,
   invalidateCache,
   memoryCache,
   ALL_DATA_TTL_MS
 };
+

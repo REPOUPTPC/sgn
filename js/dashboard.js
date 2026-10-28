@@ -122,39 +122,24 @@ $(document).ready(function () {
     filterTable('#tablaExtensionPagos tbody tr', $(this).val());
   });
 
-  // Listener para cambio en el Selector de Cantidad de Evaluaciones (4 o 5)
+  // Listener para cambio en el Selector de Cantidad de Evaluaciones (4, 5, 6, 7 u 8)
   $('#selectCantEvalGestion').on('change', function () {
     const newCant = parseInt($(this).val()) || 4;
     const unidadId = $('#selectUnidadGestion').val();
     
     if (unidadId) {
-      // Actualizar en memoria INMEDIATAMENTE para que al hacer renderNotasTable(true) no reaparezca e5
+      // Actualizar en memoria INMEDIATAMENTE para que al hacer renderNotasTable(true) no reaparezcan evaluaciones sobrantes
       sgnDb.relacionNotas.forEach(r => {
         if (r.id_unidad_curricular == unidadId) {
           r.cantidad_evaluaciones = newCant;
-          if (newCant === 4) {
-            r.e5 = 0;
+          for (let i = newCant + 1; i <= 8; i++) {
+            r['e' + i] = 0;
           }
         }
       });
     }
 
     renderNotasTable(true);
-  });
-
-  // Toggle para ver contraseñas
-  $(document).on('click', '.toggle-password', function() {
-    const targetId = $(this).data('target');
-    const input = $('#' + targetId);
-    const icon = $(this).find('i');
-    
-    if (input.attr('type') === 'password') {
-      input.attr('type', 'text');
-      icon.removeClass('fa-eye').addClass('fa-eye-slash');
-    } else {
-      input.attr('type', 'password');
-      icon.removeClass('fa-eye-slash').addClass('fa-eye');
-    }
   });
 
   // Actualizar secciones disponibles al cambiar el Programa de Formación en el Modal Estudiante
@@ -165,7 +150,7 @@ $(document).ready(function () {
   // Manejo de opción personalizada para ingresar otra sección
   $('#estudianteSeccion').on('change', function () {
     if ($(this).val() === '__custom__') {
-      const customSec = prompt('Ingrese el número o identificador de la nueva sección (ej: 170):');
+      const customSec = prompt('Ingrese el número o identificador de la nueva sección (ej: 170 o 1701):');
       if (customSec && customSec.trim()) {
         const cleanSec = customSec.trim().replace(/^'/, '').toUpperCase();
         let existingOpt = $(this).find(`option[value="${cleanSec}"]`);
@@ -946,8 +931,8 @@ function renderModalCalificacionesEstudianteContenido() {
     const cantEval = rnMatches.reduce((maxC, r) => Math.max(maxC, parseInt(r.cantidad_evaluaciones) || 4), 4);
     const actividades = (sgnDb.actividadesAsignadas || []).filter(a => String(a.id_unidad_curricular) === String(u.id));
 
-    const unifiedEval = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0 };
-    ['e1', 'e2', 'e3', 'e4', 'e5'].forEach(evKey => {
+    const unifiedEval = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0, e7: 0, e8: 0 };
+    ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'].forEach(evKey => {
       let maxVal = 0;
       rnMatches.forEach(r => {
         const v = parseFloat(r[evKey]);
@@ -968,13 +953,10 @@ function renderModalCalificacionesEstudianteContenido() {
       unifiedEval[evKey] = Math.min(20, Math.max(0, maxVal));
     });
 
-    const e1 = unifiedEval.e1;
-    const e2 = unifiedEval.e2;
-    const e3 = unifiedEval.e3;
-    const e4 = unifiedEval.e4;
-    const e5 = cantEval === 5 ? unifiedEval.e5 : 0;
-
-    const activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
+    const activeScores = [];
+    for (let i = 1; i <= cantEval; i++) {
+      activeScores.push(unifiedEval['e' + i] || 0);
+    }
     const avgCalculado = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
     const totalNum = parseFloat(avgCalculado) || 0;
 
@@ -984,8 +966,9 @@ function renderModalCalificacionesEstudianteContenido() {
       return String(fn.id_programa_formacion) === String(u.id_programa_formacion) && fnSec === uSec;
     });
 
-    // Construir casillas de corrección de notas E1..E4 (o E5)
+    // Construir casillas de corrección de notas E1..E${cantEval}
     let evalsInputsHtml = '';
+    const colClass = (cantEval === 5 || cantEval === 6) ? '2' : '3';
     for (let i = 1; i <= cantEval; i++) {
       const val = unifiedEval['e' + i] !== undefined ? unifiedEval['e' + i] : 0;
       const fnObj = fechas.find(f => (f.evaluacion || '').toLowerCase() === ('e' + i));
@@ -993,7 +976,7 @@ function renderModalCalificacionesEstudianteContenido() {
       const fnDesc = fnObj ? fnObj.descripcion : '';
 
       evalsInputsHtml += `
-        <div class="col-6 col-md-3 col-lg-${cantEval === 5 ? '2' : '3'}">
+        <div class="col-6 col-md-3 col-lg-${colClass}">
           <div class="border rounded-3 p-2 bg-white text-center h-100 shadow-xs">
             <span class="fw-bold text-navy small d-block mb-1">E${i}</span>
             <div class="input-group input-group-sm mb-1">
@@ -1219,33 +1202,31 @@ function recalcModalEstTotal(idUnidad, cantEval) {
 }
 
 function guardarEvaluacionesEstudianteModal(idEstudiante, idUnidad, idRel, cantEval) {
-  let e1 = parseFloat($(`#estEvalInput_${idUnidad}_1`).val()) || 0;
-  let e2 = parseFloat($(`#estEvalInput_${idUnidad}_2`).val()) || 0;
-  let e3 = parseFloat($(`#estEvalInput_${idUnidad}_3`).val()) || 0;
-  let e4 = parseFloat($(`#estEvalInput_${idUnidad}_4`).val()) || 0;
-  let e5 = cantEval === 5 ? (parseFloat($(`#estEvalInput_${idUnidad}_5`).val()) || 0) : 0;
+  const evalVals = {};
+  for (let i = 1; i <= 8; i++) {
+    if (i <= cantEval) {
+      const v = parseFloat($(`#estEvalInput_${idUnidad}_${i}`).val());
+      evalVals['e' + i] = isNaN(v) ? 0 : Math.min(20, Math.max(0, v));
+    } else {
+      evalVals['e' + i] = 0;
+    }
+  }
 
   const payload = {
     id: idRel || "",
     id_estudiante: idEstudiante,
     id_unidad_curricular: idUnidad,
     cantidad_evaluaciones: cantEval,
-    e1: e1,
-    e2: e2,
-    e3: e3,
-    e4: e4,
-    e5: e5
+    ...evalVals
   };
 
   sgnApiCall("saveNotas", payload, { showLoading: true }).then(function (res) {
     if (res && res.success) {
       let rn = (sgnDb.relacionNotas || []).find(r => String(r.id_unidad_curricular) === String(idUnidad) && String(r.id_estudiante) === String(idEstudiante));
       if (rn) {
-        rn.e1 = e1;
-        rn.e2 = e2;
-        rn.e3 = e3;
-        rn.e4 = e4;
-        rn.e5 = e5;
+        for (let i = 1; i <= 8; i++) {
+          rn['e' + i] = evalVals['e' + i];
+        }
         rn.total = res.total;
         rn.cantidad_evaluaciones = cantEval;
       } else {
@@ -1254,13 +1235,13 @@ function guardarEvaluacionesEstudianteModal(idEstudiante, idUnidad, idRel, cantE
           id_estudiante: idEstudiante,
           id_unidad_curricular: idUnidad,
           cantidad_evaluaciones: cantEval,
-          e1: e1, e2: e2, e3: e3, e4: e4, e5: e5,
+          ...evalVals,
           total: res.total
         });
       }
 
-      // Sincronizar también en memoria local las entregas de actividades asociadas a E1..E5
-      const evalMapLocal = { e1: e1, e2: e2, e3: e3, e4: e4, e5: e5 };
+      // Sincronizar también en memoria local las entregas de actividades asociadas a E1..E8
+      const evalMapLocal = { ...evalVals };
       const uActsLocal = (sgnDb.actividadesAsignadas || []).filter(a => String(a.id_unidad_curricular) === String(idUnidad));
       uActsLocal.forEach(act => {
         const evKey = (act.numero_evaluacion || 'e1').toString().toLowerCase().trim();
@@ -1337,7 +1318,7 @@ function guardarEntregaEstudianteModal(idActividad, idEstudiante, idEntrega) {
         if (rn) {
           rn[numEval] = numVal;
           const cEval = parseInt(rn.cantidad_evaluaciones) || 4;
-          const scores = [rn.e1 || 0, rn.e2 || 0, rn.e3 || 0, rn.e4 || 0, rn.e5 || 0].slice(0, cEval).map(v => parseFloat(v) || 0);
+          const scores = [rn.e1 || 0, rn.e2 || 0, rn.e3 || 0, rn.e4 || 0, rn.e5 || 0, rn.e6 || 0, rn.e7 || 0, rn.e8 || 0].slice(0, cEval).map(v => parseFloat(v) || 0);
           rn.total = (scores.reduce((a, b) => a + b, 0) / cEval).toFixed(2);
         }
       }
@@ -1696,12 +1677,13 @@ function renderNotasTable(keepSelectedCant = false) {
 
   const cantEval = parseInt($('#selectCantEvalGestion').val()) || 4;
 
-  // Ajustar la cabecera E5 según la cantidad de evaluaciones
-  if (cantEval === 4) {
-    $('#tablaNotas th:nth-child(7)').html('<span class="text-muted opacity-50">E5 (N/A)</span>');
-  } else {
-    $('#tablaNotas th:nth-child(7)').html('E5');
+  // Construir dinámicamente la cabecera de la tabla según cantEval
+  let theadHtml = '<tr><th>Cédula</th><th>Estudiante</th>';
+  for (let i = 1; i <= cantEval; i++) {
+    theadHtml += `<th width="80px">E${i}</th>`;
   }
+  theadHtml += '<th>Total</th></tr>';
+  $('#tablaNotas thead').html(theadHtml);
 
   // Strip apostrophe from section for comparison if present
   let targetSec = (unidad.seccion || '').toString().trim();
@@ -1715,7 +1697,7 @@ function renderNotasTable(keepSelectedCant = false) {
   });
 
   if (targetStudents.length === 0) {
-    $tbody.append('<tr><td colspan="8" class="text-center text-muted py-4">No se registran estudiantes inscritos en este programa y sección.</td></tr>');
+    $tbody.append(`<tr><td colspan="${cantEval + 3}" class="text-center text-muted py-4">No se registran estudiantes inscritos en este programa y sección.</td></tr>`);
     return;
   }
 
@@ -1725,24 +1707,20 @@ function renderNotasTable(keepSelectedCant = false) {
   targetStudents.forEach(est => {
     // Buscar si ya tiene notas en esta unidad curricular
     const rn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == unidadId && r.id_estudiante == est.id) || {};
-    let e1 = parseFloat(rn.e1) || 0;
-    let e2 = parseFloat(rn.e2) || 0;
-    let e3 = parseFloat(rn.e3) || 0;
-    let e4 = parseFloat(rn.e4) || 0;
-    let e5 = cantEval === 5 ? (parseFloat(rn.e5) || 0) : '';
-
-    let sum = e1 + e2 + e3 + e4 + (cantEval === 5 ? parseFloat(rn.e5 || 0) : 0);
+    let rowInputs = '';
+    let sum = 0;
+    for (let i = 1; i <= cantEval; i++) {
+      let val = parseFloat(rn['e' + i]) || 0;
+      sum += val;
+      rowInputs += `<td><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e${i}" data-eval="${i}" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${val}"></td>`;
+    }
     let calcTotal = (sum / cantEval).toFixed(2);
 
     $tbody.append(`
       <tr>
         <td class="fw-bold text-navy">${est.cedula}</td>
         <td>${est.nombre_completo}</td>
-        <td><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e1" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${e1}"></td>
-        <td><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e2" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${e2}"></td>
-        <td><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e3" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${e3}"></td>
-        <td><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e4" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${e4}"></td>
-        <td><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e5" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${e5}" ${cantEval === 4 ? 'disabled style="background-color: #e9ecef;"' : ''}></td>
+        ${rowInputs}
         <td class="total-cell fw-bold">${getGradeBadgeHTML(calcTotal)}</td>
       </tr>
     `);
@@ -1752,13 +1730,11 @@ function renderNotasTable(keepSelectedCant = false) {
   $('.nota-input').on('input', function() {
     const currentCant = parseInt($('#selectCantEvalGestion').val()) || 4;
     const $row = $(this).closest('tr');
-    let e1 = parseFloat($row.find('.e1').val() || 0);
-    let e2 = parseFloat($row.find('.e2').val() || 0);
-    let e3 = parseFloat($row.find('.e3').val() || 0);
-    let e4 = parseFloat($row.find('.e4').val() || 0);
-    let e5 = currentCant === 5 ? parseFloat($row.find('.e5').val() || 0) : 0;
-    
-    let sum = e1 + e2 + e3 + e4 + (currentCant === 5 ? e5 : 0);
+    let sum = 0;
+    for (let i = 1; i <= currentCant; i++) {
+      let v = parseFloat($row.find('.e' + i).val() || 0);
+      sum += Math.min(20, Math.max(0, v));
+    }
     let avg = (sum / currentCant).toFixed(2);
     $row.find('.total-cell').html(getGradeBadgeHTML(avg));
   });
@@ -1780,22 +1756,26 @@ function saveBulkNotasSubmit() {
 
   $('#tablaNotas tbody tr').each(function() {
     const row = $(this);
-    const e1Input = row.find('.e1');
-    const id = e1Input.data('id');
-    const id_estudiante = e1Input.data('estudiante');
+    const firstInput = row.find('.nota-input').first();
+    const id = firstInput.data('id');
+    const id_estudiante = firstInput.data('estudiante');
     
     if (id_estudiante) {
-      payload.push({
+      const rowData = {
         id_relacion: id || "",
         id_estudiante: id_estudiante,
         id_unidad_curricular: unidadId,
-        cantidad_evaluaciones: cantEval,
-        e1: row.find('.e1').val() || 0,
-        e2: row.find('.e2').val() || 0,
-        e3: row.find('.e3').val() || 0,
-        e4: row.find('.e4').val() || 0,
-        e5: cantEval === 5 ? (row.find('.e5').val() || 0) : 0
-      });
+        cantidad_evaluaciones: cantEval
+      };
+      for (let i = 1; i <= 8; i++) {
+        if (i <= cantEval) {
+          const val = parseFloat(row.find('.e' + i).val());
+          rowData['e' + i] = isNaN(val) ? 0 : Math.min(20, Math.max(0, val));
+        } else {
+          rowData['e' + i] = 0;
+        }
+      }
+      payload.push(rowData);
     }
   });
 
@@ -1808,12 +1788,12 @@ function saveBulkNotasSubmit() {
     btn.prop('disabled', false).html('<i class="fa-solid fa-save me-2"></i> Guardar Todas las Notas');
     
     if (res && res.success) {
-      // Actualizar la memoria local sgnDb.relacionNotas para que persista la nueva cantidad_evaluaciones (4 o 5) y e5 = 0
+      // Actualizar la memoria local sgnDb.relacionNotas para que persista la nueva cantidad_evaluaciones (4 a 8) y limpiar las inactivas
       sgnDb.relacionNotas.forEach(r => {
         if (r.id_unidad_curricular == unidadId) {
           r.cantidad_evaluaciones = cantEval;
-          if (cantEval === 4) {
-            r.e5 = 0;
+          for (let i = cantEval + 1; i <= 8; i++) {
+            r['e' + i] = 0;
           }
         }
       });
@@ -1940,9 +1920,11 @@ async function generarPDF() {
   const cantEval = parseInt($('#selectCantEvalGestion').val()) || 4;
 
   // 4. Encabezados y Filas con Numeración (N°)
-  const tableHeaders = cantEval === 5 
-    ? [['N°', 'Cédula', 'Estudiante', 'E1', 'E2', 'E3', 'E4', 'E5', 'Total']]
-    : [['N°', 'Cédula', 'Estudiante', 'E1', 'E2', 'E3', 'E4', 'Total']];
+  const evalHeaderNames = [];
+  for (let i = 1; i <= cantEval; i++) {
+    evalHeaderNames.push(`E${i}`);
+  }
+  const tableHeaders = [['N°', 'Cédula', 'Estudiante', ...evalHeaderNames, 'Total']];
 
   let aprobadosCount = 0;
   let reprobadosCount = 0;
@@ -1950,13 +1932,11 @@ async function generarPDF() {
 
   const tableData = targetStudents.map((est, index) => {
     const rn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == unidadId && r.id_estudiante == est.id) || {};
-    let e1 = parseFloat(rn.e1) || 0;
-    let e2 = parseFloat(rn.e2) || 0;
-    let e3 = parseFloat(rn.e3) || 0;
-    let e4 = parseFloat(rn.e4) || 0;
-    let e5 = cantEval === 5 ? (parseFloat(rn.e5) || 0) : 0;
+    const activeScores = [];
+    for (let i = 1; i <= cantEval; i++) {
+      activeScores.push(parseFloat(rn['e' + i]) || 0);
+    }
 
-    let activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
     let sum = activeScores.reduce((a, b) => a + b, 0);
     let avgFloat = parseFloat((sum / cantEval).toFixed(2));
     let avgStr = avgFloat.toFixed(2);
@@ -1973,12 +1953,21 @@ async function generarPDF() {
       reprobadosCount++;
     }
 
-    return cantEval === 5
-      ? [index + 1, est.cedula, est.nombre_completo, e1, e2, e3, e4, e5, avgStr]
-      : [index + 1, est.cedula, est.nombre_completo, e1, e2, e3, e4, avgStr];
+    return [index + 1, est.cedula, est.nombre_completo, ...activeScores, avgStr];
   });
 
   // 5. Renderizar Tabla con Fuente Reducida
+  const colStyles = {
+    0: { halign: 'center', cellWidth: 8 },  // N°
+    1: { halign: 'center', cellWidth: 22 }, // Cédula
+    2: { halign: 'left' }                   // Estudiante
+  };
+  const evalWidth = cantEval > 6 ? 10 : (cantEval > 4 ? 12 : 14);
+  for (let i = 1; i <= cantEval; i++) {
+    colStyles[2 + i] = { halign: 'center', cellWidth: evalWidth };
+  }
+  colStyles[3 + cantEval] = { halign: 'center', cellWidth: 16, fontStyle: 'bold' }; // Total
+
   doc.autoTable({
     startY: 40,
     head: tableHeaders,
@@ -1996,21 +1985,7 @@ async function generarPDF() {
       fontSize: 8,
       halign: 'center'
     },
-    columnStyles: {
-      0: { halign: 'center', cellWidth: 10 },  // N°
-      1: { halign: 'center', cellWidth: 24 },  // Cédula
-      2: { halign: 'left' },                   // Estudiante
-      3: { halign: 'center', cellWidth: 14 },  // E1
-      4: { halign: 'center', cellWidth: 14 },  // E2
-      5: { halign: 'center', cellWidth: 14 },  // E3
-      6: { halign: 'center', cellWidth: 14 },  // E4
-      ...(cantEval === 5 ? {
-        7: { halign: 'center', cellWidth: 14 }, // E5
-        8: { halign: 'center', cellWidth: 18, fontStyle: 'bold' } // Total
-      } : {
-        7: { halign: 'center', cellWidth: 18, fontStyle: 'bold' } // Total
-      })
-    },
+    columnStyles: colStyles,
     alternateRowStyles: {
       fillColor: [248, 250, 252]
     }
@@ -2224,17 +2199,28 @@ async function generarPDFNominaAsistencia() {
 
 // Configurar Fechas y Descripciones por Evaluación
 function openGlobalModalFechas() {
-  $('#fechaE1, #descE1, #fechaE2, #descE2, #fechaE3, #descE3, #fechaE4, #descE4, #fechaE5, #descE5').val('');
+  $('#fechaE1, #descE1, #fechaE2, #descE2, #fechaE3, #descE3, #fechaE4, #descE4, #fechaE5, #descE5, #fechaE6, #descE6, #fechaE7, #descE7, #fechaE8, #descE8').val('');
   $('#fechaUnidadId').val($('#selectUnidadGestion').val() || '');
 
   $('#fechaUnidadId').off('change').on('change', function() {
     const uId = $('#fechaUnidadId').val();
     if (!uId) return;
     
-    $('#fechaE1, #descE1, #fechaE2, #descE2, #fechaE3, #descE3, #fechaE4, #descE4, #fechaE5, #descE5').val('');
+    $('#fechaE1, #descE1, #fechaE2, #descE2, #fechaE3, #descE3, #fechaE4, #descE4, #fechaE5, #descE5, #fechaE6, #descE6, #fechaE7, #descE7, #fechaE8, #descE8').val('');
     
     const unidad = sgnDb.unidades.find(u => u.id == uId);
     if (!unidad) return;
+
+    // Mostrar/ocultar contenedores según cantEval de la unidad
+    const existingRn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == uId);
+    const cantEval = existingRn && existingRn.cantidad_evaluaciones ? parseInt(existingRn.cantidad_evaluaciones) : (parseInt($('#selectCantEvalGestion').val()) || 4);
+    for (let i = 5; i <= 8; i++) {
+      if (i <= cantEval) {
+        $(`#containerE${i}`).show();
+      } else {
+        $(`#containerE${i}`).hide();
+      }
+    }
 
     let targetSec = (unidad.seccion || '').toString().trim();
     if (targetSec.startsWith("'")) targetSec = targetSec.substring(1);
@@ -2246,7 +2232,7 @@ function openGlobalModalFechas() {
     });
     
     fechas.forEach(f => {
-      const key = (f.evaluacion || '').toString().toUpperCase(); // e1..e5
+      const key = (f.evaluacion || '').toString().toUpperCase(); // e1..e8
       if (key) {
         $(`#fecha${key}`).val(f.fecha);
         $(`#desc${key}`).val(f.descripcion);
@@ -2271,7 +2257,12 @@ function saveFechasSubmit() {
   const unidad = sgnDb.unidades.find(u => u.id == uId);
   if (!unidad) return;
 
-  const evals = ['e1', 'e2', 'e3', 'e4', 'e5'];
+  const existingRn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == uId);
+  const cantEval = existingRn && existingRn.cantidad_evaluaciones ? parseInt(existingRn.cantidad_evaluaciones) : (parseInt($('#selectCantEvalGestion').val()) || 4);
+  const evals = [];
+  for (let i = 1; i <= cantEval; i++) {
+    evals.push('e' + i);
+  }
 
   let promises = evals.map(e => {
     const keyUpper = e.toUpperCase();

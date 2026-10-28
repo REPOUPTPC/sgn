@@ -310,19 +310,38 @@ $(document).ready(function() {
   $('a[href*="extension.html"]').attr('href', 'extension.html');
   $('a[href*="index.html"]').attr('href', 'index.html');
 
-  // Toggle Mostrar/Ocultar Contraseña
-  $(document).on('click', '.toggle-password', function() {
-    const targetId = $(this).attr('data-target');
-    const $input = $('#' + targetId);
-    const $icon = $(this).find('i');
-    
-    if ($input.attr('type') === 'password') {
-      $input.attr('type', 'text');
-      $icon.removeClass('fa-eye').addClass('fa-eye-slash');
-    } else {
-      $input.attr('type', 'password');
-      $icon.removeClass('fa-eye-slash').addClass('fa-eye');
+  // Toggle Mostrar/Ocultar Contraseña Global (index, dashboard, extension)
+  $(document).off('click', '.toggle-password').on('click', '.toggle-password', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const targetId = $(this).attr('data-target') || $(this).data('target');
+    let $input = targetId ? $('#' + targetId) : [];
+    if (!$input.length) {
+      $input = $(this).closest('.input-group').find('input');
     }
+    if (!$input.length) {
+      $input = $(this).siblings('input');
+    }
+
+    const inputEl = $input[0];
+    if (!inputEl) return;
+
+    const isPass = inputEl.type === 'password';
+    inputEl.type = isPass ? 'text' : 'password';
+
+    const $icon = $(this).find('i, svg');
+    if (isPass) {
+      $icon.removeClass('fa-eye').addClass('fa-eye-slash');
+      $(this).attr('title', 'Ocultar contraseña');
+    } else {
+      $icon.removeClass('fa-eye-slash').addClass('fa-eye');
+      $(this).attr('title', 'Mostrar contraseña');
+    }
+
+    try {
+      inputEl.focus();
+    } catch (err) {}
   });
 
   // Sanitización en tiempo real para todos los campos de cédula (Buscador, Registro, Admin)

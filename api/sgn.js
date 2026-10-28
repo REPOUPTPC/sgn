@@ -230,9 +230,9 @@ module.exports = async function handler(req, res) {
           const cantEval = rnMatches.reduce((maxC, r) => Math.max(maxC, parseInt(r.cantidad_evaluaciones) || 4), 4);
           const actividadesDeUc = actividadesAll.filter(a => a.id_unidad_curricular == uc.id);
 
-          // Unificar E1..E5 tomando siempre el MAYOR valor entre relacion_programa_notas y actividades_entregadas
-          const evalScores = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0 };
-          ["e1", "e2", "e3", "e4", "e5"].forEach(evKey => {
+          // Unificar E1..E8 tomando siempre el MAYOR valor entre relacion_programa_notas y actividades_entregadas
+          const evalScores = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0, e7: 0, e8: 0 };
+          ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"].forEach(evKey => {
             let maxVal = 0;
             rnMatches.forEach(r => {
               const v = parseFloat(r[evKey]);
@@ -255,9 +255,12 @@ module.exports = async function handler(req, res) {
           let e2 = evalScores.e2;
           let e3 = evalScores.e3;
           let e4 = evalScores.e4;
-          let e5 = cantEval === 5 ? evalScores.e5 : 0;
+          let e5 = cantEval >= 5 ? evalScores.e5 : 0;
+          let e6 = cantEval >= 6 ? evalScores.e6 : 0;
+          let e7 = cantEval >= 7 ? evalScores.e7 : 0;
+          let e8 = cantEval >= 8 ? evalScores.e8 : 0;
 
-          let activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
+          let activeScores = [e1, e2, e3, e4, e5, e6, e7, e8].slice(0, cantEval);
           let calcTotal = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
 
           const actividadesConEntrega = actividadesDeUc.map(act => {
@@ -326,7 +329,7 @@ module.exports = async function handler(req, res) {
             unidad_curricular: uc.unidad_curricular || "UNIDAD CURRICULAR",
             profesor: prof ? prof.nombre_profesor : "JOSE HERRERA",
             cantidad_evaluaciones: cantEval,
-            e1: e1, e2: e2, e3: e3, e4: e4, e5: e5,
+            e1: e1, e2: e2, e3: e3, e4: e4, e5: e5, e6: e6, e7: e7, e8: e8,
             total: calcTotal,
             fechas: fechas,
             actividades: actividadesConEntrega
@@ -470,9 +473,15 @@ module.exports = async function handler(req, res) {
         }
 
         const targetSec = (seccion || "").toString().trim().replace(/^'/, "");
-        const secWithQuote = "'" + targetSec;
-        const secPadded = targetSec.padStart(3, "0");
-        const secPaddedQuote = "'" + secPadded;
+        const secVariants = Array.from(new Set([
+          targetSec,
+          "'" + targetSec,
+          targetSec.padStart(3, "0"),
+          "'" + targetSec.padStart(3, "0"),
+          targetSec.padStart(4, "0"),
+          "'" + targetSec.padStart(4, "0")
+        ])).filter(Boolean);
+        const inPlaceholders = secVariants.map(() => "?").join(", ");
 
         // 1 sola petición batch en paralelo con catálogos en caché
         const [catalog, voceroBatch] = await Promise.all([
@@ -485,12 +494,12 @@ module.exports = async function handler(req, res) {
                   args: [cleanCed, digitsOnly, digitsOnly]
                 },
             {
-              sql: "SELECT * FROM estudiantes WHERE id_programa_formacion = ? AND seccion IN (?, ?, ?, ?) ORDER BY nombre_completo ASC",
-              args: [idPrograma, targetSec, secWithQuote, secPadded, secPaddedQuote]
+              sql: `SELECT * FROM estudiantes WHERE id_programa_formacion = ? AND seccion IN (${inPlaceholders}) ORDER BY nombre_completo ASC`,
+              args: [idPrograma, ...secVariants]
             },
             {
-              sql: "SELECT * FROM relacion_programa_notas WHERE id_estudiante IN (SELECT id FROM estudiantes WHERE id_programa_formacion = ? AND seccion IN (?, ?, ?, ?))",
-              args: [idPrograma, targetSec, secWithQuote, secPadded, secPaddedQuote]
+              sql: `SELECT * FROM relacion_programa_notas WHERE id_estudiante IN (SELECT id FROM estudiantes WHERE id_programa_formacion = ? AND seccion IN (${inPlaceholders}))`,
+              args: [idPrograma, ...secVariants]
             }
           ], "read")
         ]);
@@ -508,9 +517,10 @@ module.exports = async function handler(req, res) {
 
         const prog = programas.find(p => p.id == idPrograma);
 
+        const cleanVariants = secVariants.map(s => s.replace(/^'/, ""));
         let unidadesSeccion = unidades.filter(u => {
           let uSec = (u.seccion || "").toString().trim().replace(/^'/, "");
-          return u.id_programa_formacion == idPrograma && (uSec === targetSec || uSec === secPadded);
+          return u.id_programa_formacion == idPrograma && cleanVariants.includes(uSec);
         });
 
         if (unidadesSeccion.length === 0 && sectionStudents.length > 0) {
@@ -548,7 +558,7 @@ module.exports = async function handler(req, res) {
 
           let totalAvg = "0.00";
           let cant = 4;
-          let e1 = 0, e2 = 0, e3 = 0, e4 = 0, e5 = "";
+          let e1 = 0, e2 = 0, e3 = 0, e4 = 0, e5 = "", e6 = "", e7 = "", e8 = "";
 
           if (studentNotas.length > 0) {
             const firstNote = studentNotas[0];
@@ -557,9 +567,18 @@ module.exports = async function handler(req, res) {
             e2 = parseFloat(firstNote.e2) || 0;
             e3 = parseFloat(firstNote.e3) || 0;
             e4 = parseFloat(firstNote.e4) || 0;
-            e5 = cant === 5 ? (parseFloat(firstNote.e5) || 0) : "";
+            e5 = cant >= 5 ? (parseFloat(firstNote.e5) || 0) : "";
+            e6 = cant >= 6 ? (parseFloat(firstNote.e6) || 0) : "";
+            e7 = cant >= 7 ? (parseFloat(firstNote.e7) || 0) : "";
+            e8 = cant >= 8 ? (parseFloat(firstNote.e8) || 0) : "";
 
-            let activeScores = [e1, e2, e3, e4, parseFloat(e5) || 0].slice(0, cant);
+            let activeScores = [
+              e1, e2, e3, e4,
+              parseFloat(e5) || 0,
+              parseFloat(e6) || 0,
+              parseFloat(e7) || 0,
+              parseFloat(e8) || 0
+            ].slice(0, cant);
             totalAvg = (activeScores.reduce((a, b) => a + b, 0) / cant).toFixed(2);
           }
 
@@ -571,7 +590,7 @@ module.exports = async function handler(req, res) {
             telefono: est.telefono,
             rol: est.rol || "ESTUDIANTE",
             cantidad_evaluaciones: cant,
-            e1, e2, e3, e4, e5,
+            e1, e2, e3, e4, e5, e6, e7, e8,
             total: totalAvg
           };
         });
@@ -822,10 +841,13 @@ module.exports = async function handler(req, res) {
         let e2 = parseFloat(params.e2) || 0;
         let e3 = parseFloat(params.e3) || 0;
         let e4 = parseFloat(params.e4) || 0;
-        let e5 = parseFloat(params.e5) || 0;
-        [e1, e2, e3, e4, e5] = [e1, e2, e3, e4, e5].map(v => Math.min(20, Math.max(0, v)));
+        let e5 = cantEval >= 5 ? (parseFloat(params.e5) || 0) : 0;
+        let e6 = cantEval >= 6 ? (parseFloat(params.e6) || 0) : 0;
+        let e7 = cantEval >= 7 ? (parseFloat(params.e7) || 0) : 0;
+        let e8 = cantEval >= 8 ? (parseFloat(params.e8) || 0) : 0;
+        [e1, e2, e3, e4, e5, e6, e7, e8] = [e1, e2, e3, e4, e5, e6, e7, e8].map(v => Math.min(20, Math.max(0, v)));
 
-        let activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
+        let activeScores = [e1, e2, e3, e4, e5, e6, e7, e8].slice(0, cantEval);
         let totalCalculado = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
 
         let existing = [];
@@ -838,19 +860,19 @@ module.exports = async function handler(req, res) {
 
         if (existing.length > 0) {
           await execute(
-            "UPDATE relacion_programa_notas SET cantidad_evaluaciones = ?, e1 = ?, e2 = ?, e3 = ?, e4 = ?, e5 = ?, total = ? WHERE id = ?",
-            [cantEval, e1, e2, e3, e4, e5, totalCalculado, existing[0].id]
+            "UPDATE relacion_programa_notas SET cantidad_evaluaciones = ?, e1 = ?, e2 = ?, e3 = ?, e4 = ?, e5 = ?, e6 = ?, e7 = ?, e8 = ?, total = ? WHERE id = ?",
+            [cantEval, e1, e2, e3, e4, e5, e6, e7, e8, totalCalculado, existing[0].id]
           );
         } else {
           const newId = await getNextId("relacion_programa_notas");
           await execute(
-            "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [newId, idEstudiante, idUnidadCurricular, cantEval, e1, e2, e3, e4, e5, totalCalculado]
+            "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, e6, e7, e8, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [newId, idEstudiante, idUnidadCurricular, cantEval, e1, e2, e3, e4, e5, e6, e7, e8, totalCalculado]
           );
         }
 
         if (idEstudiante && idUnidadCurricular) {
-          await syncRelacionToEntregasSql(idEstudiante, idUnidadCurricular, { e1, e2, e3, e4, e5 });
+          await syncRelacionToEntregasSql(idEstudiante, idUnidadCurricular, { e1, e2, e3, e4, e5, e6, e7, e8 });
         }
 
         return res.status(200).json({ success: true, message: "Calificaciones guardadas con éxito.", total: totalCalculado });
@@ -897,9 +919,12 @@ module.exports = async function handler(req, res) {
           let e2 = Math.min(20, Math.max(0, parseFloat(item.e2) || 0));
           let e3 = Math.min(20, Math.max(0, parseFloat(item.e3) || 0));
           let e4 = Math.min(20, Math.max(0, parseFloat(item.e4) || 0));
-          let e5 = cantEval === 5 ? Math.min(20, Math.max(0, parseFloat(item.e5) || 0)) : 0;
+          let e5 = cantEval >= 5 ? Math.min(20, Math.max(0, parseFloat(item.e5) || 0)) : 0;
+          let e6 = cantEval >= 6 ? Math.min(20, Math.max(0, parseFloat(item.e6) || 0)) : 0;
+          let e7 = cantEval >= 7 ? Math.min(20, Math.max(0, parseFloat(item.e7) || 0)) : 0;
+          let e8 = cantEval >= 8 ? Math.min(20, Math.max(0, parseFloat(item.e8) || 0)) : 0;
 
-          let activeScores = [e1, e2, e3, e4, e5].slice(0, cantEval);
+          let activeScores = [e1, e2, e3, e4, e5, e6, e7, e8].slice(0, cantEval);
           let totalCalculado = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
 
           const compKey = `${idEstudiante}_${idUnidadCurricular}`;
@@ -913,8 +938,8 @@ module.exports = async function handler(req, res) {
 
           if (targetId) {
             stmts.push({
-              sql: "UPDATE relacion_programa_notas SET cantidad_evaluaciones = ?, e1 = ?, e2 = ?, e3 = ?, e4 = ?, e5 = ?, total = ? WHERE id = ?",
-              args: [cantEval, e1, e2, e3, e4, e5, totalCalculado, targetId]
+              sql: "UPDATE relacion_programa_notas SET cantidad_evaluaciones = ?, e1 = ?, e2 = ?, e3 = ?, e4 = ?, e5 = ?, e6 = ?, e7 = ?, e8 = ?, total = ? WHERE id = ?",
+              args: [cantEval, e1, e2, e3, e4, e5, e6, e7, e8, totalCalculado, targetId]
             });
             updatedCount++;
           } else if (idEstudiante && idUnidadCurricular) {
@@ -922,15 +947,15 @@ module.exports = async function handler(req, res) {
             idSet.add(String(maxId));
             keyMap.set(compKey, maxId);
             stmts.push({
-              sql: "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              args: [maxId, idEstudiante, idUnidadCurricular, cantEval, e1, e2, e3, e4, e5, totalCalculado]
+              sql: "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, e6, e7, e8, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              args: [maxId, idEstudiante, idUnidadCurricular, cantEval, e1, e2, e3, e4, e5, e6, e7, e8, totalCalculado]
             });
             addedCount++;
           }
 
           // Sincronizar también con actividades_entregadas si existen entregas para este estudiante y unidad curricular
           if (idEstudiante && idUnidadCurricular) {
-            const evalMap = { e1, e2, e3, e4, e5 };
+            const evalMap = { e1, e2, e3, e4, e5, e6, e7, e8 };
             const uActs = allActs.filter(a => String(a.id_unidad_curricular) === String(idUnidadCurricular));
             uActs.forEach(act => {
               const evKey = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
@@ -1776,7 +1801,7 @@ module.exports = async function handler(req, res) {
         } else {
           await batch([
             { sql: "DELETE FROM actividades_entregadas WHERE id_estudiante = ?", args: [testEst.id] },
-            { sql: "UPDATE relacion_programa_notas SET e1 = 0, e2 = 0, e3 = 0, e4 = 0, e5 = 0, total = 0 WHERE id_estudiante = ?", args: [testEst.id] }
+            { sql: "UPDATE relacion_programa_notas SET e1 = 0, e2 = 0, e3 = 0, e4 = 0, e5 = 0, e6 = 0, e7 = 0, e8 = 0, total = 0 WHERE id_estudiante = ?", args: [testEst.id] }
           ], "write");
         }
 
@@ -2106,7 +2131,7 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
   const numEval = (act.numero_evaluacion || "e1").toString().toLowerCase();
   const idUnidad = act.id_unidad_curricular;
 
-  const validEvals = ["e1", "e2", "e3", "e4", "e5"];
+  const validEvals = ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"];
   if (!validEvals.includes(numEval)) return;
 
   const relRows = await query(
@@ -2124,8 +2149,11 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
     let e3 = numEval === "e3" ? cleanNota : (parseFloat(rn.e3) || 0);
     let e4 = numEval === "e4" ? cleanNota : (parseFloat(rn.e4) || 0);
     let e5 = numEval === "e5" ? cleanNota : (parseFloat(rn.e5) || 0);
+    let e6 = numEval === "e6" ? cleanNota : (parseFloat(rn.e6) || 0);
+    let e7 = numEval === "e7" ? cleanNota : (parseFloat(rn.e7) || 0);
+    let e8 = numEval === "e8" ? cleanNota : (parseFloat(rn.e8) || 0);
 
-    let active = [e1, e2, e3, e4, e5].slice(0, cantEval);
+    let active = [e1, e2, e3, e4, e5, e6, e7, e8].slice(0, cantEval);
     let total = (active.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
 
     await execute(
@@ -2139,11 +2167,14 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
     let e3 = numEval === "e3" ? cleanNota : 0;
     let e4 = numEval === "e4" ? cleanNota : 0;
     let e5 = numEval === "e5" ? cleanNota : 0;
+    let e6 = numEval === "e6" ? cleanNota : 0;
+    let e7 = numEval === "e7" ? cleanNota : 0;
+    let e8 = numEval === "e8" ? cleanNota : 0;
     let total = (cleanNota / 4).toFixed(2);
 
     await execute(
-      "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, total) VALUES (?, ?, ?, 4, ?, ?, ?, ?, ?, ?)",
-      [newId, idEstudiante, idUnidad, e1, e2, e3, e4, e5, total]
+      "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, e6, e7, e8, total) VALUES (?, ?, ?, 4, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [newId, idEstudiante, idUnidad, e1, e2, e3, e4, e5, e6, e7, e8, total]
     );
   }
 }
