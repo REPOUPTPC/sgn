@@ -74,12 +74,19 @@ $(document).ready(function () {
 
     let list = sgnDb.estudiantes || [];
     if (!sgnAuth.isSuperAdmin()) {
-      const misSecciones = (sgnDb.unidades || [])
-        .filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u))
-        .map(u => String(u.seccion || '').replace(/^'/, '').trim());
+      const misUnidades = (sgnDb.unidades || []).filter(u => String(u.id_prof) === String(currentUser.id));
+      const misUnidadesIds = misUnidades.map(u => String(u.id));
+      const misSecciones = misUnidades.map(u => ({
+        seccion: String(u.seccion || '').replace(/^'/, '').trim(),
+        id_programa_formacion: String(u.id_programa_formacion)
+      }));
       list = list.filter(e => {
         let eSec = String(e.seccion || '').replace(/^'/, '').trim();
-        return misSecciones.includes(eSec) || String(e.cedula || '').toUpperCase().trim() === 'V-12345';
+        let eProg = String(e.id_programa_formacion);
+        const matchSecProg = misSecciones.some(s => s.seccion === eSec && s.id_programa_formacion === eProg);
+        const hasRelacion = (sgnDb.relacionNotas || []).some(r => misUnidadesIds.includes(String(r.id_unidad_curricular)) && String(r.id_estudiante) === String(e.id));
+        const isTestForThisDoc = String(e.cedula || '').toUpperCase().trim() === 'V-12345' && misUnidades.some(u => isUnidadDePrueba(u));
+        return matchSecProg || hasRelacion || isTestForThisDoc;
       });
     }
 
@@ -293,7 +300,7 @@ function populateDropdownOptions() {
   
   let listUnidades = sgnDb.unidades;
   if (!sgnAuth.isSuperAdmin()) {
-    listUnidades = listUnidades.filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u));
+    listUnidades = listUnidades.filter(u => String(u.id_prof) === String(currentUser.id));
   }
 
   // Pre-calcular entregas y pendientes por unidad curricular
@@ -376,13 +383,20 @@ function renderEstudiantesTable() {
   let list = sgnDb.estudiantes || [];
   
   if (!sgnAuth.isSuperAdmin()) {
-    // DOCENTE: Filtrar estudiantes por las secciones de las unidades curriculares asignadas al docente (incluyendo entorno de prueba)
-    const misSecciones = (sgnDb.unidades || [])
-      .filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u))
-      .map(u => String(u.seccion || '').replace(/^'/, '').trim());
+    // DOCENTE: Filtrar estudiantes por las secciones y programas de las unidades curriculares asignadas al docente
+    const misUnidades = (sgnDb.unidades || []).filter(u => String(u.id_prof) === String(currentUser.id));
+    const misUnidadesIds = misUnidades.map(u => String(u.id));
+    const misSecciones = misUnidades.map(u => ({
+      seccion: String(u.seccion || '').replace(/^'/, '').trim(),
+      id_programa_formacion: String(u.id_programa_formacion)
+    }));
     list = list.filter(e => {
       let eSec = String(e.seccion || '').replace(/^'/, '').trim();
-      return misSecciones.includes(eSec) || String(e.cedula || '').toUpperCase().trim() === 'V-12345';
+      let eProg = String(e.id_programa_formacion);
+      const matchSecProg = misSecciones.some(s => s.seccion === eSec && s.id_programa_formacion === eProg);
+      const hasRelacion = (sgnDb.relacionNotas || []).some(r => misUnidadesIds.includes(String(r.id_unidad_curricular)) && String(r.id_estudiante) === String(e.id));
+      const isTestForThisDoc = String(e.cedula || '').toUpperCase().trim() === 'V-12345' && misUnidades.some(u => isUnidadDePrueba(u));
+      return matchSecProg || hasRelacion || isTestForThisDoc;
     });
   }
 
@@ -898,7 +912,7 @@ function renderModalCalificacionesEstudianteContenido() {
   // Filtrar unidades según permisos del usuario logueado
   let misUnidades = sgnDb.unidades || [];
   if (!sgnAuth.isSuperAdmin()) {
-    misUnidades = misUnidades.filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u));
+    misUnidades = misUnidades.filter(u => String(u.id_prof) === String(currentUser.id));
   }
 
   let estSec = String(est.seccion || '').replace(/^'/, '').trim();
@@ -2046,8 +2060,10 @@ async function generarPDF() {
   doc.setTextColor(100, 116, 139); // Gris
   doc.text(`${inasistentesCount}`, 188, summaryY + 14);
 
-  // 7. Descargar PDF
-  doc.save(`Planilla_Notas_Sec${cleanSec}_${new Date().getTime()}.pdf`);
+  // 7. Descargar PDF con nombre independiente y descriptivo por docente y materia
+  const docNamePlanilla = (profesor ? profesor.nombre_profesor : 'Docente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '_');
+  const matNamePlanilla = (unidad.unidad_curricular || unidad['unidad curricular'] || 'Materia').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '_');
+  doc.save(`Planilla_Notas_Prof_${docNamePlanilla}_${matNamePlanilla}_Sec${cleanSec}.pdf`);
 }
 
 async function generarPDFNominaAsistencia() {
@@ -2193,8 +2209,10 @@ async function generarPDFNominaAsistencia() {
   doc.text("________________________________", 160, summaryY, { align: 'center' });
   doc.text("Firma del Vocero", 160, summaryY + 5, { align: 'center' });
 
-  // 7. Descargar PDF
-  doc.save(`Nomina_Asistencia_Sec${cleanSec}_${new Date().getTime()}.pdf`);
+  // 7. Descargar PDF con nombre independiente y descriptivo por docente y materia
+  const docNameNomina = (profesor ? profesor.nombre_profesor : 'Docente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '_');
+  const matNameNomina = (unidad.unidad_curricular || unidad['unidad curricular'] || 'Materia').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '_');
+  doc.save(`Nomina_Asistencia_Prof_${docNameNomina}_${matNameNomina}_Sec${cleanSec}.pdf`);
 }
 
 // Configurar Fechas y Descripciones por Evaluación
@@ -2427,9 +2445,9 @@ function renderActividadesTable() {
   let list = sgnDb.actividadesAsignadas || [];
 
   if (!sgnAuth.isSuperAdmin()) {
-    // DOCENTE: Filtrar actividades por sus Unidades Curriculares asignadas (incluyendo Unidad Curricular de Prueba)
+    // DOCENTE: Filtrar actividades por sus Unidades Curriculares asignadas
     const misUnidadesIds = sgnDb.unidades
-      .filter(u => u.id_prof == currentUser.id || isUnidadDePrueba(u))
+      .filter(u => String(u.id_prof) === String(currentUser.id))
       .map(u => String(u.id));
     list = list.filter(a => misUnidadesIds.includes(String(a.id_unidad_curricular)));
   }
@@ -2833,14 +2851,27 @@ function onActividadLapsoChange(source) {
 // ==========================================================================
 // PARSER Y GESTIÓN DE BANCO DE PREGUNTAS EN MARKDOWN (EVALUACIÓN ONLINE)
 // ==========================================================================
+function updateIaEvaluacionUI(tipo) {
+  const isQuiz = (tipo || '').toUpperCase() === 'QUIZ';
+  $('#iaEvaluacionSection').show();
+  if (isQuiz) {
+    $('#labelActividadIaEvaluar').html('<i class="fa-solid fa-bolt text-warning me-1"></i> Autocorrección y Asignación Inmediata de Puntos (Quiz)');
+    $('#descActividadIaEvaluar').text('Si el switch está activo, el sistema corregirá automáticamente el examen y registrará los puntos calculados en la planilla de notas. Si el switch está apagado, las respuestas quedarán registradas para revisión y asignación manual de notas por el docente.');
+    $('#btnGroupRubricas').hide();
+  } else {
+    $('#labelActividadIaEvaluar').html('<i class="fa-solid fa-robot text-primary me-1"></i> Autoevaluación con Inteligencia Artificial (DeepSeek)');
+    $('#descActividadIaEvaluar').text('Al activar este switch, DeepSeek evaluará automáticamente cada entrega de los estudiantes según la pauta y rúbrica configurada abajo (Calificación 1-20 y retroalimentación inmediata). Si está apagado, el docente corregirá manualmente.');
+    $('#btnGroupRubricas').show();
+  }
+}
+
 function onTipoActividadChange() {
   const tipo = $('#actividadTipo').val();
+  updateIaEvaluacionUI(tipo);
   if (tipo === 'QUIZ') {
-    $('#iaEvaluacionSection').slideUp(200);
     $('#quizConfigSection').slideDown(200);
     updateQuizMarkdownPreview();
   } else {
-    $('#iaEvaluacionSection').slideDown(200);
     $('#quizConfigSection').slideUp(200);
   }
 }
@@ -3101,12 +3132,12 @@ function openModalActividad() {
   $('#actividadDiasLapso').val(7);
   $('#actividadFechaLimite').val(addDaysYMDClient(hoyStr, 7));
   $('#actividadTipo').val('ENTREGA');
+  updateIaEvaluacionUI('ENTREGA');
   $('#quizCantidadMostrar').val(15);
   $('#quizPuntajeMaximo').val(20);
   $('#quizTiempoMinutos').val(30);
   $('#quizMarkdownInput').val('');
   $('#quizConfigSection').hide();
-  $('#iaEvaluacionSection').show();
   $('#actividadIaEvaluar').prop('checked', false);
   updateQuizMarkdownPreview();
   $('#modalActividadTitle').text('Asignar Nueva Actividad / Evaluación');
@@ -3139,6 +3170,7 @@ function editActividad(id) {
 
   const tipoAct = String(a.tipo_actividad || "ENTREGA").toUpperCase();
   $('#actividadTipo').val(tipoAct === 'QUIZ' ? 'QUIZ' : 'ENTREGA');
+  updateIaEvaluacionUI(tipoAct);
 
   if (tipoAct === 'QUIZ') {
     let cfg = {};
@@ -3155,7 +3187,6 @@ function editActividad(id) {
     $('#quizPuntajeMaximo').val(cfg.puntaje_maximo || 20);
     $('#quizTiempoMinutos').val(tiempoMin);
     $('#quizMarkdownInput').val(serializeQuizBankToMarkdown(bank));
-    $('#iaEvaluacionSection').hide();
     $('#quizConfigSection').show();
     updateQuizMarkdownPreview();
   } else {
@@ -3163,7 +3194,6 @@ function editActividad(id) {
     $('#quizPuntajeMaximo').val(20);
     $('#quizTiempoMinutos').val(30);
     $('#quizMarkdownInput').val('');
-    $('#iaEvaluacionSection').show();
     $('#quizConfigSection').hide();
   }
 
@@ -3318,7 +3348,7 @@ function saveActividadSubmit() {
     fecha_limite: fechaLimite,
     descripcion: desc,
     tipo_actividad: tipoActividad,
-    ia_evaluacion: (tipoActividad !== 'QUIZ' && $('#actividadIaEvaluar').is(':checked')) ? "SI" : "NO",
+    ia_evaluacion: $('#actividadIaEvaluar').is(':checked') ? "SI" : "NO",
     quiz_config_json: quizConfigJson,
     quiz_preguntas_json: quizPreguntasJson,
     tiempo_minutos: tiempoMinutos

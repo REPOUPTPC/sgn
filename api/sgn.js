@@ -541,7 +541,17 @@ module.exports = async function handler(req, res) {
 
         let activeUc = null;
         if (idUnidadCurricular) {
-          activeUc = unidadesInfo.find(u => String(u.id) === String(idUnidadCurricular));
+          const directUc = unidades.find(u => String(u.id) === String(idUnidadCurricular));
+          if (directUc) {
+            const prof = profesores.find(p => p.id == directUc.id_prof);
+            activeUc = {
+              id: directUc.id,
+              unidad_curricular: directUc.unidad_curricular || "UNIDAD CURRICULAR",
+              seccion: formatSeccion(directUc.seccion),
+              id_prof: directUc.id_prof,
+              profesor: prof ? prof.nombre_profesor : "Docente no asignado"
+            };
+          }
         }
         if (!activeUc && unidadesInfo.length > 0) {
           activeUc = unidadesInfo[0];
@@ -595,6 +605,7 @@ module.exports = async function handler(req, res) {
           };
         });
 
+        const profFinal = activeUc ? activeUc.profesor : "Docente no asignado";
         return res.status(200).json({
           success: true,
           vocero: { id: vocero.id, nombre_completo: vocero.nombre_completo, cedula: vocero.cedula },
@@ -602,7 +613,8 @@ module.exports = async function handler(req, res) {
           seccion: formatSeccion(seccion),
           unidad_curricular: activeUc ? activeUc.unidad_curricular : "Sin Unidades Asignadas",
           id_unidad_curricular: activeUc ? activeUc.id : null,
-          profesor: activeUc ? activeUc.profesor : "JOSE HERRERA",
+          profesor: profFinal,
+          id_prof: activeUc ? activeUc.id_prof : null,
           unidades_seccion: unidadesInfo,
           unidades_disponibles: unidadesInfo,
           total_estudiantes: roster.length,
@@ -1623,8 +1635,8 @@ module.exports = async function handler(req, res) {
         const ansMap = {};
         if (Array.isArray(respuestas)) {
           respuestas.forEach(ans => {
-            const qId = String(ans.id_pregunta || ans.questionId || "").trim();
-            const optId = String(ans.id_opcion_seleccionada || ans.optionId || "").trim();
+            const qId = String(ans.id_pregunta || ans.questionId || ans.pregunta_id || "").trim();
+            const optId = String(ans.id_opcion_seleccionada || ans.optionId || ans.opcion_id || "").trim();
             if (qId) ansMap[qId] = optId;
           });
         }
@@ -1691,8 +1703,10 @@ module.exports = async function handler(req, res) {
           ? String(existingEnt.hora_inicio)
           : (prevDetail && prevDetail.hora_inicio ? prevDetail.hora_inicio : horaFinStr);
 
+        const isAutoEval = String(act.ia_evaluacion || "").trim().toUpperCase() === "SI" || act.ia_evaluacion === true || act.ia_evaluacion == "1";
+
         const resultadoResumen = {
-          estado: "FINALIZADO",
+          estado: isAutoEval ? "FINALIZADO" : "PENDIENTE_CALIFICACION",
           id_actividad: act.id,
           descripcion: act.descripcion,
           numero_evaluacion: (act.numero_evaluacion || "e1").toString().toLowerCase(),
@@ -1705,32 +1719,41 @@ module.exports = async function handler(req, res) {
           total_preguntas: totalPreguntas,
           puntaje_maximo: puntajeMaximo,
           valor_por_pregunta: valorCadaPregunta,
-          nota: notaFinal,
+          autoevaluado: isAutoEval,
+          nota: isAutoEval ? notaFinal : null,
           resumen: resumen
         };
 
-        const entregaLabel = `QUIZ_ONLINE: ${correctas}/${totalPreguntas} correctas (${notaFinal}/${puntajeMaximo} pts)`;
+        const entregaLabel = isAutoEval
+          ? `QUIZ_ONLINE: ${correctas}/${totalPreguntas} correctas (${notaFinal}/${puntajeMaximo} pts)`
+          : `QUIZ_ONLINE: ${correctas}/${totalPreguntas} respondidas (Pendiente de Calificación Docente)`;
+
+        const notaParaGuardar = isAutoEval ? notaFinal : null;
 
         if (existingEnt) {
           await execute(
             "UPDATE actividades_entregadas SET entrega = ?, fecha_entrega = ?, nota = ?, quiz_detalle_json = ?, hora_inicio = ?, hora_fin = ? WHERE id = ?",
-            [entregaLabel, horaFinStr, notaFinal, JSON.stringify(resultadoResumen), horaInicioStr, horaFinStr, existingEnt.id]
+            [entregaLabel, horaFinStr, notaParaGuardar, JSON.stringify(resultadoResumen), horaInicioStr, horaFinStr, existingEnt.id]
           );
         } else {
           const newId = await getNextId("actividades_entregadas");
           await execute(
             "INSERT INTO actividades_entregadas (id, id_actividades_asignadas, id_estudiante, entrega, fecha_entrega, nota, quiz_detalle_json, hora_inicio, hora_fin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [newId, idActividad, idEstudiante, entregaLabel, horaFinStr, notaFinal, JSON.stringify(resultadoResumen), horaInicioStr, horaFinStr]
+            [newId, idActividad, idEstudiante, entregaLabel, horaFinStr, notaParaGuardar, JSON.stringify(resultadoResumen), horaInicioStr, horaFinStr]
           );
         }
 
-        const notaNormalizada20 = Math.min(20, Math.max(0, notaFinal));
-        await syncNotaToRelacionSql(idActividad, idEstudiante, notaNormalizada20);
+        if (isAutoEval) {
+          const notaNormalizada20 = Math.min(20, Math.max(0, notaFinal));
+          await syncNotaToRelacionSql(idActividad, idEstudiante, notaNormalizada20);
+        }
 
         return res.status(200).json({
           success: true,
-          message: "Evaluación completada y calificada exitosamente.",
-          nota: notaFinal,
+          message: isAutoEval
+            ? "Evaluación completada y calificada exitosamente. La nota fue asignada a la planilla."
+            : "Evaluación completada y enviada correctamente. Queda registrada para revisión y calificación manual del docente.",
+          nota: isAutoEval ? notaFinal : null,
           puntaje_maximo: puntajeMaximo,
           correctas: correctas,
           aciertos: correctas,
@@ -1740,6 +1763,7 @@ module.exports = async function handler(req, res) {
           hora_fin: horaFinStr,
           fecha_entrega: horaFinStr,
           entrega: entregaLabel,
+          autoevaluado: isAutoEval,
           resumen: resumen,
           resultado: resultadoResumen
         });

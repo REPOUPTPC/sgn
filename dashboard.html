@@ -985,7 +985,7 @@
                 <input type="date" id="actividadFechaLimite" class="form-control border-danger fw-semibold" onchange="onActividadLapsoChange('limite')" required>
                 <div class="form-text small">Al vencer se bloquean entregas.</div>
               </div>
-              <!-- SWITCH DE AUTOEVALUACIÓN CON IA (DEEPSEEK) -->
+              <!-- SWITCH DE AUTOEVALUACIÓN Y ASIGNACIÓN DE PUNTOS -->
               <div class="col-md-12" id="iaEvaluacionSection">
                 <div class="card border border-primary-subtle bg-light p-3 rounded-3 shadow-xs">
                   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -994,15 +994,15 @@
                         <input class="form-check-input" type="checkbox" role="switch" id="actividadIaEvaluar" style="width: 2.8em; height: 1.4em; cursor: pointer;">
                       </div>
                       <div>
-                        <label class="form-check-label fw-bold text-navy mb-0 cursor-pointer" for="actividadIaEvaluar">
+                        <label class="form-check-label fw-bold text-navy mb-0 cursor-pointer" for="actividadIaEvaluar" id="labelActividadIaEvaluar">
                           <i class="fa-solid fa-robot text-primary me-1"></i> Autoevaluación con Inteligencia Artificial (DeepSeek)
                         </label>
-                        <div class="text-muted small">
+                        <div class="text-muted small" id="descActividadIaEvaluar">
                           Al activar este switch, DeepSeek evaluará automáticamente cada entrega de los estudiantes según la pauta y rúbrica configurada abajo (Calificación 1-20 y retroalimentación inmediata).
                         </div>
                       </div>
                     </div>
-                    <div class="btn-group">
+                    <div class="btn-group" id="btnGroupRubricas">
                       <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="insertarPlantillaRubrica('general')" title="Insertar rúbrica general estándar de ejemplo (20 pts)">
                         <i class="fa-solid fa-table-list me-1"></i> Insertar Rúbrica de Ejemplo
                       </button>
@@ -1388,9 +1388,9 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
   
   <!-- SGN Modulos -->
-  <script src="js/config.js?v=1.3"></script>
-  <script src="js/modals.js?v=1.3"></script>
-  <script src="js/auth.js?v=1.3"></script>
-  <script src="js/dashboard.js?v=1.3"></script>
+  <script src="js/config.js?v=1.4"></script>
+  <script src="js/modals.js?v=1.4"></script>
+  <script src="js/auth.js?v=1.4"></script>
+  <script src="js/dashboard.js?v=1.4"></script>
 </body>
 </html>

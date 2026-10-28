@@ -441,6 +441,7 @@ function renderBarraLapsoStudentHtml(act) {
  * Renderizar Resumen Académico del Estudiante
  */
 function renderStudentAcademicProfile(res) {
+  window.currentStudentPortalData = res;
   const student = res.student;
   const notas = res.notas || [];
   const isTestUser = !!res.is_test_student || String(student.cedula || '').toUpperCase().trim() === 'V-12345';
@@ -465,23 +466,12 @@ function renderStudentAcademicProfile(res) {
     `);
   } else if (student.rol === 'VOCERO') {
     $rolBadge.html('<span class="role-badge role-vocero"><i class="fa-solid fa-bullhorn me-1"></i> VOCERO</span>');
-    
-    let cleanSec = String(student.seccion || '').replace(/^'/, '');
-    if (!cleanSec && notas.length > 0) {
-      cleanSec = String(notas[0].seccion || '').replace(/^'/, '');
-    }
-    const cleanCed = String(student.cedula || '').replace(/'/g, "\\'");
-    const cleanProgId = String(student.id_programa_formacion || '');
-    const programaStr = String(student.programa || '').replace(/'/g, "\\'");
-    const defaultMateria = notas.length > 0 ? String(notas[0].unidad_curricular || notas[0]['unidad curricular'] || '').replace(/'/g, "\\'") : '';
-    const defaultDocente = notas.length > 0 ? String(notas[0].profesor || '').replace(/'/g, "\\'") : '';
-    const defaultUcId = notas.length > 0 ? String(notas[0].id_unidad_curricular || '') : '';
 
     $voceroActions.html(`
-      <button type="button" class="btn btn-outline-light btn-sm fw-bold border-white" onclick="openVoceroRoster('${cleanCed}', '${cleanSec}', '${cleanProgId}', '${defaultUcId}')" title="Ver Roster de Notas de la Sección">
+      <button type="button" class="btn btn-outline-light btn-sm fw-bold border-white" onclick="handleVoceroHeaderNomina('roster')" title="Ver Roster de Notas de la Sección">
         <i class="fa-solid fa-users me-1"></i> Roster
       </button>
-      <button type="button" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="generarPDFNominaVocero('${cleanSec}', '${programaStr}', '${defaultMateria}', '${defaultDocente}', '${cleanCed}', '${cleanProgId}', '${defaultUcId}')" title="Imprimir Nómina de Asistencia">
+      <button type="button" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="handleVoceroHeaderNomina('asistencia')" title="Imprimir Nómina de Asistencia">
         <i class="fa-solid fa-file-pdf me-1"></i> Asistencia
       </button>
     `);
@@ -1049,6 +1039,99 @@ function submitStudentProfileUpdate() {
 }
 
 /**
+ * Manejador para botones de cabecera de Vocero: Permite seleccionar la Unidad Curricular
+ * si el estudiante está cursando múltiples materias para que el PDF refleje exactamente el docente correspondiente.
+ */
+function handleVoceroHeaderNomina(action) {
+  const data = window.currentStudentPortalData || {};
+  const student = data.student || {};
+  const notas = data.notas || [];
+  const cleanCed = String(student.cedula || '').replace(/'/g, "\\'");
+  const cleanProgId = String(student.id_programa_formacion || '');
+  const programaStr = String(student.programa || '').replace(/'/g, "\\'");
+
+  if (notas.length === 0) {
+    let cleanSec = String(student.seccion || '').replace(/^'/, '');
+    if (action === 'roster') {
+      openVoceroRoster(cleanCed, cleanSec, cleanProgId, '');
+    } else {
+      generarPDFNominaVocero(cleanSec, programaStr, '', '', cleanCed, cleanProgId, '');
+    }
+    return;
+  }
+
+  if (notas.length === 1) {
+    const n = notas[0];
+    const cleanSec = String(n.seccion || student.seccion || '').replace(/^'/, '');
+    const materiaStr = String(n.unidad_curricular || n['unidad curricular'] || '').replace(/'/g, "\\'");
+    const docenteStr = String(n.profesor || '').replace(/'/g, "\\'");
+    const ucIdStr = String(n.id_unidad_curricular || '');
+    if (action === 'roster') {
+      openVoceroRoster(cleanCed, cleanSec, cleanProgId, ucIdStr);
+    } else {
+      generarPDFNominaVocero(cleanSec, programaStr, materiaStr, docenteStr, cleanCed, cleanProgId, ucIdStr);
+    }
+    return;
+  }
+
+  let itemsHtml = '';
+  notas.forEach(n => {
+    const cleanSec = String(n.seccion || student.seccion || '').replace(/^'/, '');
+    const materiaStr = String(n.unidad_curricular || n['unidad curricular'] || 'Asignatura').replace(/'/g, "\\'");
+    const docenteStr = String(n.profesor || 'Docente no asignado').replace(/'/g, "\\'");
+    const ucIdStr = String(n.id_unidad_curricular || '');
+    const isRoster = action === 'roster';
+    const clickFn = isRoster
+      ? `openVoceroRoster('${cleanCed}', '${cleanSec}', '${cleanProgId}', '${ucIdStr}'); bootstrap.Modal.getInstance(document.getElementById('modalSeleccionUcVocero')).hide();`
+      : `generarPDFNominaVocero('${cleanSec}', '${programaStr}', '${materiaStr}', '${docenteStr}', '${cleanCed}', '${cleanProgId}', '${ucIdStr}'); bootstrap.Modal.getInstance(document.getElementById('modalSeleccionUcVocero')).hide();`;
+
+    itemsHtml += `
+      <div class="list-group-item list-group-item-action p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <div class="fw-bold text-navy fs-6"><i class="fa-solid fa-book-bookmark text-primary me-2"></i>${n.unidad_curricular || n['unidad curricular']}</div>
+          <div class="text-muted small mt-1">
+            <span class="badge bg-secondary me-2">Sección: ${cleanSec}</span>
+            <span><i class="fa-solid fa-chalkboard-user me-1"></i>Docente: <strong>Prof. ${n.profesor || 'Docente no asignado'}</strong></span>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm ${isRoster ? 'btn-outline-primary' : 'btn-danger'} fw-bold shadow-sm" onclick="${clickFn}">
+          <i class="fa-solid ${isRoster ? 'fa-users' : 'fa-file-pdf'} me-1"></i> ${isRoster ? 'Ver Roster' : 'Generar Nómina'}
+        </button>
+      </div>
+    `;
+  });
+
+  const modalHtml = `
+    <div class="modal fade" id="modalSeleccionUcVocero" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+          <div class="modal-header bg-navy text-white">
+            <h5 class="modal-title fs-6 fw-bold">
+              <i class="fa-solid ${action === 'roster' ? 'fa-users' : 'fa-file-signature'} me-2 text-warning"></i>
+              ${action === 'roster' ? 'Seleccionar Asignatura para Ver Roster' : 'Seleccionar Asignatura para Nómina de Asistencia'}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body p-3">
+            <p class="text-muted small mb-3">
+              Seleccione la Unidad Curricular para generar el documento con el docente correspondiente:
+            </p>
+            <div class="list-group shadow-xs">
+              ${itemsHtml}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  $('#modalSeleccionUcVocero').remove();
+  $('body').append(modalHtml);
+  const bsModal = new bootstrap.Modal(document.getElementById('modalSeleccionUcVocero'));
+  bsModal.show();
+}
+
+/**
  * Función para Vocero: Ver Roster de Notas Completo de su Sección
  */
 function openVoceroRoster(cedula, seccion, idPrograma, idUnidadCurricular) {
@@ -1165,7 +1248,9 @@ async function generarPDFNominaVocero(seccion, programa, materia, docente, cedul
       }
 
       const materiaFinal = res.unidad_curricular || materia || 'N/A';
-      const docenteFinal = res.profesor || docente || 'N/A';
+      const docenteFinal = (res.profesor && res.profesor !== 'N/A' && res.profesor !== 'Docente no asignado')
+        ? res.profesor
+        : (docente && docente !== 'N/A' ? docente : (res.profesor || 'Docente no asignado'));
       const programaFinal = res.programa || programa || 'N/A';
       const seccionFinal = res.seccion || seccion || 'N/A';
       
@@ -1267,7 +1352,9 @@ async function generarPDFNominaVocero(seccion, programa, materia, docente, cedul
       doc.text("________________________________", 160, summaryY, { align: 'center' });
       doc.text("Firma del Vocero", 160, summaryY + 5, { align: 'center' });
 
-      doc.save(`Nomina_Asistencia_Sec${seccionFinal}_${new Date().getTime()}.pdf`);
+      const cleanDocName = (docenteFinal || 'Docente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '_');
+      const cleanMatName = (materiaFinal || 'Materia').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '_');
+      doc.save(`Nomina_Asistencia_Prof_${cleanDocName}_${cleanMatName}_Sec${seccionFinal}.pdf`);
     } else {
       sgnShowModal({ title: "Acceso Denegado", message: res.message || "No posee autorización de VOCERO.", type: "warning" });
     }
