@@ -637,7 +637,7 @@ module.exports = async function handler(req, res) {
           { sql: "SELECT * FROM unidad_curricular ORDER BY id ASC", args: [] },
           { sql: "SELECT * FROM relacion_programa_notas ORDER BY id ASC", args: [] },
           { sql: "SELECT * FROM fecha_relacion_nota ORDER BY id ASC", args: [] },
-          { sql: "SELECT * FROM actividades_asignadas ORDER BY id ASC", args: [] },
+          { sql: "SELECT * FROM actividades_asignadas ORDER BY id DESC", args: [] },
           { sql: "SELECT * FROM actividades_entregadas ORDER BY id ASC", args: [] },
           { sql: "SELECT * FROM extension ORDER BY id ASC", args: [] },
           { sql: "SELECT * FROM pagos ORDER BY id ASC", args: [] },

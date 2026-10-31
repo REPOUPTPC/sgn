@@ -2565,6 +2565,33 @@ function renderActividadesTable() {
     return;
   }
 
+  // Ordenar: Mostrar lo más reciente primero y las primeras evaluaciones asignadas de último
+  actividadesFiltradas.sort((itemA, itemB) => {
+    const a = itemA.actividad;
+    const b = itemB.actividad;
+
+    // 1. Comparar por fecha de asignación descendente (más reciente primero)
+    const fechaA = (a.fecha_asignacion || '').toString().trim();
+    const fechaB = (b.fecha_asignacion || '').toString().trim();
+    if (fechaA && fechaB && fechaA !== fechaB) {
+      return fechaB.localeCompare(fechaA);
+    }
+    if (fechaA && !fechaB) return -1;
+    if (!fechaA && fechaB) return 1;
+
+    // 2. Si las fechas de asignación son iguales, ordenar por número de evaluación descendente (ej: E4 > E3 > E2 > E1)
+    const numEvalA = parseInt((a.numero_evaluacion || '').replace(/\D/g, ''), 10) || 0;
+    const numEvalB = parseInt((b.numero_evaluacion || '').replace(/\D/g, ''), 10) || 0;
+    if (numEvalA !== numEvalB) {
+      return numEvalB - numEvalA;
+    }
+
+    // 3. Desempate por ID descendente (la evaluación creada más recientemente primero)
+    const idA = parseInt(a.id, 10) || 0;
+    const idB = parseInt(b.id, 10) || 0;
+    return idB - idA;
+  });
+
   actividadesFiltradas.forEach(item => {
     const a = item.actividad;
     const uc = sgnDb.unidades.find(u => u.id == a.id_unidad_curricular);
