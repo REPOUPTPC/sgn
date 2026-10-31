@@ -176,7 +176,7 @@ async function getCatalogData(forceRefresh = false) {
   return catalog;
 }
 
-// Garantizar que existan las columnas e6, e7, e8 en relacion_programa_notas
+// Garantizar que existan las columnas e6, e7, e8 en relacion_programa_notas y la tabla api_keys
 let schemaVerified = false;
 async function ensureSchemaColumns() {
   if (schemaVerified) return;
@@ -188,8 +188,24 @@ async function ensureSchemaColumns() {
         await execute(`ALTER TABLE relacion_programa_notas ADD COLUMN ${col} REAL DEFAULT 0`);
       }
     }
+
+    await execute(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id INTEGER PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        api_key TEXT NOT NULL UNIQUE,
+        api_secret TEXT NOT NULL,
+        descripcion TEXT,
+        estado TEXT DEFAULT 'ACTIVO',
+        created_at TEXT,
+        last_used_at TEXT
+      )
+    `);
+
     schemaVerified = true;
-  } catch (err) {}
+  } catch (err) {
+    console.error("Error en ensureSchemaColumns:", err);
+  }
 }
 
 // Pre-calentar conexión TLS y caché en segundo plano al iniciar el módulo

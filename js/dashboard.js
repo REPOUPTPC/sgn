@@ -202,13 +202,15 @@ function setupUserInterface() {
   $('#navUserRole').text(currentUser.rol === "SUPER_ADMIN" ? "Super Administrador" : "Docente");
 
   if (!sgnAuth.isSuperAdmin()) {
-    // Ocultar pestañas exclusivas de Super Admin (Profesores, Unidades, Programas, Extensión)
+    // Ocultar pestañas exclusivas de Super Admin (Profesores, Unidades, Programas, Extensión, API)
     $('#tab-profesores-nav').hide();
     $('#tab-unidades-nav').hide();
     $('#tab-programas-nav').hide();
     $('#tab-extension-nav').hide();
+    $('#tab-api-nav').hide();
   } else {
     $('#tab-extension-nav').show();
+    $('#tab-api-nav').show();
   }
 }
 
@@ -245,6 +247,7 @@ function renderAllDashboardTables(keepSelectedCant = false) {
     renderProfesoresTable();
     populateExtensionDropdowns();
     renderExtensionTable();
+    loadApiKeysTable();
   }
   renderUnidadesTable();
   renderProgramasTable();
@@ -2361,7 +2364,8 @@ const HASH_TAB_MAP = {
   '#programas': '#tab-programas-btn',
   '#calificaciones': '#tab-notas-btn',
   '#actividades': '#tab-actividades-btn',
-  '#extension': '#tab-extension-btn'
+  '#extension': '#tab-extension-btn',
+  '#api': '#tab-api-btn'
 };
 
 const TAB_HASH_MAP = {
@@ -2371,13 +2375,17 @@ const TAB_HASH_MAP = {
   'tab-programas-btn': '#programas',
   'tab-notas-btn': '#calificaciones',
   'tab-actividades-btn': '#actividades',
-  'tab-extension-btn': '#extension'
+  'tab-extension-btn': '#extension',
+  'tab-api-btn': '#api'
 };
 
 function setupHashNavigation() {
   $('#sgnDashboardTabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
     const btnId = $(e.target).attr('id');
     const hash = TAB_HASH_MAP[btnId];
+    if (btnId === 'tab-api-btn') {
+      loadApiKeysTable();
+    }
     if (hash && history.pushState) {
       history.pushState(null, null, hash);
     } else if (hash) {
@@ -4699,5 +4707,396 @@ function escapeCsvField(val) {
     str = `"${str}"`;
   }
   return str;
+}
+
+// ==========================================================================
+// 10. MÓDULO CONECTIVIDAD API & EXPORTACIÓN JSON
+// ==========================================================================
+let currentApiKeysList = [];
+
+function getFullApiExportUrl() {
+  const origin = window.location.origin || "";
+  const apiUrl = (typeof SGN_CONFIG !== "undefined" && SGN_CONFIG.API_URL) ? SGN_CONFIG.API_URL : "/api/sgn";
+  return origin + apiUrl + "?action=apiExportEstudiantes";
+}
+
+function updateApiSnippets(sampleKey = "TU_API_KEY", sampleSecret = "TU_API_SECRET") {
+  const fullUrl = getFullApiExportUrl();
+  $('#apiEndpointUrlDisplay').text(fullUrl);
+
+  const curlCode = `# Petición cURL desde terminal o servidor externo
+curl -X GET "${fullUrl}" \\
+  -H "x-api-key: ${sampleKey}" \\
+  -H "x-api-secret: ${sampleSecret}"`;
+  $('#snippetCurl').text(curlCode);
+
+  const jsCode = `// Consumo directo desde el frontend o backend de otra web
+const response = await fetch("${fullUrl}", {
+  method: "GET",
+  headers: {
+    "x-api-key": "${sampleKey}",
+    "x-api-secret": "${sampleSecret}"
+  }
+});
+
+const data = await response.json();
+if (data.success) {
+  // Array de estudiantes: [{ cedula: "V-12345678", nombre_completo: "Juan Pérez" }, ...]
+  console.log("Total estudiantes:", data.total);
+  console.log("Listado:", data.estudiantes);
+}`;
+  $('#snippetJs').text(jsCode);
+
+  const pyCode = `import requests
+
+url = "${fullUrl}"
+headers = {
+    "x-api-key": "${sampleKey}",
+    "x-api-secret": "${sampleSecret}"
+}
+
+response = requests.get(url, headers=headers)
+data = response.json()
+
+if data.get("success"):
+    for alumno in data.get("estudiantes", []):
+        print(f"Cédula: {alumno['cedula']} | Nombre: {alumno['nombre_completo']}")`;
+  $('#snippetPython').text(pyCode);
+
+  const phpCode = `<?php
+$url = "${fullUrl}";
+$ch = curl_init($url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    "x-api-key: ${sampleKey}",
+    "x-api-secret: ${sampleSecret}"
+]);
+$response = curl_exec($ch);
+curl_close($ch);
+
+$data = json_decode($response, true);
+if (!empty($data['success'])) {
+    foreach ($data['estudiantes'] as $alumno) {
+        echo $alumno['cedula'] . " - " . $alumno['nombre_completo'] . PHP_EOL;
+    }
+}
+?>`;
+  $('#snippetPhp').text(phpCode);
+}
+
+function copyApiEndpointUrl() {
+  const fullUrl = getFullApiExportUrl();
+  copiarTexto(fullUrl, "URL del endpoint copiada al portapapeles");
+}
+
+function loadApiKeysTable() {
+  if (!sgnAuth.isSuperAdmin()) return;
+  updateApiSnippets();
+
+  const $tbody = $('#tbodyApiKeys');
+  const $selectTest = $('#selectTestApiKey');
+
+  sgnApiCall("getApiKeys", {}, { showLoading: false })
+    .then(function (res) {
+      if (!res || !res.success) {
+        $tbody.html(`
+          <tr>
+            <td colspan="9" class="text-center py-4 text-danger">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i> No se pudieron cargar las conectividades API.
+            </td>
+          </tr>
+        `);
+        return;
+      }
+
+      currentApiKeysList = res.apiKeys || [];
+      $tbody.empty();
+      $selectTest.empty().append('<option value="">-- Seleccione una clave registrada --</option>');
+
+      if (currentApiKeysList.length === 0) {
+        $tbody.html(`
+          <tr>
+            <td colspan="9" class="text-center py-5 text-muted">
+              <i class="fa-solid fa-key fs-3 d-block mb-2 text-secondary opacity-50"></i>
+              No hay credenciales API creadas todavía.<br>
+              <button class="btn btn-sm btn-primary-sgn mt-2" onclick="openCrearApiKeyModal()">
+                <i class="fa-solid fa-plus me-1"></i> Crear Primera Conectividad API
+              </button>
+            </td>
+          </tr>
+        `);
+        return;
+      }
+
+      currentApiKeysList.forEach(k => {
+        const isActivo = (k.estado === "ACTIVO");
+        const badgeEstado = isActivo
+          ? `<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i> ACTIVO</span>`
+          : `<span class="badge bg-secondary"><i class="fa-solid fa-pause me-1"></i> SUSPENDIDO</span>`;
+
+        const btnToggleEstado = isActivo
+          ? `<button class="btn btn-sm btn-outline-warning" onclick="toggleApiKeyEstado(${k.id}, 'INACTIVO')" title="Suspender temporalmente">
+               <i class="fa-solid fa-pause"></i>
+             </button>`
+          : `<button class="btn btn-sm btn-outline-success" onclick="toggleApiKeyEstado(${k.id}, 'ACTIVO')" title="Reactivar conectividad">
+               <i class="fa-solid fa-play"></i>
+             </button>`;
+
+        const curlCmd = `curl -X GET "${getFullApiExportUrl()}" -H "x-api-key: ${k.api_key}" -H "x-api-secret: TU_SECRETO"`;
+
+        $tbody.append(`
+          <tr>
+            <td><strong>#${k.id}</strong></td>
+            <td>
+              <span class="fw-bold text-navy">${k.nombre}</span>
+            </td>
+            <td>
+              <div class="d-flex align-items-center gap-1">
+                <code class="user-select-all">${k.api_key}</code>
+                <button class="btn btn-xs btn-outline-secondary p-1" style="font-size: 0.7rem;" onclick="copiarTexto('${k.api_key}', 'API Key copiada')" title="Copiar API Key">
+                  <i class="fa-regular fa-copy"></i>
+                </button>
+              </div>
+            </td>
+            <td>
+              <span class="badge bg-light text-muted border font-monospace" title="Por seguridad, el secreto completo solo se muestra al momento de crearlo">
+                ${k.api_secret_masked}
+              </span>
+            </td>
+            <td><small class="text-muted">${k.descripcion || '<em>Sin notas</em>'}</small></td>
+            <td>${badgeEstado}</td>
+            <td><small><i class="fa-regular fa-calendar text-primary me-1"></i>${k.created_at || 'N/A'}</small></td>
+            <td><small><i class="fa-solid fa-clock-rotate-left text-muted me-1"></i>${k.last_used_at || 'Nunca'}</small></td>
+            <td>
+              <div class="d-flex align-items-center gap-1">
+                <button class="btn btn-sm btn-outline-primary" onclick="copiarTexto('${curlCmd}', 'Comando cURL copiado')" title="Copiar snippet cURL de esta API">
+                  <i class="fa-solid fa-terminal"></i>
+                </button>
+                ${btnToggleEstado}
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteApiKey(${k.id})" title="Revocar y eliminar clave permanentemente">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `);
+
+        if (isActivo) {
+          $selectTest.append(`<option value="${k.id}" data-key="${k.api_key}">${k.nombre} (${k.api_key.substring(0, 15)}...)</option>`);
+        }
+      });
+    });
+}
+
+function openCrearApiKeyModal() {
+  $('#formCrearApiKey')[0].reset();
+  const modalEl = document.getElementById('modalCrearApiKey');
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+}
+
+function submitCrearApiKey() {
+  const nombre = ($('#apiKeyNombre').val() || "").trim();
+  const descripcion = ($('#apiKeyDescripcion').val() || "").trim();
+
+  if (!nombre) {
+    sgnShowModal({
+      title: "Campo Requerido",
+      message: "Por favor indique el nombre o destino de la aplicación web.",
+      type: "warning"
+    });
+    return;
+  }
+
+  const $btn = $('#btnSubmitCrearApiKey');
+  $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-1"></i> Generando...');
+
+  sgnApiCall("createApiKey", { nombre: nombre, descripcion: descripcion }, { showLoading: true })
+    .then(function (res) {
+      $btn.prop('disabled', false).html('<i class="fa-solid fa-shield-halved me-1"></i> Generar Credenciales');
+
+      if (res && res.success && res.apiKey) {
+        // Cerrar modal de creación
+        const modalCrearEl = document.getElementById('modalCrearApiKey');
+        const modalCrear = bootstrap.Modal.getInstance(modalCrearEl);
+        if (modalCrear) modalCrear.hide();
+
+        const k = res.apiKey;
+        const fullUrl = getFullApiExportUrl();
+        const curlSnippet = `curl -X GET "${fullUrl}" \\
+  -H "x-api-key: ${k.api_key}" \\
+  -H "x-api-secret: ${k.api_secret}"`;
+
+        // Poblar modal de resultado con secreto generado
+        $('#resApiKeyNombre').val(k.nombre);
+        $('#resApiKeyId').val(k.api_key);
+        $('#resApiKeySecret').val(k.api_secret);
+        $('#resApiKeyCurlSnippet').text(curlSnippet);
+
+        // Mostrar modal de resultado
+        const modalResEl = document.getElementById('modalMostrarApiKeyCreada');
+        const modalRes = bootstrap.Modal.getOrCreateInstance(modalResEl);
+        modalRes.show();
+
+        loadApiKeysTable();
+      } else {
+        sgnShowModal({
+          title: "Error al Generar",
+          message: (res && res.message) ? res.message : "No se pudo generar la conectividad API.",
+          type: "danger"
+        });
+      }
+    })
+    .catch(function () {
+      $btn.prop('disabled', false).html('<i class="fa-solid fa-shield-halved me-1"></i> Generar Credenciales');
+    });
+}
+
+function toggleApiKeyEstado(idKey, nuevoEstado) {
+  const msg = nuevoEstado === "ACTIVO" ? "¿Desea reactivar esta conectividad API?" : "¿Desea suspender temporalmente esta conectividad API? Las peticiones externas serán rechazadas hasta que se vuelva a activar.";
+  sgnShowConfirm({
+    title: nuevoEstado === "ACTIVO" ? "Reactivar Conectividad" : "Suspender Conectividad",
+    message: msg,
+    confirmText: nuevoEstado === "ACTIVO" ? "Sí, Reactivar" : "Sí, Suspender",
+    onConfirm: function () {
+      sgnApiCall("toggleApiKeyEstado", { id: idKey, estado: nuevoEstado }, { showLoading: true })
+        .then(function (res) {
+          if (res && res.success) {
+            loadApiKeysTable();
+          } else {
+            sgnShowModal({ title: "Error", message: res.message || "Error al actualizar estado.", type: "danger" });
+          }
+        });
+    }
+  });
+}
+
+function deleteApiKey(idKey) {
+  sgnShowConfirm({
+    title: "Revocar y Eliminar Conectividad API",
+    message: `¿Está completamente seguro de eliminar y revocar permanentemente la conectividad <strong>#${idKey}</strong>?<br><span class="text-danger small">Las aplicaciones web externas que utilicen esta credencial perderán de inmediato el acceso a la exportación de estudiantes.</span>`,
+    confirmText: "Sí, Revocar y Eliminar",
+    type: "danger",
+    onConfirm: function () {
+      sgnApiCall("deleteApiKey", { id: idKey }, { showLoading: true })
+        .then(function (res) {
+          if (res && res.success) {
+            sgnShowModal({
+              title: "Conectividad Revocada",
+              message: res.message || "La clave de conectividad fue eliminada correctamente.",
+              type: "success"
+            });
+            loadApiKeysTable();
+          } else {
+            sgnShowModal({
+              title: "Error",
+              message: res.message || "No se pudo eliminar la conectividad API.",
+              type: "danger"
+            });
+          }
+        });
+    }
+  });
+}
+
+function copiarAlPortapapeles(elemId, toastMsg = "Copiado al portapapeles") {
+  const elem = document.getElementById(elemId);
+  if (!elem) return;
+  const texto = elem.value || elem.innerText || "";
+  copiarTexto(texto, toastMsg);
+}
+
+function copiarTexto(texto, toastMsg = "Copiado al portapapeles") {
+  if (!texto) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(() => {
+      mostrarNotificacionFlotante(toastMsg);
+    }).catch(() => {
+      fallbackCopiarTexto(texto, toastMsg);
+    });
+  } else {
+    fallbackCopiarTexto(texto, toastMsg);
+  }
+}
+
+function fallbackCopiarTexto(texto, toastMsg) {
+  const tempInput = document.createElement("textarea");
+  tempInput.value = texto;
+  document.body.appendChild(tempInput);
+  tempInput.select();
+  try {
+    document.execCommand("copy");
+    mostrarNotificacionFlotante(toastMsg);
+  } catch (e) {}
+  document.body.removeChild(tempInput);
+}
+
+function mostrarNotificacionFlotante(msg) {
+  let $toast = $('#sgnFloatingToast');
+  if ($toast.length === 0) {
+    $('body').append(`
+      <div id="sgnFloatingToast" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1099;">
+        <div class="toast align-items-center text-white bg-dark border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body">
+              <i class="fa-solid fa-circle-check text-success me-2"></i> <span id="sgnFloatingToastText"></span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      </div>
+    `);
+    $toast = $('#sgnFloatingToast');
+  }
+  $('#sgnFloatingToastText').text(msg);
+  const toastEl = $toast.find('.toast')[0];
+  const bsToast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 2500 });
+  bsToast.show();
+}
+
+function ejecutarPruebaApi() {
+  const idKey = $('#selectTestApiKey').val();
+  const formato = $('#selectTestFormat').val();
+  const $box = $('#testApiOutputBox');
+  const $status = $('#testApiStatusBadge');
+  const $dur = $('#testApiDuration');
+  const $code = $('#testApiOutputCode');
+
+  if (!idKey) {
+    sgnShowModal({
+      title: "Seleccione una Credencial",
+      message: "Por favor seleccione una de las claves de conectividad registradas para ejecutar la prueba.",
+      type: "warning"
+    });
+    return;
+  }
+
+  const selectedKeyObj = currentApiKeysList.find(k => k.id == idKey);
+  if (!selectedKeyObj) return;
+
+  $box.show();
+  $status.html('<i class="fa-solid fa-spinner fa-spin me-1"></i> Conectando al endpoint...');
+  $dur.text('');
+  $code.text('Consultando /api/sgn?action=apiExportEstudiantes...');
+
+  const startTime = Date.now();
+
+  sgnApiCall("apiExportEstudiantes", {
+    api_key: selectedKeyObj.api_key,
+    test_mode_dashboard: true,
+    raw: formato === 'raw' ? "1" : "0"
+  }, { showLoading: false })
+    .then(function (res) {
+      const durationMs = Date.now() - startTime;
+      $dur.text(`Tiempo de respuesta: ${durationMs}ms`);
+      $status.html('<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i> HTTP 200 OK — Conectividad Exitosa</span>');
+      $code.text(JSON.stringify(res, null, 2));
+    })
+    .catch(function (err) {
+      const durationMs = Date.now() - startTime;
+      $dur.text(`Tiempo: ${durationMs}ms`);
+      $status.html('<span class="badge bg-danger"><i class="fa-solid fa-xmark me-1"></i> Error en la Petición</span>');
+      $code.text(JSON.stringify(err, null, 2));
+    });
 }
 

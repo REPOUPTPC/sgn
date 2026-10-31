@@ -1,4 +1,5 @@
-const { query, execute, batch, getNextId, getCatalogData, invalidateCache, memoryCache, ALL_DATA_TTL_MS } = require("./lib/db");
+const crypto = require("crypto");
+const { query, execute, batch, getNextId, getCatalogData, ensureSchemaColumns, invalidateCache, memoryCache, ALL_DATA_TTL_MS } = require("./lib/db");
 const { uploadBase64, R2_PUBLIC_URL } = require("./lib/s3");
 const {
   SUPER_ADMIN_EMAIL,
@@ -42,7 +43,7 @@ module.exports = async function handler(req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, x-api-secret");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -2155,6 +2156,195 @@ module.exports = async function handler(req, res) {
         }
         await execute("UPDATE extension SET estado = ? WHERE id = ?", [estado, idExt]);
         return res.status(200).json({ success: true, message: "Estado del curso actualizado a " + estado });
+      }
+
+      // ==================== GESTIÓN DE CONECTIVIDAD API & EXPORTACIÓN ====================
+      case "getApiKeys": {
+        await ensureSchemaColumns();
+        const rows = await query("SELECT id, nombre, api_key, api_secret, descripcion, estado, created_at, last_used_at FROM api_keys ORDER BY id DESC");
+        const list = (rows || []).map(r => {
+          const sec = r.api_secret || "";
+          const maskedSecret = sec.length > 10 ? sec.substring(0, 6) + "••••••••••••" + sec.substring(sec.length - 4) : "••••••••••••";
+          return {
+            id: r.id,
+            nombre: r.nombre,
+            api_key: r.api_key,
+            api_secret_masked: maskedSecret,
+            descripcion: r.descripcion || "",
+            estado: r.estado || "ACTIVO",
+            created_at: r.created_at || "",
+            last_used_at: r.last_used_at || "Nunca"
+          };
+        });
+        return res.status(200).json({ success: true, apiKeys: list });
+      }
+
+      case "createApiKey": {
+        await ensureSchemaColumns();
+        const nombre = (params.nombre || "").toString().trim();
+        const descripcion = (params.descripcion || "").toString().trim();
+
+        if (!nombre) {
+          return res.status(200).json({ success: false, message: "El nombre de la aplicación es obligatorio." });
+        }
+
+        const newId = await getNextId("api_keys");
+        const apiKey = "sgn_live_" + crypto.randomBytes(12).toString("hex");
+        const apiSecret = "sec_" + crypto.randomBytes(24).toString("hex");
+        const nowCaracas = getCaracasTodayYMD() + " " + (new Date().toLocaleTimeString("es-VE", { hour12: false }));
+
+        await execute(
+          "INSERT INTO api_keys (id, nombre, api_key, api_secret, descripcion, estado, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, 'ACTIVO', ?, 'Nunca')",
+          [newId, nombre, apiKey, apiSecret, descripcion, nowCaracas]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: "Conectividad API creada exitosamente.",
+          apiKey: {
+            id: newId,
+            nombre,
+            api_key: apiKey,
+            api_secret: apiSecret,
+            descripcion,
+            estado: "ACTIVO",
+            created_at: nowCaracas
+          }
+        });
+      }
+
+      case "toggleApiKeyEstado": {
+        await ensureSchemaColumns();
+        const idKey = params.id;
+        const nuevoEstado = (params.estado || "ACTIVO").toString().toUpperCase().trim();
+        if (!idKey) {
+          return res.status(200).json({ success: false, message: "ID de clave API requerido." });
+        }
+        await execute("UPDATE api_keys SET estado = ? WHERE id = ?", [nuevoEstado, idKey]);
+        return res.status(200).json({ success: true, message: `Estado actualizado a ${nuevoEstado}.` });
+      }
+
+      case "deleteApiKey": {
+        await ensureSchemaColumns();
+        const idKey = params.id;
+        if (!idKey) {
+          return res.status(200).json({ success: false, message: "ID de clave API requerido." });
+        }
+        await execute("DELETE FROM api_keys WHERE id = ?", [idKey]);
+        return res.status(200).json({ success: true, message: "Conectividad API eliminada exitosamente." });
+      }
+
+      case "apiExportEstudiantes":
+      case "exportStudentsJson":
+      case "export_estudiantes":
+      case "exportAlumnos": {
+        await ensureSchemaColumns();
+
+        // 1. Extraer credenciales desde Headers, Query Params o Body
+        const authHeader = (req.headers && (req.headers["authorization"] || req.headers["Authorization"])) || "";
+        const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+
+        const providedKey = (req.headers && (req.headers["x-api-key"] || req.headers["x-apikey"])) ||
+                            params.api_key || params.apiKey || params.key || "";
+        const providedSecret = (req.headers && (req.headers["x-api-secret"] || req.headers["x-apisecret"])) ||
+                               bearerToken ||
+                               params.api_secret || params.apiSecret || params.secret || "";
+
+        let clientKey = null;
+        // Soporte de prueba en vivo desde el panel de Super Admin
+        if (params.test_mode_dashboard && providedKey) {
+          const keyRows = await query(
+            "SELECT id, nombre, estado FROM api_keys WHERE api_key = ?",
+            [providedKey.trim()]
+          );
+          if (keyRows && keyRows.length > 0) {
+            clientKey = keyRows[0];
+          }
+        }
+
+        if (!clientKey) {
+          if (!providedKey || !providedSecret) {
+            return res.status(401).json({
+              success: false,
+              error: "UNAUTHORIZED",
+              message: "Faltan credenciales de acceso. Envíe x-api-key y x-api-secret mediante encabezados HTTP o parámetros de consulta."
+            });
+          }
+
+          // 2. Validar credenciales contra la base de datos
+          const keyRows = await query(
+            "SELECT id, nombre, estado FROM api_keys WHERE api_key = ? AND api_secret = ?",
+            [providedKey.trim(), providedSecret.trim()]
+          );
+
+          if (!keyRows || keyRows.length === 0) {
+            return res.status(401).json({
+              success: false,
+              error: "INVALID_CREDENTIALS",
+              message: "Credenciales de API inválidas o secret incorrecto."
+            });
+          }
+          clientKey = keyRows[0];
+        }
+        if (clientKey.estado !== "ACTIVO") {
+          return res.status(403).json({
+            success: false,
+            error: "KEY_INACTIVE",
+            message: "Esta clave de conectividad API se encuentra suspendida o inactiva."
+          });
+        }
+
+        // 3. Registrar fecha de último acceso
+        const nowUsage = getCaracasTodayYMD() + " " + (new Date().toLocaleTimeString("es-VE", { hour12: false }));
+        execute("UPDATE api_keys SET last_used_at = ? WHERE id = ?", [nowUsage, clientKey.id]).catch(() => {});
+
+        // 4. Consultar listado de estudiantes (Cédula y Nombre Completo)
+        let sql = "SELECT cedula, nombre_completo FROM estudiantes";
+        const args = [];
+        const whereClauses = [];
+
+        if (params.search || params.q) {
+          const qVal = `%${(params.search || params.q).trim()}%`;
+          whereClauses.push("(cedula LIKE ? OR nombre_completo LIKE ?)");
+          args.push(qVal, qVal);
+        }
+
+        if (params.id_programa_formacion) {
+          whereClauses.push("id_programa_formacion = ?");
+          args.push(params.id_programa_formacion);
+        }
+
+        if (params.seccion) {
+          whereClauses.push("seccion = ?");
+          args.push(formatSeccion(params.seccion));
+        }
+
+        if (whereClauses.length > 0) {
+          sql += " WHERE " + whereClauses.join(" AND ");
+        }
+
+        sql += " ORDER BY nombre_completo ASC";
+
+        const estudiantesRows = await query(sql, args);
+
+        const dataExport = (estudiantesRows || []).map(e => ({
+          cedula: e.cedula || "",
+          nombre_completo: e.nombre_completo || ""
+        }));
+
+        // Si se solicita formato crudo (array directo en JSON)
+        const isRaw = (params.raw === "1" || params.raw === "true" || params.format === "raw");
+        if (isRaw) {
+          return res.status(200).json(dataExport);
+        }
+
+        return res.status(200).json({
+          success: true,
+          client: clientKey.nombre,
+          total: dataExport.length,
+          estudiantes: dataExport,
+          timestamp: new Date().toISOString()
+        });
       }
 
       default:
