@@ -1070,6 +1070,17 @@ module.exports = async function handler(req, res) {
         }
 
         if (!params.id) {
+          const dup = await query(
+            "SELECT id FROM actividades_asignadas WHERE id_unidad_curricular = ? AND LOWER(numero_evaluacion) = ?",
+            [idUnidad, numEval]
+          );
+          if (dup && dup.length > 0) {
+            return res.status(200).json({
+              success: false,
+              message: `La evaluación ${numEval.toUpperCase()} ya se encuentra asignada para esta Unidad Curricular.`
+            });
+          }
+
           const newId = await getNextId("actividades_asignadas");
           await execute(
             "INSERT INTO actividades_asignadas (id, id_unidad_curricular, fecha_asignacion, numero_evaluacion, descripcion, tipo_actividad, quiz_config_json, quiz_preguntas_json, tiempo_minutos, fecha_limite, ia_evaluacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1077,6 +1088,17 @@ module.exports = async function handler(req, res) {
           );
           return res.status(200).json({ success: true, message: "Actividad asignada con éxito.", id: newId });
         } else {
+          const dup = await query(
+            "SELECT id FROM actividades_asignadas WHERE id_unidad_curricular = ? AND LOWER(numero_evaluacion) = ? AND id != ?",
+            [idUnidad, numEval, params.id]
+          );
+          if (dup && dup.length > 0) {
+            return res.status(200).json({
+              success: false,
+              message: `La evaluación ${numEval.toUpperCase()} ya se encuentra asignada para esta Unidad Curricular.`
+            });
+          }
+
           await execute(
             "UPDATE actividades_asignadas SET id_unidad_curricular = ?, fecha_asignacion = ?, numero_evaluacion = ?, descripcion = ?, tipo_actividad = ?, quiz_config_json = ?, quiz_preguntas_json = ?, tiempo_minutos = ?, fecha_limite = ?, ia_evaluacion = ? WHERE id = ?",
             [idUnidad, fechaAsig, numEval, desc, tipoActividad, quizConfigJson, quizPreguntasJson, tiempoMinutos, fechaLimite, iaEvaluacion, params.id]

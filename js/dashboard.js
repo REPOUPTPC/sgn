@@ -172,6 +172,11 @@ $(document).ready(function () {
       }
     }
   });
+
+  // Actualizar evaluaciones disponibles al cambiar la Unidad Curricular en el modal de Asignar Actividad
+  $(document).on('change', '#actividadUnidadId', function () {
+    updateActividadEvalOptions();
+  });
 });
 
 /**
@@ -3124,6 +3129,90 @@ GROUP BY departamento
   updateQuizMarkdownPreview();
 }
 
+function updateActividadEvalOptions(preferredEval = null) {
+  const uId = $('#actividadUnidadId').val();
+  const currentActId = $('#actividadId').val() || '';
+  const $evalSelect = $('#actividadEval');
+  const $alertBox = $('#actividadEvalHelp');
+  const $btnGuardar = $('#btnGuardarActividadModal');
+
+  let currentVal = preferredEval ? String(preferredEval).toLowerCase().trim() : ($evalSelect.val() || '').toLowerCase().trim();
+
+  // Buscar qué evaluaciones ya están asignadas a esta unidad (excluyendo la actividad que se está editando)
+  const assignedEvals = [];
+  if (uId) {
+    (sgnDb.actividadesAsignadas || []).forEach(a => {
+      if (String(a.id_unidad_curricular) === String(uId) && String(a.id) !== String(currentActId)) {
+        const num = (a.numero_evaluacion || '').toString().toLowerCase().trim();
+        if (num && !assignedEvals.includes(num)) {
+          assignedEvals.push(num);
+        }
+      }
+    });
+  }
+
+  const allEvals = [
+    { key: 'e1', label: 'Evaluación 1 (E1)' },
+    { key: 'e2', label: 'Evaluación 2 (E2)' },
+    { key: 'e3', label: 'Evaluación 3 (E3)' },
+    { key: 'e4', label: 'Evaluación 4 (E4)' },
+    { key: 'e5', label: 'Evaluación 5 (E5)' },
+    { key: 'e6', label: 'Evaluación 6 (E6)' },
+    { key: 'e7', label: 'Evaluación 7 (E7)' },
+    { key: 'e8', label: 'Evaluación 8 (E8)' }
+  ];
+
+  $evalSelect.empty();
+
+  let firstAvailable = null;
+  let availableCount = 0;
+
+  allEvals.forEach(ev => {
+    const isAssigned = assignedEvals.includes(ev.key);
+    if (!isAssigned) {
+      availableCount++;
+      if (!firstAvailable) {
+        firstAvailable = ev.key;
+      }
+      $evalSelect.append(`<option value="${ev.key}">${ev.label}</option>`);
+    } else {
+      $evalSelect.append(`<option value="${ev.key}" disabled class="text-muted bg-light">${ev.label} — (Ya asignada)</option>`);
+    }
+  });
+
+  // Determinar la opción seleccionada
+  if (currentVal && !assignedEvals.includes(currentVal)) {
+    $evalSelect.val(currentVal);
+  } else if (firstAvailable) {
+    $evalSelect.val(firstAvailable);
+  } else {
+    $evalSelect.val('');
+  }
+
+  // Notificación visual en el modal
+  if (!uId) {
+    if ($alertBox.length) {
+      $alertBox.html('<span class="text-muted"><i class="fa-solid fa-circle-info me-1"></i> Seleccione una Unidad Curricular para comprobar las evaluaciones disponibles.</span>');
+    }
+    $btnGuardar.prop('disabled', false);
+  } else if (availableCount === 0) {
+    if ($alertBox.length) {
+      $alertBox.html('<span class="text-danger fw-bold"><i class="fa-solid fa-triangle-exclamation me-1"></i> Todas las evaluaciones (E1 a E8) ya han sido asignadas para esta Unidad Curricular. No es posible asignar evaluaciones duplicadas.</span>');
+    }
+    $btnGuardar.prop('disabled', true);
+  } else {
+    if ($alertBox.length) {
+      if (assignedEvals.length > 0) {
+        const assignedTxt = assignedEvals.map(e => e.toUpperCase()).sort().join(', ');
+        $alertBox.html(`<span class="text-muted"><i class="fa-solid fa-circle-info text-primary me-1"></i> Evaluaciones ya asignadas: <strong>${assignedTxt}</strong> (no seleccionables para evitar duplicados).</span>`);
+      } else {
+        $alertBox.html('<span class="text-muted"><i class="fa-solid fa-circle-check text-success me-1"></i> Todas las evaluaciones están disponibles para asignar.</span>');
+      }
+    }
+    $btnGuardar.prop('disabled', false);
+  }
+}
+
 function openModalActividad() {
   $('#modalActividadForm')[0].reset();
   $('#actividadId').val('');
@@ -3143,6 +3232,14 @@ function openModalActividad() {
   $('#modalActividadTitle').text('Asignar Nueva Actividad / Evaluación');
   
   populateDropdownOptions();
+
+  // Si en la pestaña de actividades hay una unidad seleccionada en el filtro, preseleccionarla
+  const filtroVal = $('#filtroActividadUnidad').val();
+  if (filtroVal && $('#actividadUnidadId option[value="' + filtroVal + '"]').length > 0) {
+    $('#actividadUnidadId').val(filtroVal);
+  }
+
+  updateActividadEvalOptions();
   
   const bsModal = new bootstrap.Modal(document.getElementById('modalActividad'));
   bsModal.show();
@@ -3158,7 +3255,8 @@ function editActividad(id) {
 
   $('#actividadId').val(a.id);
   $('#actividadUnidadId').val(a.id_unidad_curricular);
-  $('#actividadEval').val((a.numero_evaluacion || "e1").toLowerCase());
+  const evalActual = (a.numero_evaluacion || "e1").toLowerCase();
+  updateActividadEvalOptions(evalActual);
   $('#actividadFecha').val(lapsoInfo.fecha_asignacion);
   $('#actividadFechaLimite').val(lapsoInfo.fecha_limite);
   const startMs = parseYMDLocalMs(lapsoInfo.fecha_asignacion);
@@ -3277,7 +3375,8 @@ function insertarPlantillaRubrica(tipo) {
 
 function saveActividadSubmit() {
   const uId = $('#actividadUnidadId').val();
-  const evalKey = $('#actividadEval').val();
+  const evalKey = ($('#actividadEval').val() || '').toLowerCase().trim();
+  const currentActId = $('#actividadId').val() || '';
   const fecha = normalizeDateYMDClient($('#actividadFecha').val()) || getTodayYMDClient();
   const diasInput = parseInt($('#actividadDiasLapso').val(), 10);
   const fechaLimite = normalizeDateYMDClient($('#actividadFechaLimite').val()) || addDaysYMDClient(fecha, isNaN(diasInput) ? 7 : diasInput);
@@ -3286,6 +3385,27 @@ function saveActividadSubmit() {
 
   if (!uId || !desc) {
     sgnShowModal({ title: "Atención", message: "Debe seleccionar la Unidad Curricular e ingresar la descripción de la actividad.", type: "warning" });
+    return;
+  }
+
+  if (!evalKey) {
+    sgnShowModal({ title: "Atención", message: "Debe seleccionar el Número de Evaluación a asignar.", type: "warning" });
+    return;
+  }
+
+  // Validación: Evitar duplicado de evaluación en la misma Unidad Curricular
+  const yaAsignada = (sgnDb.actividadesAsignadas || []).find(a =>
+    String(a.id_unidad_curricular) === String(uId) &&
+    (a.numero_evaluacion || '').toString().toLowerCase().trim() === evalKey &&
+    String(a.id) !== String(currentActId)
+  );
+
+  if (yaAsignada) {
+    sgnShowModal({
+      title: "Evaluación ya Asignada",
+      message: `La evaluación <strong>${evalKey.toUpperCase()}</strong> ya fue asignada previamente para esta Unidad Curricular. Por favor seleccione otra evaluación para evitar duplicados.`,
+      type: "warning"
+    });
     return;
   }
 
@@ -4013,15 +4133,16 @@ $(document).on('hidden.bs.modal', '#sgnUniversalModal', function () {
 
 function buildPagosExtJoined() {
   sgnDb.pagosExtJoined = (sgnDb.pagos || []).map(p => {
-    const st = (sgnDb.estudiantes || []).find(e => e.id == p.id_usuario);
+    const st = (sgnDb.estudiantes || []).find(e => e.id == p.id_usuario) ||
+               (sgnDb.estudiantes || []).find(e => String(e.cedula).toUpperCase().trim() === String(p.id_usuario).toUpperCase().trim());
     const ext = (sgnDb.extension || []).find(ex => ex.id == p.id_extension);
     const bnk = (sgnDb.banco || []).find(b => b.id == p.id_banco);
     let rawEstado = (p.estado !== undefined && p.estado !== null && p.estado !== "") ? p.estado.toString().toUpperCase().trim() : "FALSE";
     return {
       id: p.id,
       id_usuario: p.id_usuario,
-      cedula: st ? st.cedula : "N/A",
-      nombre_completo: st ? st.nombre_completo : "Desconocido",
+      cedula: st ? st.cedula : (p.cedula || "N/A"),
+      nombre_completo: st ? st.nombre_completo : (p.nombre_completo || p.nombre_estudiante || "Desconocido"),
       id_extension: p.id_extension,
       curso: ext ? ext.taller : "N/A",
       estado_curso: ext ? (ext.estado || "EN_CURSO") : "EN_CURSO",
@@ -4474,7 +4595,7 @@ function toggleEstadoCurso(idExtension, nuevoEstado) {
 
 /**
  * Exporta las declaraciones de pago existentes en formato CSV con las columnas:
- * cedula, curso_ofertado, referencia, monto, banco_origen, capture, fecha
+ * cedula, nombre_completo, curso_ofertado, referencia, monto, banco_origen, capture, fecha
  */
 function exportExtensionCSV(modo = 'todos') {
   const selectedCursoId = $('#selectExtensionGestion').val();
@@ -4507,7 +4628,7 @@ function exportExtensionCSV(modo = 'todos') {
     return;
   }
 
-  const headers = ["cedula", "curso_ofertado", "referencia", "monto", "banco_origen", "capture", "fecha"];
+  const headers = ["cedula", "nombre_completo", "curso_ofertado", "referencia", "monto", "banco_origen", "capture", "fecha"];
   
   let csvRows = [];
   csvRows.push(headers.join(","));
@@ -4515,8 +4636,10 @@ function exportExtensionCSV(modo = 'todos') {
   list.forEach(item => {
     const montoFormatted = (parseFloat(item.monto) || 0).toFixed(2);
     const fechaYMD = normalizeFechaPagoYMD(item.fecha_transferencia);
+    const nombreCompleto = item.nombre_completo || item.nombre_estudiante || (sgnDb.estudiantes || []).find(e => e.id == item.id_usuario)?.nombre_completo || "";
     const row = [
       escapeCsvField(item.cedula),
+      escapeCsvField(nombreCompleto),
       escapeCsvField(item.curso),
       escapeCsvField(item.numero_transferencia),
       escapeCsvField(montoFormatted),

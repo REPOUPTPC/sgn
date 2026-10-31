@@ -470,7 +470,7 @@
                 </button>
               </div>
             </div>
-            <p class="text-muted mb-4">Administre, cree, edite o elimine las declaraciones de pago de Extensión Universitaria y exporte los registros en formato CSV (<code>cedula, curso_ofertado, referencia, monto, banco_origen, capture, fecha</code>).</p>
+            <p class="text-muted mb-4">Administre, cree, edite o elimine las declaraciones de pago de Extensión Universitaria y exporte los registros en formato CSV (<code>cedula, nombre_completo, curso_ofertado, referencia, monto, banco_origen, capture, fecha</code>).</p>
 
             <div class="row g-3 align-items-center mb-4 bg-light p-3 rounded-3 border">
               <div class="col-md-6">
@@ -948,7 +948,7 @@
             <div class="row g-3">
               <div class="col-md-12">
                 <label class="form-label fw-bold">Unidad Curricular *</label>
-                <select id="actividadUnidadId" class="form-select select-unidad-opt" required></select>
+                <select id="actividadUnidadId" class="form-select select-unidad-opt" required onchange="updateActividadEvalOptions()"></select>
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Número de Evaluación *</label>
@@ -962,6 +962,7 @@
                   <option value="e7">Evaluación 7 (E7)</option>
                   <option value="e8">Evaluación 8 (E8)</option>
                 </select>
+                <div id="actividadEvalHelp" class="form-text small mt-1"></div>
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Tipo de Actividad *</label>
