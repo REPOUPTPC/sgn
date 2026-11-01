@@ -202,6 +202,16 @@ async function ensureSchemaColumns() {
       )
     `);
 
+    // Limpiar entregas que quedaron con nota 0 por fallo o apagado de la IA
+    try {
+      await execute(`
+        UPDATE actividades_entregadas
+        SET nota = NULL, comentario = NULL
+        WHERE (comentario LIKE '%Evaluado por IA%' OR comentario LIKE '%DeepSeek%')
+          AND (nota = 0 OR nota IS NULL)
+      `);
+    } catch (eClean) {}
+
     schemaVerified = true;
   } catch (err) {
     console.error("Error en ensureSchemaColumns:", err);

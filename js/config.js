@@ -48,6 +48,9 @@ function sgnApiCall(action, data = {}, options = {}) {
  * Formateador de Nota con Insignia de Color
  */
 function getGradeBadgeHTML(score) {
+  if (score === null || score === undefined || score === "" || score === "PENDIENTE") {
+    return `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-semibold" style="font-size: 0.78rem;"><i class="fa-solid fa-hourglass-half me-1"></i> A la espera de calificación</span>`;
+  }
   const num = parseFloat(score);
   if (isNaN(num)) return `<span class="grade-badge grade-fail">N/A</span>`;
   

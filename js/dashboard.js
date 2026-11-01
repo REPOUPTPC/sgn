@@ -3399,12 +3399,10 @@ function insertarPlantillaRubrica(tipo) {
       confirmText: "Sí, insertar rúbrica",
       onConfirm: function () {
         $('#actividadDesc').val(rubricaPlantilla);
-        $('#actividadIaEvaluar').prop('checked', true);
       }
     });
   } else {
     $('#actividadDesc').val(rubricaPlantilla);
-    $('#actividadIaEvaluar').prop('checked', true);
   }
 }
 
@@ -3575,8 +3573,8 @@ function renderTablaEntregasActividad() {
   const rawEntregas = currentEntregasState.entregas || [];
   // Ordenar: primero los estudiantes que les falta nota (pendientes) y luego los ya calificados
   const entregas = [...rawEntregas].sort((a, b) => {
-    const aHasNota = (a.nota !== undefined && a.nota !== "" && a.nota !== null);
-    const bHasNota = (b.nota !== undefined && b.nota !== "" && b.nota !== null);
+    const aHasNota = (a.nota !== undefined && a.nota !== "" && a.nota !== null && !isNaN(parseFloat(a.nota)) && parseFloat(a.nota) > 0);
+    const bHasNota = (b.nota !== undefined && b.nota !== "" && b.nota !== null && !isNaN(parseFloat(b.nota)) && parseFloat(b.nota) > 0);
     if (aHasNota !== bHasNota) {
       return aHasNota ? 1 : -1;
     }
@@ -3589,7 +3587,7 @@ function renderTablaEntregasActividad() {
 
   // Calcular estadísticas de calificación
   const total = entregas.length;
-  const calificados = entregas.filter(e => e.nota !== undefined && e.nota !== "" && e.nota !== null).length;
+  const calificados = entregas.filter(e => e.nota !== undefined && e.nota !== "" && e.nota !== null && !isNaN(parseFloat(e.nota)) && parseFloat(e.nota) > 0).length;
   const pendientes = total - calificados;
   const porcentaje = total > 0 ? Math.round((calificados / total) * 100) : 0;
 
@@ -3635,7 +3633,7 @@ function renderTablaEntregasActividad() {
       }
     }
 
-    const isCalificado = (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
+    const isCalificado = (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null && !isNaN(parseFloat(ent.nota)) && parseFloat(ent.nota) > 0);
     const notaVal = isCalificado ? ent.nota : "";
     const comentarioVal = (ent.comentario !== undefined && ent.comentario !== null) ? ent.comentario : "";
     const rowClass = isCalificado ? 'entrega-row-calificada' : 'entrega-row-pendiente';

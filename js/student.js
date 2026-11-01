@@ -531,8 +531,11 @@ function renderStudentAcademicProfile(res) {
       }
 
       let notaDisplay = '';
-      if (act.nota !== undefined && act.nota !== "" && act.nota !== null) {
-        notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(act.nota)}</span>`;
+      const actNotaNum = (act.nota !== undefined && act.nota !== "" && act.nota !== null) ? parseFloat(act.nota) : NaN;
+      if (act.calificado && !isNaN(actNotaNum) && actNotaNum > 0) {
+        notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(actNotaNum)}</span>`;
+      } else if (hasEntrega) {
+        notaDisplay = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>`;
       }
 
       let tipoTagHtml = '';
@@ -603,8 +606,9 @@ function renderStudentAcademicProfile(res) {
       const descFormatted = sgnFormatTextWithLinks(act.descripcion);
 
       let comentarioTopDisplay = '';
-      if (act.comentario && String(act.comentario).trim()) {
-        const is20 = (act.nota !== undefined && parseFloat(act.nota) === 20);
+      const isComentarioIaInvalido = act.comentario && (act.comentario.includes("Evaluado por IA") || act.comentario.includes("DeepSeek")) && (!act.calificado || isNaN(actNotaNum) || actNotaNum === 0);
+      if (act.comentario && String(act.comentario).trim() && !isComentarioIaInvalido) {
+        const is20 = (!isNaN(actNotaNum) && actNotaNum === 20);
         comentarioTopDisplay = `
           <div class="alert ${is20 ? 'alert-success border-success-subtle' : 'alert-info border-info-subtle'} p-2 mt-2 mb-1 rounded-2 shadow-xs d-flex align-items-start gap-2">
             <i class="fa-solid ${is20 ? 'fa-award text-warning' : 'fa-comment-dots text-primary'} fs-5 mt-1 flex-shrink-0"></i>
@@ -674,8 +678,28 @@ function renderStudentAcademicProfile(res) {
         
         const evalNumStr = 'e' + i;
         const actDeEval = (n.actividades || []).find(a => String(a.numero_evaluacion || '').toLowerCase() === evalNumStr);
+        
+        let evalBadgeHtml = '';
+        const hasActEntrega = actDeEval && (!!actDeEval.entrega || !!actDeEval.quiz_completado || actDeEval.estado_calificacion === 'A_LA_ESPERA');
+        const isActCalificado = actDeEval && actDeEval.calificado && actDeEval.nota !== null && !isNaN(parseFloat(actDeEval.nota)) && parseFloat(actDeEval.nota) > 0;
+        const valNum = parseFloat(val);
+        const hasValScore = !isNaN(valNum) && valNum > 0;
+
+        if (isActCalificado) {
+          evalBadgeHtml = getGradeBadgeHTML(actDeEval.nota);
+        } else if (hasValScore) {
+          evalBadgeHtml = getGradeBadgeHTML(valNum);
+        } else if (hasActEntrega) {
+          evalBadgeHtml = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-1 px-2 fw-semibold" style="font-size: 0.78rem;" title="Entrega registrada. A la espera de asignación de calificación por el docente."><i class="fa-solid fa-hourglass-half me-1"></i> A la Espera</span>`;
+        } else if (actDeEval) {
+          evalBadgeHtml = `<span class="badge bg-secondary-subtle text-secondary border py-1 px-2 fw-semibold" style="font-size: 0.78rem;"><i class="fa-solid fa-clock me-1"></i> Sin Calificar</span>`;
+        } else {
+          evalBadgeHtml = `<span class="badge bg-light text-muted border py-1 px-2 fw-semibold" style="font-size: 0.78rem;"><i class="fa-solid fa-minus me-1"></i> Pendiente</span>`;
+        }
+
         let evalComentarioHtml = '';
-        if (actDeEval && actDeEval.comentario && String(actDeEval.comentario).trim()) {
+        const isFailedIaComment = actDeEval && actDeEval.comentario && (actDeEval.comentario.includes("Evaluado por IA") || actDeEval.comentario.includes("DeepSeek")) && (!actDeEval.calificado || !isActCalificado);
+        if (actDeEval && actDeEval.comentario && String(actDeEval.comentario).trim() && !isFailedIaComment) {
           const is20 = (actDeEval.nota !== undefined && parseFloat(actDeEval.nota) === 20);
           evalComentarioHtml = `
             <div class="mt-2 pt-2 border-top">
@@ -692,7 +716,7 @@ function renderStudentAcademicProfile(res) {
             <div class="border rounded-3 p-3 bg-light h-100">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-bold text-navy">Evaluación ${i}</span>
-                ${getGradeBadgeHTML(val)}
+                ${evalBadgeHtml}
               </div>
               <p class="text-muted small mb-1"><i class="fa-regular fa-calendar-check me-1"></i> ${fechaStr}</p>
               <div class="text-secondary small mb-0 desc-actividad-box text-break"><i class="fa-solid fa-info-circle me-1"></i> ${sgnFormatTextWithLinks(descStr)}</div>
@@ -737,8 +761,11 @@ function renderStudentAcademicProfile(res) {
           }
 
           let notaDisplay = '';
-          if (act.nota !== undefined && act.nota !== "" && act.nota !== null) {
-            notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(act.nota)}</span>`;
+          const actNotaNum = (act.nota !== undefined && act.nota !== "" && act.nota !== null) ? parseFloat(act.nota) : NaN;
+          if (act.calificado && !isNaN(actNotaNum) && actNotaNum > 0) {
+            notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(actNotaNum)}</span>`;
+          } else if (hasEntrega) {
+            notaDisplay = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>`;
           }
 
           let tipoTagHtml = '';
@@ -809,7 +836,8 @@ function renderStudentAcademicProfile(res) {
           const descFormatted = sgnFormatTextWithLinks(act.descripcion);
 
           let comentarioSubjectDisplay = '';
-          if (act.comentario && String(act.comentario).trim()) {
+          const isComentarioIaInvalido = act.comentario && (act.comentario.includes("Evaluado por IA") || act.comentario.includes("DeepSeek")) && (!act.calificado || isNaN(actNotaNum) || actNotaNum === 0);
+          if (act.comentario && String(act.comentario).trim() && !isComentarioIaInvalido) {
             const is20 = (act.nota !== undefined && parseFloat(act.nota) === 20);
             comentarioSubjectDisplay = `
               <div class="alert ${is20 ? 'alert-success border-success-subtle' : 'alert-info border-info-subtle'} p-2 mt-2 mb-1 rounded-2 shadow-xs d-flex align-items-start gap-2">
@@ -892,6 +920,19 @@ function renderStudentAcademicProfile(res) {
         `;
       }
 
+      const totalNum = parseFloat(n.total);
+      let totalBadgeHtml = '';
+      if (isNaN(totalNum) || totalNum === 0) {
+        const hasPendingSubmissions = (n.actividades || []).some(a => (a.entrega || a.quiz_completado) && !a.calificado);
+        if (hasPendingSubmissions) {
+          totalBadgeHtml = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> En Espera de Calificaciones</span>`;
+        } else {
+          totalBadgeHtml = `<span class="badge bg-light text-muted border py-2 px-3 fw-semibold"><i class="fa-solid fa-hourglass-start me-1"></i> Sin Calificaciones Registradas</span>`;
+        }
+      } else {
+        totalBadgeHtml = getGradeBadgeHTML(totalNum);
+      }
+
       $notasContainer.append(`
         <div class="card card-custom mb-4">
           <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -909,7 +950,7 @@ function renderStudentAcademicProfile(res) {
             ${actividadesHtml}
             <div class="mt-3 pt-3 border-top d-flex justify-content-between align-items-center">
               <span class="fw-bold text-navy fs-5">Promedio Acumulado Total:</span>
-              ${getGradeBadgeHTML(n.total)}
+              ${totalBadgeHtml}
             </div>
           </div>
         </div>
@@ -1547,7 +1588,15 @@ function submitEstudianteEntrega() {
           } else {
             sgnShowModal({
               title: "¡Entrega Realizada!",
-              message: "Su trabajo ha sido subido con éxito y registrado para el docente.",
+              message: `
+                <div class="text-center my-3">
+                  <div class="d-inline-flex align-items-center gap-2 bg-warning-subtle text-warning-emphasis px-4 py-2 rounded-pill border border-warning-subtle shadow-xs">
+                    <i class="fa-solid fa-hourglass-half fa-lg"></i>
+                    <span class="fs-6 fw-bold">A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>
+                  </div>
+                </div>
+                <p class="text-muted small text-center mb-0 mt-2">Su trabajo ha sido subido con éxito. El docente revisará su entrega y asignará la calificación correspondiente.</p>
+              `,
               type: "success"
             });
           }
@@ -1610,7 +1659,15 @@ function submitEstudianteEntrega() {
         } else {
           sgnShowModal({
             title: "¡Entrega Registrada!",
-            message: "El enlace de su actividad ha sido verificado como público y guardado exitosamente.",
+            message: `
+              <div class="text-center my-3">
+                <div class="d-inline-flex align-items-center gap-2 bg-warning-subtle text-warning-emphasis px-4 py-2 rounded-pill border border-warning-subtle shadow-xs">
+                  <i class="fa-solid fa-hourglass-half fa-lg"></i>
+                  <span class="fs-6 fw-bold">A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>
+                </div>
+              </div>
+              <p class="text-muted small text-center mb-0 mt-2">El enlace de su actividad ha sido registrado exitosamente. El docente revisará su entrega y asignará la calificación correspondiente.</p>
+            `,
             type: "success"
           });
         }

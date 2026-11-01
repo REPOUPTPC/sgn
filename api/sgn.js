@@ -288,13 +288,28 @@ module.exports = async function handler(req, res) {
             }
 
             const isEnCurso = tipoAct === "QUIZ" && ent && String(ent.entrega || "").trim() === "EN_CURSO";
-            const hasEntGrade = ent && ent.nota !== undefined && ent.nota !== null && ent.nota !== "";
-            const hasUnifiedGrade = hasEntGrade || unifiedEvalScore > 0;
-            const finalActNota = hasUnifiedGrade
-              ? Math.max(hasEntGrade ? (parseFloat(ent.nota) || 0) : 0, unifiedEvalScore)
-              : "";
+            const hasEntrega = !isEnCurso && ent && !!(ent.entrega || ent.quiz_detalle_json);
 
-            const hasQuizAttempt = tipoAct === "QUIZ" && ent && !isEnCurso && (ent.quiz_detalle_json || ent.entrega || hasUnifiedGrade);
+            // Validar nota real: debe ser un número válido mayor a 0, y no un 0 asignado por fallo de IA
+            const entNotaNum = (ent && ent.nota !== undefined && ent.nota !== null && ent.nota !== "") ? parseFloat(ent.nota) : NaN;
+            const isIaComment = ent && ent.comentario && (ent.comentario.includes("Evaluado por IA") || ent.comentario.includes("DeepSeek"));
+            const isFailedIaNota = isIaComment && (isNaN(entNotaNum) || entNotaNum === 0);
+
+            let finalActNota = null;
+            let calificado = false;
+
+            if (!isNaN(entNotaNum) && entNotaNum > 0 && !isFailedIaNota) {
+              finalActNota = entNotaNum;
+              calificado = true;
+            } else if (unifiedEvalScore > 0) {
+              finalActNota = unifiedEvalScore;
+              calificado = true;
+            } else if (hasEntrega) {
+              finalActNota = null;
+              calificado = false;
+            }
+
+            const hasQuizAttempt = tipoAct === "QUIZ" && ent && !isEnCurso && (ent.quiz_detalle_json || ent.entrega || calificado);
             const lapsoInfo = evaluateLapsoActividad(act);
 
             return {
@@ -319,7 +334,9 @@ module.exports = async function handler(req, res) {
               entrega: (ent && !isEnCurso) ? ent.entrega : "",
               fecha_entrega: (ent && !isEnCurso) ? ent.fecha_entrega : "",
               nota: finalActNota,
-              comentario: ent ? (ent.comentario || "") : ""
+              calificado: calificado,
+              estado_calificacion: calificado ? "CALIFICADO" : (hasEntrega ? "A_LA_ESPERA" : "PENDIENTE_ENTREGA"),
+              comentario: isFailedIaNota ? "" : (ent ? (ent.comentario || "") : "")
             };
           });
 
@@ -1104,6 +1121,19 @@ module.exports = async function handler(req, res) {
             "UPDATE actividades_asignadas SET id_unidad_curricular = ?, fecha_asignacion = ?, numero_evaluacion = ?, descripcion = ?, tipo_actividad = ?, quiz_config_json = ?, quiz_preguntas_json = ?, tiempo_minutos = ?, fecha_limite = ?, ia_evaluacion = ? WHERE id = ?",
             [idUnidad, fechaAsig, numEval, desc, tipoActividad, quizConfigJson, quizPreguntasJson, tiempoMinutos, fechaLimite, iaEvaluacion, params.id]
           );
+
+          if (iaEvaluacion === "NO") {
+            try {
+              await execute(
+                `UPDATE actividades_entregadas
+                 SET nota = NULL, comentario = NULL
+                 WHERE id_actividades_asignadas = ?
+                   AND (comentario LIKE '%Evaluado por IA%' OR comentario LIKE '%DeepSeek%' OR (nota = 0 AND (comentario IS NULL OR comentario = '' OR comentario LIKE '%IA%')))`,
+                [params.id]
+              );
+            } catch (eCleanAct) {}
+          }
+
           return res.status(200).json({ success: true, message: "Actividad asignada actualizada correctamente." });
         }
       }
@@ -1137,9 +1167,16 @@ module.exports = async function handler(req, res) {
           const est = estudiantes.find(s => s.id == ent.id_estudiante);
           const relEst = relNotas.filter(r => String(r.id_estudiante) === String(ent.id_estudiante));
           const maxRelVal = relEst.reduce((m, r) => Math.max(m, parseFloat(r[evKey]) || 0), 0);
-          const hasEntNota = ent.nota !== undefined && ent.nota !== null && ent.nota !== "";
+          const hasEntNota = ent.nota !== undefined && ent.nota !== null && ent.nota !== "" && !isNaN(parseFloat(ent.nota));
           const entVal = hasEntNota ? (parseFloat(ent.nota) || 0) : 0;
-          const finalNota = (hasEntNota || maxRelVal > 0) ? Math.max(entVal, maxRelVal) : "";
+          const isFailedIaComment = ent.comentario && (ent.comentario.includes("Evaluado por IA") || ent.comentario.includes("DeepSeek")) && entVal === 0;
+
+          let finalNota = "";
+          if (hasEntNota && entVal > 0 && !isFailedIaComment) {
+            finalNota = Math.max(entVal, maxRelVal);
+          } else if (maxRelVal > 0) {
+            finalNota = maxRelVal;
+          }
 
           return {
             id: ent.id,
@@ -1150,7 +1187,7 @@ module.exports = async function handler(req, res) {
             entrega: ent.entrega,
             fecha_entrega: ent.fecha_entrega,
             nota: finalNota,
-            comentario: ent.comentario || "",
+            comentario: isFailedIaComment ? "" : (ent.comentario || ""),
             quiz_detalle_json: ent.quiz_detalle_json || "",
             hora_inicio: ent.hora_inicio || "",
             hora_fin: ent.hora_fin || ""
@@ -1325,23 +1362,23 @@ module.exports = async function handler(req, res) {
         if (existing.length > 0) {
           entregaId = existing[0].id;
           await execute(
-            "UPDATE actividades_entregadas SET entrega = ?, fecha_entrega = ? WHERE id = ?",
+            "UPDATE actividades_entregadas SET entrega = ?, fecha_entrega = ?, nota = NULL, comentario = NULL WHERE id = ?",
             [entregaUrl, fechaEntrega, entregaId]
           );
         } else {
           entregaId = await getNextId("actividades_entregadas");
           await execute(
-            "INSERT INTO actividades_entregadas (id, id_actividades_asignadas, id_estudiante, entrega, fecha_entrega) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO actividades_entregadas (id, id_actividades_asignadas, id_estudiante, entrega, fecha_entrega, nota, comentario) VALUES (?, ?, ?, ?, ?, NULL, NULL)",
             [entregaId, idActividad, idEstudiante, entregaUrl, fechaEntrega]
           );
         }
 
-        // Evaluación automática con IA si está habilitada
-        const iaHabilitada = String(actObj.ia_evaluacion).toUpperCase() === "SI" || actObj.ia_evaluacion === true || actObj.ia_evaluacion == "1";
+        // Evaluación automática con IA ÚNICAMENTE si está explícitamente habilitada y activa en la actividad
+        const iaHabilitada = String(actObj.ia_evaluacion || "").trim().toUpperCase() === "SI" || actObj.ia_evaluacion === true || actObj.ia_evaluacion === "1";
         if (iaHabilitada && DEEPSEEK_API_KEY) {
           try {
             const aiResult = await evaluarEntregaIaLogic(entregaId, idEstudiante, entregaUrl, actObj);
-            if (aiResult.success) {
+            if (aiResult && aiResult.success && aiResult.nota !== undefined && aiResult.nota !== null && !isNaN(aiResult.nota) && parseFloat(aiResult.nota) > 0) {
               return res.status(200).json({
                 success: true,
                 message: "Entrega registrada y autoevaluada exitosamente por la Inteligencia Artificial (DeepSeek).",
@@ -1352,18 +1389,23 @@ module.exports = async function handler(req, res) {
                 nota: aiResult.nota,
                 comentario: aiResult.comentario
               });
+            } else {
+              console.warn("Fallo o saldo insuficiente en DeepSeek IA. La entrega queda registrada sin calificación (NULL) a la espera de calificación docente.");
             }
           } catch (eAi) {
-            console.error("Error en evaluacion IA:", eAi);
+            console.error("Error al conectar con DeepSeek IA:", eAi.message);
           }
         }
 
         return res.status(200).json({
           success: true,
-          message: "Entrega subida y registrada exitosamente.",
+          message: "Entrega subida y registrada exitosamente. Queda a la espera de evaluación y asignación de calificación por el docente.",
           entrega: entregaUrl,
           entregaUrl: entregaUrl,
-          fecha_entrega: fechaEntrega
+          fecha_entrega: fechaEntrega,
+          evaluado_por_ia: false,
+          nota: null,
+          comentario: null
         });
       }
 
@@ -2459,37 +2501,53 @@ Responde ESTRICTAMENTE en formato JSON con la siguiente estructura:
   "comentario": "Justificación clara y constructiva detallando fortalezas y aspectos a mejorar."
 }`;
 
-  const response = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: DEEPSEEK_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2
-    })
-  });
+  try {
+    const response = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: DEEPSEEK_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2
+      })
+    });
 
-  const data = await response.json();
-  const rawText = data.choices?.[0]?.message?.content || "";
-  const match = rawText.match(/\{[\s\S]*\}/);
-  if (match) {
-    const parsed = JSON.parse(match[0]);
-    const nota = Math.min(20, Math.max(0, parseFloat(parsed.nota) || 0));
-    const comentario = parsed.comentario || parsed.retroalimentacion || "Evaluado por IA.";
-    await execute("UPDATE actividades_entregadas SET nota = ?, comentario = ? WHERE id = ?", [nota, comentario, idEntrega]);
-    await syncNotaToRelacionSql(actObj.id, idEstudiante, nota);
-    return {
-      success: true,
-      id_entrega: idEntrega,
-      nota,
-      comentario,
-      retroalimentacion: comentario,
-      message: "Actividad evaluada y calificada exitosamente por DeepSeek."
-    };
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.warn(`DeepSeek API devolvió error HTTP ${response.status}: ${errText}`);
+      return { success: false, message: `Error del servicio de IA (Status ${response.status}). No se asigna calificación.` };
+    }
+
+    const data = await response.json();
+    const rawText = data.choices?.[0]?.message?.content || "";
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (parsed.nota !== undefined && parsed.nota !== null && !isNaN(parsed.nota)) {
+        const parsedNotaNum = parseFloat(parsed.nota);
+        if (parsedNotaNum > 0) {
+          const nota = Math.min(20, Math.max(0, parsedNotaNum));
+          const comentario = parsed.comentario || parsed.retroalimentacion || "Evaluado por IA.";
+          await execute("UPDATE actividades_entregadas SET nota = ?, comentario = ? WHERE id = ?", [nota, comentario, idEntrega]);
+          await syncNotaToRelacionSql(actObj.id, idEstudiante, nota);
+          return {
+            success: true,
+            id_entrega: idEntrega,
+            nota,
+            comentario,
+            retroalimentacion: comentario,
+            message: "Actividad evaluada y calificada exitosamente por DeepSeek."
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Excepción en evaluarEntregaIaLogic:", err.message);
+    return { success: false, message: "Error al comunicar con la IA: " + err.message };
   }
 
-  return { success: false, message: "No se pudo interpretar la respuesta de la IA." };
+  return { success: false, message: "No se pudo interpretar una calificación válida de la IA." };
 }
