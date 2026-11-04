@@ -1044,6 +1044,7 @@ function renderModalCalificacionesEstudianteContenido() {
         const isCalificado = hasEntNota || unifiedScore > 0;
         const notaVal = isCalificado ? Math.max(hasEntNota ? (parseFloat(ent.nota) || 0) : 0, unifiedScore) : "";
         const comentarioVal = (ent && ent.comentario) ? ent.comentario : "";
+        const safeEstNameAttr = String(est.nombre_completo || 'Estudiante').replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
         let statusBadgeHtml = '';
         if (isCalificado) {
@@ -1060,15 +1061,28 @@ function renderModalCalificacionesEstudianteContenido() {
         let entregaDetalleHtml = '';
         if (ent && ent.entrega) {
           if (isEnCurso) {
-            entregaDetalleHtml = `<span class="text-muted small"><i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Presentando examen online...</span>`;
+            entregaDetalleHtml = `
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="text-muted small"><i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Presentando examen online...</span>
+                <button type="button" class="btn btn-sm btn-primary-sgn py-1 px-2 fw-bold shadow-xs" onclick="openQuizResultadoEstudiante(${act.id}, ${est.id})">
+                  <i class="fa-solid fa-list-check me-1"></i> Ver Resumen de Respuestas y Diagnóstico
+                </button>
+                <button type="button" class="btn btn-sm btn-warning text-dark py-1 px-2 fw-bold" onclick="reaplicarQuizEstudianteIndividualPrompt(${act.id}, ${est.id}, '${safeEstNameAttr}')">
+                  <i class="fa-solid fa-rotate-right me-1"></i> Repetir Quiz (Barajear Nuevo)
+                </button>
+              </div>
+            `;
           } else if (String(ent.entrega).startsWith('QUIZ_ONLINE:')) {
             entregaDetalleHtml = `
-              <div class="d-flex align-items-center gap-2 mt-1">
+              <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-1 px-2">
                   <i class="fa-solid fa-bolt me-1"></i> ${ent.entrega.replace('QUIZ_ONLINE:', 'Evaluación Online:')}
                 </span>
-                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold" onclick="openQuizResultadoEstudiante(${act.id}, ${est.id})">
-                  <i class="fa-solid fa-list-check me-1"></i> Ver Respuestas y Aciertos
+                <button type="button" class="btn btn-sm btn-primary-sgn py-1 px-3 fw-bold shadow-xs" onclick="openQuizResultadoEstudiante(${act.id}, ${est.id})">
+                  <i class="fa-solid fa-list-check me-1"></i> Ver Respuestas (Correctas / Incorrectas)
+                </button>
+                <button type="button" class="btn btn-sm btn-warning text-dark py-1 px-2 fw-bold" onclick="reaplicarQuizEstudianteIndividualPrompt(${act.id}, ${est.id}, '${safeEstNameAttr}')">
+                  <i class="fa-solid fa-rotate-right me-1"></i> Repetir Quiz (Barajear Nuevo)
                 </button>
               </div>
             `;
@@ -2713,6 +2727,7 @@ function renderActividadesTable() {
         <td>${estadoEntregasHtml}</td>
         <td>
           <div class="btn-group btn-group-sm">
+            ${tipoAct === 'QUIZ' ? `<button class="btn btn-outline-warning text-dark fw-bold" onclick="reaplicarQuizDesdeTablaPrompt(${a.id})" title="Aplicar nuevamente el Quiz (a estudiantes afectados o a todos) con nuevo sorteo de preguntas"><i class="fa-solid fa-rotate-right"></i></button>` : ''}
             <button class="btn btn-outline-primary" onclick="editActividad(${a.id})" title="Editar Actividad"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-outline-danger" onclick="deleteActividadPrompt(${a.id})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
           </div>
@@ -2909,6 +2924,9 @@ function onTipoActividadChange() {
   const tipo = $('#actividadTipo').val();
   updateIaEvaluacionUI(tipo);
   if (tipo === 'QUIZ') {
+    if (!$('#actividadId').val()) {
+      $('#actividadIaEvaluar').prop('checked', true);
+    }
     $('#quizConfigSection').slideDown(200);
     updateQuizMarkdownPreview();
   } else {
@@ -3534,9 +3552,30 @@ function deleteActividadPrompt(id) {
 
 let currentEntregasState = {
   idActividad: null,
+  esQuiz: false,
+  resumenQuiz: null,
   entregas: [],
   filtroActual: 'todos'
 };
+
+function isEntregaCalificadaValida(ent) {
+  if (!ent) return false;
+  if (ent.nota === undefined || ent.nota === "" || ent.nota === null) return false;
+  const num = parseFloat(ent.nota);
+  if (isNaN(num)) return false;
+  const isQuizEnt = String(ent.entrega || '').startsWith('QUIZ_ONLINE:') || !!(ent.quiz_diagnostico && ent.quiz_diagnostico.es_quiz);
+  const isEnCurso = String(ent.entrega || '').trim() === 'EN_CURSO';
+  if (isQuizEnt && !isEnCurso) {
+    return num >= 0;
+  }
+  return num > 0;
+}
+
+function hasAlertaConectividadEntrega(ent) {
+  if (!ent || !ent.quiz_diagnostico) return false;
+  const d = ent.quiz_diagnostico;
+  return !!(d.alerta_conectividad || (d.solicitud_repeticion && d.solicitud_repeticion.solicitada));
+}
 
 function openModalEntregas(idActividad) {
   const act = (sgnDb.actividadesAsignadas || []).find(a => a.id == idActividad);
@@ -3545,6 +3584,7 @@ function openModalEntregas(idActividad) {
   const uc = sgnDb.unidades.find(u => u.id == act.id_unidad_curricular);
   const ucNombre = uc ? (uc.unidad_curricular || uc['unidad curricular']) : "Materia";
   const numEval = (act.numero_evaluacion || "e1").toUpperCase();
+  const isQuizAct = String(act.tipo_actividad || "ENTREGA").toUpperCase().trim() === "QUIZ";
 
   $('#entregasActividadDesc').html(`<strong>Actividad:</strong> ${sgnFormatTextWithLinks(act.descripcion)}`);
   $('#entregasActividadMeta').text(`${ucNombre} | ${numEval} | Fecha de Asignación: ${act.fecha_asignacion}`);
@@ -3553,14 +3593,18 @@ function openModalEntregas(idActividad) {
   $('#inputNotaMasivaEntregas').val('');
   $('#searchEntregasEstudiante').val('');
   currentEntregasState.idActividad = idActividad;
+  currentEntregasState.esQuiz = isQuizAct;
+  currentEntregasState.resumenQuiz = null;
   currentEntregasState.filtroActual = 'todos';
   $('#filterEntregasButtonGroup button').removeClass('active');
   $('#btnFilterTodos').addClass('active');
-  $('#filterFeedbackText').html('<i class="fa-solid fa-circle-info me-1"></i> Mostrando todas las entregas (primero sin nota)');
+  $('#filterFeedbackText').html('<i class="fa-solid fa-circle-info me-1"></i> Mostrando todas las entregas (primero incidencias o sin nota)');
 
   sgnApiCall("getEntregasByActividad", { id_actividades_asignadas: idActividad }, { showLoading: true }).then(function (res) {
     if (res && res.success) {
       currentEntregasState.entregas = res.entregas || [];
+      currentEntregasState.esQuiz = isQuizAct || (res.actividad_tipo === 'QUIZ') || !!(res.resumen_quiz && res.resumen_quiz.es_quiz);
+      currentEntregasState.resumenQuiz = res.resumen_quiz || null;
       renderTablaEntregasActividad();
 
       const bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEntregasActividad'));
@@ -3571,10 +3615,14 @@ function openModalEntregas(idActividad) {
 
 function renderTablaEntregasActividad() {
   const rawEntregas = currentEntregasState.entregas || [];
-  // Ordenar: primero los estudiantes que les falta nota (pendientes) y luego los ya calificados
+  // Ordenar: primero los estudiantes con alertas de conectividad / solicitudes, luego los que les falta nota, y luego los calificados OK
   const entregas = [...rawEntregas].sort((a, b) => {
-    const aHasNota = (a.nota !== undefined && a.nota !== "" && a.nota !== null && !isNaN(parseFloat(a.nota)) && parseFloat(a.nota) > 0);
-    const bHasNota = (b.nota !== undefined && b.nota !== "" && b.nota !== null && !isNaN(parseFloat(b.nota)) && parseFloat(b.nota) > 0);
+    const aAlert = hasAlertaConectividadEntrega(a) ? 1 : 0;
+    const bAlert = hasAlertaConectividadEntrega(b) ? 1 : 0;
+    if (aAlert !== bAlert) return bAlert - aAlert;
+
+    const aHasNota = isEntregaCalificadaValida(a);
+    const bHasNota = isEntregaCalificadaValida(b);
     if (aHasNota !== bHasNota) {
       return aHasNota ? 1 : -1;
     }
@@ -3585,10 +3633,11 @@ function renderTablaEntregasActividad() {
   const $tbody = $('#tablaEntregasActividad tbody');
   $tbody.empty();
 
-  // Calcular estadísticas de calificación
+  // Calcular estadísticas de calificación y alertas de Quiz
   const total = entregas.length;
-  const calificados = entregas.filter(e => e.nota !== undefined && e.nota !== "" && e.nota !== null && !isNaN(parseFloat(e.nota)) && parseFloat(e.nota) > 0).length;
+  const calificados = entregas.filter(e => isEntregaCalificadaValida(e)).length;
   const pendientes = total - calificados;
+  const conAlertasQuiz = entregas.filter(e => hasAlertaConectividadEntrega(e)).length;
   const porcentaje = total > 0 ? Math.round((calificados / total) * 100) : 0;
 
   // Actualizar contadores y badges de encabezado
@@ -3598,31 +3647,93 @@ function renderTablaEntregasActividad() {
   $('#filterCountTodos').text(total);
   $('#filterCountCalificados').text(calificados);
   $('#filterCountPendientes').text(pendientes);
+  $('#filterCountAlertasQuiz').text(conAlertasQuiz);
+
+  if (currentEntregasState.esQuiz) {
+    $('#panelControlQuizEntregas').show();
+    $('#btnFilterAlertasQuiz').show();
+    $('#countQuizAfectadosBtn').text(conAlertasQuiz);
+    $('#btnReaplicarQuizAfectados').prop('disabled', conAlertasQuiz === 0);
+
+    const rq = currentEntregasState.resumenQuiz || {};
+    const okCount = rq.completados_ok !== undefined ? rq.completados_ok : Math.max(0, total - conAlertasQuiz);
+    const enCursoAct = rq.en_curso_activos || 0;
+    const solRep = rq.con_solicitud_repeticion || 0;
+    const reintAut = rq.reinicios_autorizados_pendientes || 0;
+
+    let badgesHtml = `
+      <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-circle-check me-1"></i>Completados Normal: ${okCount}</span>
+      <span class="badge ${conAlertasQuiz > 0 ? 'bg-danger text-white' : 'bg-secondary-subtle text-secondary border'}"><i class="fa-solid fa-wifi me-1"></i>Alertas Conectividad / En Blanco: ${conAlertasQuiz}</span>
+    `;
+    if (enCursoAct > 0) {
+      badgesHtml += `<span class="badge bg-info text-dark"><i class="fa-solid fa-stopwatch fa-spin me-1"></i>En Curso: ${enCursoAct}</span>`;
+    }
+    if (solRep > 0) {
+      badgesHtml += `<span class="badge bg-warning text-dark border border-dark"><i class="fa-solid fa-hand me-1"></i>Solicitudes Repetir: ${solRep}</span>`;
+    }
+    if (reintAut > 0) {
+      badgesHtml += `<span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="fa-solid fa-shuffle me-1"></i>Nuevos Exámenes Habilitados: ${reintAut}</span>`;
+    }
+    $('#badgesDiagnosticoQuizResumen').html(badgesHtml);
+  } else {
+    $('#panelControlQuizEntregas').hide();
+    $('#btnFilterAlertasQuiz').hide();
+  }
 
   $('#percentEntregasTexto').text(`${porcentaje}% completado (${calificados} de ${total})`);
   $('#progressBarEntregas').css('width', `${porcentaje}%`).attr('aria-valuenow', porcentaje);
-  $('#footerSummaryEntregas').html(`<i class="fa-solid fa-list-check me-1"></i> <strong>${total}</strong> entregas registradas: <span class="text-warning-emphasis fw-bold">${pendientes} sin nota (mostradas primero)</span> y <span class="text-success fw-bold">${calificados} calificadas</span>.`);
+  $('#footerSummaryEntregas').html(`<i class="fa-solid fa-list-check me-1"></i> <strong>${total}</strong> entregas registradas: <span class="text-warning-emphasis fw-bold">${pendientes} sin nota</span>${conAlertasQuiz > 0 ? `, <span class="text-danger fw-bold">${conAlertasQuiz} con alerta de conexión/en blanco</span>` : ''} y <span class="text-success fw-bold">${calificados} calificadas</span>.`);
 
   if (entregas.length === 0) {
-    $tbody.append('<tr><td colspan="8" class="text-center text-muted py-4"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>Aún ningún estudiante ha registrado una entrega para esta actividad.</td></tr>');
+    const rq = currentEntregasState.resumenQuiz || {};
+    const msgExtra = (currentEntregasState.esQuiz && rq.reinicios_autorizados_pendientes > 0)
+      ? `<div class="mt-2 badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2"><i class="fa-solid fa-shuffle me-1"></i> Hay ${rq.reinicios_autorizados_pendientes} estudiante(s) con nuevo intento habilitado pendientes por iniciar el examen barajeado.</div>`
+      : '';
+    $tbody.append(`<tr><td colspan="8" class="text-center text-muted py-4"><i class="fa-solid fa-folder-open fa-2x mb-2 d-block"></i>Aún ningún estudiante ha registrado una entrega para esta actividad.${msgExtra}</td></tr>`);
     return;
   }
 
   entregas.forEach(ent => {
     let linkHtml = '<span class="text-muted small"><i class="fa-regular fa-file-excel me-1"></i> Sin archivo</span>';
     const isEnCurso = String(ent.entrega || '').trim() === 'EN_CURSO';
-    if (ent.entrega) {
+    const diag = ent.quiz_diagnostico || null;
+    const isQuizRow = currentEntregasState.esQuiz || String(ent.entrega || '').startsWith('QUIZ_ONLINE:') || isEnCurso || !!diag;
+    const hasAlertQuiz = hasAlertaConectividadEntrega(ent);
+
+    if (ent.entrega || diag) {
       if (isEnCurso) {
+        const isExpiredCurso = diag && diag.estado === 'EN_CURSO_EXPIRADO';
         linkHtml = `
-          <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle py-2 px-2">
-            <i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Evaluación en curso...
-          </span>
+          <div>
+            <span class="badge ${isExpiredCurso ? 'bg-danger-subtle text-danger border border-danger-subtle' : 'bg-info-subtle text-info-emphasis border border-info-subtle'} py-1 px-2">
+              <i class="fa-solid ${isExpiredCurso ? 'fa-plug-circle-xmark' : 'fa-hourglass-half fa-spin'} me-1"></i>
+              ${isExpiredCurso ? 'Interrumpido / Sin Cierre' : 'Evaluación en curso...'}
+            </span>
+            ${diag ? `<div class="small text-muted mt-1" style="font-size: 0.73rem;">Guardadas: <strong>${diag.respondidas}/${diag.total_preguntas}</strong></div>` : ''}
+            <button type="button" class="btn btn-sm btn-primary-sgn py-1 px-2 mt-1 fw-bold shadow-xs" style="font-size: 0.74rem;" onclick="openQuizResultadoEstudiante(${ent.id_actividades_asignadas}, ${ent.id_estudiante})">
+              <i class="fa-solid fa-list-check me-1"></i> Ver Respuestas y Diagnóstico
+            </button>
+          </div>
         `;
-      } else if (String(ent.entrega).startsWith('QUIZ_ONLINE:')) {
+      } else if (String(ent.entrega).startsWith('QUIZ_ONLINE:') || isQuizRow) {
+        const labelShort = String(ent.entrega || '').replace('QUIZ_ONLINE:', 'Quiz:');
+        const respInfoHtml = diag
+          ? `<div class="small mt-1" style="font-size: 0.73rem;">
+               <span class="text-success fw-bold me-1"><i class="fa-solid fa-check me-1"></i>${diag.correctas || 0} buenas</span>
+               <span class="text-danger fw-bold me-1"><i class="fa-solid fa-xmark me-1"></i>${Math.max(0, (diag.respondidas || 0) - (diag.correctas || 0))} malas</span>
+               ${diag.en_blanco > 0 ? `<span class="text-warning-emphasis fw-bold"><i class="fa-solid fa-circle-question me-1"></i>${diag.en_blanco} en blanco</span>` : ''}
+             </div>`
+          : '';
         linkHtml = `
-          <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-2 px-2">
-            <i class="fa-solid fa-bolt me-1"></i> ${ent.entrega.replace('QUIZ_ONLINE:', 'Quiz:')}
-          </span>
+          <div>
+            <span class="badge ${hasAlertQuiz ? 'bg-warning-subtle text-dark border border-warning' : 'bg-primary-subtle text-primary border border-primary-subtle'} py-1 px-2 text-wrap text-start">
+              <i class="fa-solid fa-bolt me-1"></i> ${labelShort}
+            </span>
+            ${respInfoHtml}
+            <button type="button" class="btn btn-sm btn-primary-sgn py-1 px-2 mt-1 fw-bold shadow-xs" style="font-size: 0.74rem;" onclick="openQuizResultadoEstudiante(${ent.id_actividades_asignadas}, ${ent.id_estudiante})">
+              <i class="fa-solid fa-list-check me-1"></i> Ver Resumen de Respuestas
+            </button>
+          </div>
         `;
       } else {
         linkHtml = `
@@ -3633,10 +3744,10 @@ function renderTablaEntregasActividad() {
       }
     }
 
-    const isCalificado = (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null && !isNaN(parseFloat(ent.nota)) && parseFloat(ent.nota) > 0);
+    const isCalificado = isEntregaCalificadaValida(ent);
     const notaVal = isCalificado ? ent.nota : "";
     const comentarioVal = (ent.comentario !== undefined && ent.comentario !== null) ? ent.comentario : "";
-    const rowClass = isCalificado ? 'entrega-row-calificada' : 'entrega-row-pendiente';
+    const rowClass = hasAlertQuiz ? 'table-warning' : (isCalificado ? 'entrega-row-calificada' : 'entrega-row-pendiente');
 
     let estadoBadgeHtml = '';
     const isIaEval = comentarioVal.includes('EVALUACIÓN AUTOMÁTICA CON IA');
@@ -3648,9 +3759,10 @@ function renderTablaEntregasActividad() {
         ${isIaEval ? '<div class="mt-1"><span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.68rem;"><i class="fa-solid fa-robot me-1"></i>IA</span></div>' : ''}
       `;
     } else if (isEnCurso) {
+      const isExpiredCurso = diag && diag.estado === 'EN_CURSO_EXPIRADO';
       estadoBadgeHtml = `
-        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle badge-status-entrega" id="badgeEstado_${ent.id}">
-          <i class="fa-solid fa-stopwatch"></i> En Curso
+        <span class="badge ${isExpiredCurso ? 'bg-danger text-white' : 'bg-info-subtle text-info-emphasis border border-info-subtle'} badge-status-entrega" id="badgeEstado_${ent.id}">
+          <i class="fa-solid ${isExpiredCurso ? 'fa-wifi' : 'fa-stopwatch'}"></i> ${isExpiredCurso ? 'Tiempo Expirado sin Cierre' : 'En Curso'}
         </span>
       `;
     } else {
@@ -3661,6 +3773,40 @@ function renderTablaEntregasActividad() {
       `;
     }
 
+    if (diag) {
+      if (diag.solicitud_repeticion && diag.solicitud_repeticion.solicitada) {
+        const motSafe = escapeHtmlDashboard(diag.solicitud_repeticion.motivo || 'Falla reportada por el estudiante');
+        estadoBadgeHtml += `
+          <div class="mt-1">
+            <span class="badge bg-danger text-white" style="font-size: 0.68rem;" title="Motivo: ${motSafe}">
+              <i class="fa-solid fa-hand me-1"></i> Solicita Repetir
+            </span>
+          </div>
+        `;
+      } else if (diag.alerta_conectividad) {
+        const detSafe = escapeHtmlDashboard(diag.diagnostico_detalle || '');
+        const shortAlert = diag.respondidas === 0
+          ? '0 Resp. (Tiempo/Red)'
+          : (diag.en_blanco > 0 ? `${diag.en_blanco} en blanco` : 'Alerta Conectividad');
+        estadoBadgeHtml += `
+          <div class="mt-1">
+            <span class="badge bg-warning text-dark border border-dark" style="font-size: 0.68rem;" title="${detSafe}">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i> ${shortAlert}
+            </span>
+          </div>
+        `;
+      }
+      if (diag.intento_numero && diag.intento_numero > 1) {
+        estadoBadgeHtml += `
+          <div class="mt-1">
+            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 0.67rem;">
+              <i class="fa-solid fa-shuffle me-1"></i> Intento #${diag.intento_numero}
+            </span>
+          </div>
+        `;
+      }
+    }
+
     let tiemposQuizHtml = `<small class="text-muted"><i class="fa-regular fa-calendar me-1"></i>${ent.fecha_entrega || "N/A"}</small>`;
     if (ent.hora_inicio) {
       tiemposQuizHtml += `<div class="small text-muted mt-1"><i class="fa-solid fa-play text-success me-1"></i>Inicio: ${ent.hora_inicio}</div>`;
@@ -3668,12 +3814,32 @@ function renderTablaEntregasActividad() {
     if (ent.hora_fin) {
       tiemposQuizHtml += `<div class="small text-muted"><i class="fa-solid fa-flag-checkered text-primary me-1"></i>Fin: ${ent.hora_fin}</div>`;
     }
+    if (diag && diag.tiempo_empleado_texto && diag.tiempo_empleado_texto !== 'N/A') {
+      tiemposQuizHtml += `<div class="small ${diag.exceso_tiempo_seg > 10 ? 'text-danger fw-bold' : 'text-secondary'}"><i class="fa-solid fa-stopwatch me-1"></i>Duración: ${diag.tiempo_empleado_texto}${diag.exceso_tiempo_seg > 10 ? ` (+${Math.round(diag.exceso_tiempo_seg)}s)` : ''}</div>`;
+    }
+
+    const safeStudentName = String(ent.nombre_estudiante || 'Estudiante').replace(/'/g, "\\'").replace(/"/g, "&quot;");
+    const actionsExtraHtml = isQuizRow
+      ? `
+        <button class="btn btn-sm btn-primary-sgn fw-bold px-2" onclick="openQuizResultadoEstudiante(${ent.id_actividades_asignadas}, ${ent.id_estudiante})" title="Ver Resumen de Respuestas (Correctas / Incorrectas) y Diagnóstico del Estudiante">
+          <i class="fa-solid fa-list-check"></i>
+        </button>
+        <button class="btn btn-sm btn-warning text-dark fw-bold px-2" onclick="reaplicarQuizEstudianteIndividualPrompt(${ent.id_actividades_asignadas}, ${ent.id_estudiante}, '${safeStudentName}')" title="Aplicar nuevamente el Quiz a este estudiante (barajeando un examen nuevo)">
+          <i class="fa-solid fa-rotate-right"></i>
+        </button>
+      `
+      : `
+        <button class="btn btn-sm btn-outline-primary fw-bold" id="btnIaEval_${ent.id}" onclick="autoevaluarEntregaIndividualDocente(${ent.id})" title="Autoevaluar esta entrega con DeepSeek IA">
+          <i class="fa-solid fa-robot"></i>
+        </button>
+      `;
 
     const $row = $(`
-      <tr class="${rowClass}" id="rowEntrega_${ent.id}" data-id="${ent.id}" data-calificado="${isCalificado ? 'true' : 'false'}">
+      <tr class="${rowClass}" id="rowEntrega_${ent.id}" data-id="${ent.id}" data-calificado="${isCalificado ? 'true' : 'false'}" data-alerta-quiz="${hasAlertQuiz ? 'true' : 'false'}">
         <td class="fw-bold text-navy">${ent.cedula}</td>
         <td>
           <div class="fw-semibold text-dark">${ent.nombre_estudiante}</div>
+          ${diag && diag.solicitud_repeticion && diag.solicitud_repeticion.solicitada ? `<div class="small text-danger fw-semibold mt-1"><i class="fa-solid fa-comment-medical me-1"></i>"${escapeHtmlDashboard(diag.solicitud_repeticion.motivo)}"</div>` : ''}
         </td>
         <td class="text-center" id="colEstado_${ent.id}">
           ${estadoBadgeHtml}
@@ -3687,13 +3853,11 @@ function renderTablaEntregasActividad() {
           <input type="text" class="form-control form-control-sm input-comentario-entrega" id="comentarioEntrega_${ent.id}" data-id="${ent.id}" data-original="${comentarioVal}" value="${comentarioVal}" placeholder="Observación o felicitación..." oninput="onInputComentarioEntregaChange(${ent.id})">
         </td>
         <td class="text-center">
-          <div class="d-flex justify-content-center align-items-center gap-1">
+          <div class="d-flex justify-content-center align-items-center gap-1 flex-nowrap">
             <button class="btn btn-sm ${isCalificado ? 'btn-outline-success' : 'btn-success'} fw-bold" id="btnCalificar_${ent.id}" onclick="saveNotaEntregaSubmit(${ent.id})" title="${isCalificado ? 'Actualizar Nota' : 'Guardar Nota Individual'}">
               <i class="fa-solid ${isCalificado ? 'fa-check-double' : 'fa-check'}"></i>
             </button>
-            <button class="btn btn-sm btn-outline-primary fw-bold" id="btnIaEval_${ent.id}" onclick="autoevaluarEntregaIndividualDocente(${ent.id})" title="Autoevaluar esta entrega con DeepSeek IA">
-              <i class="fa-solid fa-robot"></i>
-            </button>
+            ${actionsExtraHtml}
           </div>
         </td>
       </tr>
@@ -3771,9 +3935,11 @@ function filterEntregasTable() {
 
   $('#tablaEntregasActividad tbody tr').each(function () {
     const isCalificado = $(this).attr('data-calificado') === 'true';
+    const hasAlertaQuiz = $(this).attr('data-alerta-quiz') === 'true';
     let matchTipo = true;
     if (tipo === 'calificados') matchTipo = isCalificado;
     else if (tipo === 'pendientes') matchTipo = !isCalificado;
+    else if (tipo === 'alertas_quiz') matchTipo = hasAlertaQuiz;
 
     const rowText = $(this).text().toLowerCase();
     const matchSearch = (!query || rowText.indexOf(query) !== -1);
@@ -3798,9 +3964,654 @@ function filterEntregas(tipo, btn) {
     $feedback.html('<i class="fa-solid fa-filter me-1 text-success"></i> Mostrando únicamente estudiantes ya calificados');
   } else if (tipo === 'pendientes') {
     $feedback.html('<i class="fa-solid fa-filter me-1 text-warning"></i> Mostrando únicamente estudiantes que faltan por calificar');
+  } else if (tipo === 'alertas_quiz') {
+    $feedback.html('<i class="fa-solid fa-wifi me-1 text-danger"></i> Mostrando estudiantes con posibles fallas de conectividad, preguntas en blanco o solicitudes de repetición');
   }
 
   filterEntregasTable();
+}
+
+function escapeHtmlDashboard(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatQuizEnunciadoDashboard(rawText) {
+  if (!rawText) return '';
+  const text = String(rawText).replace(/\r\n/g, '\n');
+  const parts = text.split(/(```[\s\S]*?```)/g);
+  return parts.map(part => {
+    if (part.startsWith('```') && part.endsWith('```')) {
+      const inner = part.slice(3, -3).replace(/^[a-zA-Z0-9_-]+\n/, '');
+      return `<pre class="bg-dark text-light p-3 rounded-3 mt-2 mb-2 small overflow-auto" style="font-family: monospace;"><code>${escapeHtmlDashboard(inner.trim())}</code></pre>`;
+    }
+    let safe = escapeHtmlDashboard(part);
+    safe = safe.replace(/`([^`\n]+)`/g, '<code class="bg-light px-1 rounded border text-danger">$1</code>');
+    return safe.replace(/\n/g, '<br>');
+  }).join('');
+}
+
+let _submodalQuizFilterActual = 'todas';
+let _submodalQuizStackListenersBound = false;
+
+function ensureSubmodalQuizStackedBehavior() {
+  if (_submodalQuizStackListenersBound) return;
+  const subModalEl = document.getElementById('modalDiagnosticoQuizDocente');
+  if (!subModalEl) return;
+  _submodalQuizStackListenersBound = true;
+
+  subModalEl.addEventListener('shown.bs.modal', function () {
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    if (backdrops.length > 1) {
+      backdrops[backdrops.length - 1].classList.add('submodal-backdrop-stacked');
+    }
+  });
+
+  subModalEl.addEventListener('hidden.bs.modal', function () {
+    if (document.querySelectorAll('.modal.show').length > 0) {
+      document.body.classList.add('modal-open');
+      document.body.style.overflow = 'hidden';
+    }
+  });
+}
+
+/**
+ * Abre el Submodal 100% Responsive con el Resumen de Respuestas (Correctas / Incorrectas / En Blanco)
+ * y el Diagnóstico de Conectividad del Estudiante (Vista Docente)
+ */
+function openQuizResultadoEstudiante(idActividad, idEstudiante) {
+  ensureSubmodalQuizStackedBehavior();
+  sgnApiCall("getQuizResultadoEstudiante", {
+    id_actividades_asignadas: idActividad,
+    id_estudiante: idEstudiante,
+    modo_docente: true
+  }, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      _submodalQuizFilterActual = 'todas';
+      renderModalDiagnosticoQuizDocente(res);
+      const bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDiagnosticoQuizDocente'));
+      bsModal.show();
+    } else {
+      sgnShowModal({
+        title: "Resumen no disponible",
+        message: (res && res.message) || "No se encontró el detalle de respuestas de la evaluación para este estudiante.",
+        type: "warning"
+      });
+    }
+  });
+}
+
+function renderModalDiagnosticoQuizDocente(res) {
+  const est = res.estudiante || {};
+  const diag = res.quiz_diagnostico || {};
+  const resumen = res.resumen || [];
+  const nota = res.nota !== undefined && res.nota !== null ? res.nota : 0;
+  const pMax = res.puntaje_maximo || 20;
+  const totalP = res.total_preguntas || resumen.length;
+  const valPorPregunta = res.valor_por_pregunta || (totalP > 0 ? Math.round((pMax / totalP) * 100) / 100 : 1);
+
+  // Clasificar cada pregunta exactamente en: correcta, incorrecta (respondida pero errónea) o blanco (sin responder)
+  let countCorrectas = 0;
+  let countIncorrectas = 0;
+  let countEnBlanco = 0;
+
+  const itemsClasificados = resumen.map((item, idx) => {
+    const qNum = idx + 1;
+    const rawSelText = String(item.texto_seleccionada || '').trim();
+    const sinResponder = !item.id_opcion_seleccionada || rawSelText === '' || rawSelText.startsWith('Sin respuesta');
+    const acertada = !sinResponder && !!item.acertada;
+    let categoria = 'incorrecta';
+    if (sinResponder) {
+      categoria = 'blanco';
+      countEnBlanco++;
+    } else if (acertada) {
+      categoria = 'correcta';
+      countCorrectas++;
+    } else {
+      categoria = 'incorrecta';
+      countIncorrectas++;
+    }
+    return {
+      ...item,
+      qNum,
+      sinResponder,
+      acertada,
+      categoria
+    };
+  });
+
+  const respondidas = countCorrectas + countIncorrectas;
+  const intentoNum = diag.intento_numero || 1;
+  const estNombre = est.nombre_completo || 'Estudiante';
+  const estCedula = est.cedula || '';
+  const evalTag = res.numero_evaluacion || 'E1';
+  const pctAciertos = totalP > 0 ? Math.round((countCorrectas / totalP) * 100) : 0;
+  const pctIncorrectas = totalP > 0 ? Math.round((countIncorrectas / totalP) * 100) : 0;
+  const pctBlanco = totalP > 0 ? Math.max(0, 100 - pctAciertos - pctIncorrectas) : 0;
+
+  $('#modalDiagQuizTitle').html(`
+    <i class="fa-solid fa-list-check me-2"></i> Resumen de Respuestas — ${escapeHtmlDashboard(estNombre)} <span class="badge bg-light text-navy ms-1">${escapeHtmlDashboard(estCedula)}</span>
+  `);
+  $('#modalDiagQuizSubtitle').html(`
+    <span class="badge bg-warning text-dark me-1">${escapeHtmlDashboard(evalTag)}</span>
+    Intento #${intentoNum} | Calificación: <strong>${nota} / ${pMax} pts (${pctAciertos}% efectividad)</strong> |
+    <span class="text-white"><i class="fa-solid fa-check text-success-emphasis me-1"></i><strong>${countCorrectas}</strong> Correctas</span> ·
+    <span class="text-white"><i class="fa-solid fa-xmark text-danger-emphasis me-1"></i><strong>${countIncorrectas}</strong> Incorrectas</span>
+    ${countEnBlanco > 0 ? ` · <span class="text-warning"><i class="fa-solid fa-circle-question me-1"></i><strong>${countEnBlanco}</strong> En Blanco</span>` : ''}
+  `);
+
+  const safeEstName = String(estNombre).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+  $('#btnModalDiagRepetirQuiz').off('click').on('click', function () {
+    const diagModalEl = document.getElementById('modalDiagnosticoQuizDocente');
+    const inst = bootstrap.Modal.getInstance(diagModalEl);
+    if (inst) inst.hide();
+    reaplicarQuizEstudianteIndividualPrompt(res.id_actividad, res.id_estudiante, safeEstName);
+  });
+
+  $('#modalDiagQuizFooterLeft').html(`
+    <i class="fa-solid fa-circle-info text-primary me-1"></i> Toque cualquier número del mapa o filtre por <strong>Correctas</strong> / <strong>Incorrectas</strong> para auditar el examen.
+  `);
+
+  const hasAlerta = !!diag.alerta_conectividad;
+  const alertBoxClass = hasAlerta ? 'alert-warning border-warning' : 'alert-light border';
+  const alertIcon = hasAlerta ? 'fa-triangle-exclamation text-danger' : 'fa-shield-check text-success';
+
+  let solicitudHtml = '';
+  if (diag.solicitud_repeticion && diag.solicitud_repeticion.solicitada) {
+    solicitudHtml = `
+      <div class="alert alert-danger border-danger d-flex align-items-start gap-2 mb-3 shadow-xs">
+        <i class="fa-solid fa-hand fa-lg mt-1"></i>
+        <div>
+          <strong>Solicitud de Repetición Enviada por el Estudiante (${escapeHtmlDashboard(diag.solicitud_repeticion.fecha || '')}):</strong>
+          <div class="mt-1">"${escapeHtmlDashboard(diag.solicitud_repeticion.motivo || 'Falla eléctrica o de conectividad')}"</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Mapa rápido de preguntas (1..N)
+  const navPillsHtml = itemsClasificados.map(it => {
+    const pillClass = it.categoria === 'correcta'
+      ? 'qnav-correcta'
+      : (it.categoria === 'incorrecta' ? 'qnav-incorrecta' : 'qnav-blanco');
+    const titleStatus = it.categoria === 'correcta'
+      ? `Pregunta #${it.qNum}: Respuesta Correcta (+${valPorPregunta} pts)`
+      : (it.categoria === 'incorrecta' ? `Pregunta #${it.qNum}: Respuesta Incorrecta (0 pts)` : `Pregunta #${it.qNum}: Sin Responder / En Blanco (0 pts)`);
+    return `<button type="button" class="quiz-qnav-pill ${pillClass}" onclick="scrollToQuizQuestionSubmodal(${it.qNum})" title="${titleStatus}">${it.qNum}</button>`;
+  }).join('');
+
+  let html = `
+    ${solicitudHtml}
+
+    <!-- 1. TARJETAS KPI DE RESUMEN DE RESPUESTAS (100% RESPONSIVE) -->
+    <div class="row row-cols-2 row-cols-lg-4 g-2 g-md-3 mb-3">
+      <div class="col">
+        <div class="card border-0 shadow-xs bg-white quiz-submodal-kpi-card border-start border-4 ${nota >= (pMax * 0.5) ? 'border-primary' : 'border-danger'}">
+          <div class="card-body p-2 p-sm-3 d-flex align-items-center justify-content-between">
+            <div>
+              <span class="text-muted small fw-semibold d-block">Calificación Obtenida</span>
+              <h4 class="fw-extrabold text-navy mb-0">${nota} <small class="fs-6 text-muted fw-normal">/ ${pMax} pts</small></h4>
+              <small class="text-muted" style="font-size: 0.72rem;">Valor c/u: ${valPorPregunta} pts</small>
+            </div>
+            <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+              <i class="fa-solid fa-graduation-cap fs-5"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card border-0 shadow-xs bg-white quiz-submodal-kpi-card border-start border-4 border-success" style="cursor: pointer;" onclick="filtrarPreguntasSubmodalQuiz('correcta')">
+          <div class="card-body p-2 p-sm-3 d-flex align-items-center justify-content-between">
+            <div>
+              <span class="text-success small fw-bold d-block">Respuestas Correctas</span>
+              <h4 class="fw-extrabold text-success mb-0">${countCorrectas} <small class="fs-6 text-muted fw-normal">de ${totalP}</small></h4>
+              <small class="text-success fw-semibold" style="font-size: 0.72rem;">+${Math.round(countCorrectas * valPorPregunta * 100) / 100} pts (${pctAciertos}%)</small>
+            </div>
+            <div class="rounded-circle bg-success-subtle text-success d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+              <i class="fa-solid fa-check-double fs-5"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card border-0 shadow-xs bg-white quiz-submodal-kpi-card border-start border-4 border-danger" style="cursor: pointer;" onclick="filtrarPreguntasSubmodalQuiz('incorrecta')">
+          <div class="card-body p-2 p-sm-3 d-flex align-items-center justify-content-between">
+            <div>
+              <span class="text-danger small fw-bold d-block">Respuestas Incorrectas</span>
+              <h4 class="fw-extrabold text-danger mb-0">${countIncorrectas} <small class="fs-6 text-muted fw-normal">de ${totalP}</small></h4>
+              <small class="text-danger fw-semibold" style="font-size: 0.72rem;">Opción errónea (${pctIncorrectas}%)</small>
+            </div>
+            <div class="rounded-circle bg-danger-subtle text-danger d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+              <i class="fa-solid fa-xmark fs-5"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card border-0 shadow-xs bg-white quiz-submodal-kpi-card border-start border-4 border-warning" style="cursor: pointer;" onclick="filtrarPreguntasSubmodalQuiz('blanco')">
+          <div class="card-body p-2 p-sm-3 d-flex align-items-center justify-content-between">
+            <div>
+              <span class="text-warning-emphasis small fw-bold d-block">Sin Responder (Blanco)</span>
+              <h4 class="fw-extrabold text-warning-emphasis mb-0">${countEnBlanco} <small class="fs-6 text-muted fw-normal">de ${totalP}</small></h4>
+              <small class="text-muted" style="font-size: 0.72rem;">Contestadas: ${respondidas}/${totalP}</small>
+            </div>
+            <div class="rounded-circle bg-warning-subtle text-warning-emphasis d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+              <i class="fa-solid fa-circle-question fs-5"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. BARRA PROPORCIONAL Y MAPA INTERACTIVO DE PREGUNTAS -->
+    <div class="card border-0 shadow-xs bg-white mb-3 rounded-3">
+      <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+          <span class="small fw-bold text-navy">
+            <i class="fa-solid fa-chart-pie text-primary me-1"></i> Mapa Rápido de Respuestas del Estudiante (Toque un número para ir a la pregunta):
+          </span>
+          <div class="d-flex flex-wrap gap-2 small" style="font-size: 0.75rem;">
+            <span><span class="badge bg-success me-1">&nbsp;</span>Correcta (${countCorrectas})</span>
+            <span><span class="badge bg-danger me-1">&nbsp;</span>Incorrecta (${countIncorrectas})</span>
+            ${countEnBlanco > 0 ? `<span><span class="badge bg-warning text-dark me-1">&nbsp;</span>En Blanco (${countEnBlanco})</span>` : ''}
+          </div>
+        </div>
+
+        <div class="progress mb-3" style="height: 10px; border-radius: 6px; overflow: hidden;">
+          <div class="progress-bar bg-success" role="progressbar" style="width: ${pctAciertos}%" title="Correctas: ${countCorrectas}"></div>
+          <div class="progress-bar bg-danger" role="progressbar" style="width: ${pctIncorrectas}%" title="Incorrectas: ${countIncorrectas}"></div>
+          <div class="progress-bar bg-warning" role="progressbar" style="width: ${pctBlanco}%" title="En Blanco: ${countEnBlanco}"></div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-1">
+          ${navPillsHtml}
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. BLOQUE DE TELEMETRÍA Y CONECTIVIDAD -->
+    <div class="alert ${alertBoxClass} shadow-xs mb-3 p-2 p-sm-3 rounded-3">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="small">
+          <i class="fa-solid ${alertIcon} me-1"></i>
+          <strong>Telemetría de Conectividad:</strong> ${escapeHtmlDashboard(diag.diagnostico_corto || 'Evaluación Registrada')} —
+          <span class="text-muted">${escapeHtmlDashboard(diag.diagnostico_detalle || '')}</span>
+        </div>
+      </div>
+      <div class="row g-2 mt-1 pt-2 border-top border-secondary-subtle small" style="font-size: 0.78rem;">
+        <div class="col-6 col-md-3">
+          <span class="text-muted">Inicio:</span> <strong>${escapeHtmlDashboard(res.hora_inicio || 'N/A')}</strong>
+        </div>
+        <div class="col-6 col-md-3">
+          <span class="text-muted">Cierre:</span> <strong>${escapeHtmlDashboard(res.hora_fin || (res.en_curso ? 'En curso' : 'N/A'))}</strong>
+        </div>
+        <div class="col-6 col-md-3">
+          <span class="text-muted">Duración:</span>
+          <strong class="${diag.exceso_tiempo_seg > 10 ? 'text-danger' : ''}">
+            ${escapeHtmlDashboard(diag.tiempo_empleado_texto || 'N/A')} / ${res.tiempo_minutos || 30} min
+            ${diag.exceso_tiempo_seg > 10 ? ` (+${Math.round(diag.exceso_tiempo_seg)}s)` : ''}
+          </strong>
+        </div>
+        <div class="col-6 col-md-3">
+          <span class="text-muted">Reconexiones:</span>
+          <strong class="${diag.reconexiones > 0 ? 'text-warning-emphasis' : ''}">${diag.reconexiones || 0}</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. BARRA STICKY DE FILTROS DE RESPUESTAS Y BUSCADOR -->
+    <div class="quiz-submodal-sticky-bar mb-3">
+      <div class="row g-2 align-items-center">
+        <div class="col-12 col-lg-8">
+          <div class="d-flex flex-wrap gap-1" id="submodalQuizFilterBtnGroup">
+            <button type="button" class="btn btn-sm btn-primary fw-bold" data-quiz-filter="todas" onclick="filtrarPreguntasSubmodalQuiz('todas')">
+              <i class="fa-solid fa-layer-group me-1"></i> Todas (${totalP})
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success fw-bold" data-quiz-filter="correcta" onclick="filtrarPreguntasSubmodalQuiz('correcta')">
+              <i class="fa-solid fa-circle-check me-1"></i> Correctas (${countCorrectas})
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger fw-bold" data-quiz-filter="incorrecta" onclick="filtrarPreguntasSubmodalQuiz('incorrecta')">
+              <i class="fa-solid fa-circle-xmark me-1"></i> Incorrectas (${countIncorrectas})
+            </button>
+            ${countEnBlanco > 0 ? `
+              <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold" data-quiz-filter="blanco" onclick="filtrarPreguntasSubmodalQuiz('blanco')">
+                <i class="fa-solid fa-circle-question me-1"></i> En Blanco (${countEnBlanco})
+              </button>
+            ` : ''}
+          </div>
+        </div>
+        <div class="col-12 col-lg-4">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text bg-white text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input type="text" class="form-control" id="searchSubmodalQuizInput" placeholder="Buscar en preguntas o respuestas..." oninput="filtrarPreguntasSubmodalQuiz()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. LISTADO DETALLADO DE PREGUNTAS Y COMPARATIVA DE RESPUESTAS -->
+    <div id="submodalQuizQuestionsList">
+  `;
+
+  itemsClasificados.forEach(item => {
+    const qNum = item.qNum;
+    const sinResponder = item.sinResponder;
+    const acertada = item.acertada;
+    const cat = item.categoria;
+    const borderClass = sinResponder ? 'border-warning' : (acertada ? 'border-success' : 'border-danger');
+    const ptsGanados = acertada ? `+${valPorPregunta} pts` : `0 pts`;
+    const ptsBadgeClass = acertada ? 'bg-success-subtle text-success border border-success' : 'bg-danger-subtle text-danger border border-danger';
+
+    const statusBadge = sinResponder
+      ? `<span class="badge bg-warning text-dark"><i class="fa-solid fa-circle-question me-1"></i> SIN RESPONDER (EN BLANCO)</span>`
+      : (acertada
+        ? `<span class="badge bg-success"><i class="fa-solid fa-check-double me-1"></i> RESPUESTA CORRECTA</span>`
+        : `<span class="badge bg-danger"><i class="fa-solid fa-xmark me-1"></i> RESPUESTA INCORRECTA</span>`);
+
+    // Encontrar texto y explicación de lo que respondió el estudiante vs la respuesta correcta
+    let textoSeleccionada = item.texto_seleccionada || '';
+    let feedbackSeleccionada = item.feedback_seleccionada || '';
+    let textoCorrecta = item.texto_correcta || '';
+    let feedbackCorrecta = item.feedback_correcta || '';
+
+    if (Array.isArray(item.opciones_detalle)) {
+      const selOpt = item.opciones_detalle.find(o => o.seleccionada);
+      const corOpt = item.opciones_detalle.find(o => o.es_correcta);
+      if (selOpt) {
+        textoSeleccionada = selOpt.texto || textoSeleccionada;
+        feedbackSeleccionada = selOpt.feedback || feedbackSeleccionada;
+      }
+      if (corOpt) {
+        textoCorrecta = corOpt.texto || textoCorrecta;
+        feedbackCorrecta = corOpt.feedback || feedbackCorrecta;
+      }
+    }
+
+    // Cuadro Comparativo Directo (Respuesta del Estudiante vs Respuesta Correcta)
+    let comparativaDirectaHtml = '';
+    if (acertada) {
+      comparativaDirectaHtml = `
+        <div class="quiz-compare-box bg-success-subtle border border-success mb-3">
+          <div class="small fw-bold text-success mb-1">
+            <i class="fa-solid fa-circle-check me-1"></i> Respuesta seleccionada por el estudiante (¡Acertada!):
+          </div>
+          <div class="fw-bold text-dark small text-break">${escapeHtmlDashboard(textoSeleccionada)}</div>
+          ${feedbackSeleccionada ? `<div class="mt-1 pt-1 border-top border-success-subtle small text-secondary fst-italic"><i class="fa-solid fa-comment-dots text-success me-1"></i>${escapeHtmlDashboard(feedbackSeleccionada)}</div>` : ''}
+        </div>
+      `;
+    } else {
+      const boxEstClass = sinResponder ? 'bg-warning-subtle border border-warning' : 'bg-danger-subtle border border-danger';
+      const titleEstHtml = sinResponder
+        ? `<div class="small fw-bold text-warning-emphasis mb-1"><i class="fa-solid fa-circle-exclamation me-1"></i> Lo que respondió el estudiante:</div>`
+        : `<div class="small fw-bold text-danger mb-1"><i class="fa-solid fa-circle-xmark me-1"></i> Lo que respondió el estudiante (Incorrecta):</div>`;
+      const valorEstHtml = sinResponder
+        ? `<div class="fw-semibold text-dark small fst-italic">No seleccionó ninguna opción (dejada en blanco)</div>`
+        : `<div class="fw-bold text-dark small text-break">${escapeHtmlDashboard(textoSeleccionada)}</div>`;
+
+      comparativaDirectaHtml = `
+        <div class="row g-2 mb-3">
+          <div class="col-12 col-lg-6">
+            <div class="quiz-compare-box ${boxEstClass}">
+              ${titleEstHtml}
+              ${valorEstHtml}
+              ${feedbackSeleccionada ? `<div class="mt-1 pt-1 border-top border-danger-subtle small text-secondary fst-italic"><i class="fa-solid fa-circle-info text-danger me-1"></i>${escapeHtmlDashboard(feedbackSeleccionada)}</div>` : ''}
+            </div>
+          </div>
+          <div class="col-12 col-lg-6">
+            <div class="quiz-compare-box bg-success-subtle border border-success">
+              <div class="small fw-bold text-success mb-1">
+                <i class="fa-solid fa-check me-1"></i> Respuesta que debía seleccionar (Correcta):
+              </div>
+              <div class="fw-bold text-dark small text-break">${escapeHtmlDashboard(textoCorrecta || 'N/A')}</div>
+              ${feedbackCorrecta ? `<div class="mt-1 pt-1 border-top border-success-subtle small text-secondary fst-italic"><i class="fa-solid fa-lightbulb text-success me-1"></i>${escapeHtmlDashboard(feedbackCorrecta)}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    let opcionesDetalleHtml = '';
+    if (Array.isArray(item.opciones_detalle) && item.opciones_detalle.length > 0) {
+      item.opciones_detalle.forEach((opt, optIdx) => {
+        const letraOpt = String.fromCharCode(65 + optIdx);
+        let optBoxClass = 'bg-light border';
+        let optTag = '';
+
+        if (opt.es_correcta && opt.seleccionada) {
+          optBoxClass = 'bg-success-subtle border-success border-2';
+          optTag = `<span class="badge bg-success ms-auto"><i class="fa-solid fa-check-double me-1"></i> Marcada por el estudiante (Correcta)</span>`;
+        } else if (opt.seleccionada && !opt.es_correcta) {
+          optBoxClass = 'bg-danger-subtle border-danger border-2';
+          optTag = `<span class="badge bg-danger ms-auto"><i class="fa-solid fa-xmark me-1"></i> Marcada por el estudiante (Incorrecta)</span>`;
+        } else if (opt.es_correcta) {
+          optBoxClass = 'bg-success-subtle border-success';
+          optTag = `<span class="badge bg-white text-success border border-success ms-auto"><i class="fa-solid fa-check me-1"></i> Opción Correcta</span>`;
+        }
+
+        opcionesDetalleHtml += `
+          <div class="p-2 rounded-2 mb-1 ${optBoxClass}">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 small">
+              <div class="fw-medium text-dark text-break">
+                <span class="badge bg-secondary-subtle text-dark border me-1">${letraOpt}</span>
+                ${escapeHtmlDashboard(opt.texto)}
+              </div>
+              ${optTag}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    html += `
+      <div class="card shadow-xs mb-3 border-start border-4 ${borderClass} rounded-3 submodal-quiz-qcard" id="submodalQuizCard_${qNum}" data-q-categoria="${cat}">
+        <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-navy text-white px-2 py-1">Pregunta #${qNum}</span>
+            <span class="text-muted small">(${escapeHtmlDashboard(item.id_pregunta || '')})</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge ${ptsBadgeClass}">${ptsGanados}</span>
+            ${statusBadge}
+          </div>
+        </div>
+        <div class="card-body p-3 bg-white">
+          <div class="fw-bold text-navy mb-3 text-break" style="font-size: 0.95rem;">${formatQuizEnunciadoDashboard(item.enunciado)}</div>
+          ${comparativaDirectaHtml}
+          ${opcionesDetalleHtml ? `
+            <details class="small">
+              <summary class="text-primary fw-semibold" style="cursor: pointer; user-select: none;">
+                <i class="fa-solid fa-list-ul me-1"></i> Ver todas las opciones de la pregunta (${item.opciones_detalle.length})
+              </summary>
+              <div class="mt-2">
+                ${opcionesDetalleHtml}
+              </div>
+            </details>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  });
+
+  html += `
+    </div>
+    <div id="submodalQuizEmptyFilterMsg" class="alert alert-light border text-center py-4 my-2" style="display: none;">
+      <i class="fa-solid fa-filter-circle-xmark fa-2x text-muted mb-2 d-block"></i>
+      <span class="text-muted fw-semibold">No hay preguntas que coincidan con el filtro seleccionado.</span>
+    </div>
+  `;
+
+  $('#modalDiagQuizBody').html(html);
+}
+
+function filtrarPreguntasSubmodalQuiz(nuevoFiltro) {
+  if (nuevoFiltro !== undefined && nuevoFiltro !== null) {
+    _submodalQuizFilterActual = nuevoFiltro;
+    const $btns = $('#submodalQuizFilterBtnGroup button');
+    $btns.each(function () {
+      const f = $(this).attr('data-quiz-filter');
+      const isAct = (f === _submodalQuizFilterActual);
+      if (f === 'todas') {
+        $(this).toggleClass('btn-primary', isAct).toggleClass('btn-outline-primary', !isAct);
+      } else if (f === 'correcta') {
+        $(this).toggleClass('btn-success', isAct).toggleClass('btn-outline-success', !isAct);
+      } else if (f === 'incorrecta') {
+        $(this).toggleClass('btn-danger', isAct).toggleClass('btn-outline-danger', !isAct);
+      } else if (f === 'blanco') {
+        $(this).toggleClass('btn-warning text-dark', isAct).toggleClass('btn-outline-warning text-dark', !isAct);
+      }
+    });
+  }
+
+  const query = ($('#searchSubmodalQuizInput').val() || '').toLowerCase().trim();
+  let visibles = 0;
+
+  $('.submodal-quiz-qcard').each(function () {
+    const cat = $(this).attr('data-q-categoria');
+    const matchCat = (_submodalQuizFilterActual === 'todas') || (cat === _submodalQuizFilterActual);
+    const textCard = $(this).text().toLowerCase();
+    const matchSearch = !query || textCard.indexOf(query) !== -1;
+
+    if (matchCat && matchSearch) {
+      $(this).show();
+      visibles++;
+    } else {
+      $(this).hide();
+    }
+  });
+
+  if (visibles === 0) {
+    $('#submodalQuizEmptyFilterMsg').show();
+  } else {
+    $('#submodalQuizEmptyFilterMsg').hide();
+  }
+}
+
+function scrollToQuizQuestionSubmodal(qNum) {
+  if (_submodalQuizFilterActual !== 'todas') {
+    filtrarPreguntasSubmodalQuiz('todas');
+  }
+  const el = document.getElementById(`submodalQuizCard_${qNum}`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('quiz-question-card-highlight');
+    void el.offsetWidth;
+    el.classList.add('quiz-question-card-highlight');
+  }
+}
+
+/**
+ * Solicita confirmación para aplicar nuevamente el Quiz a UN estudiante específico
+ */
+function reaplicarQuizEstudianteIndividualPrompt(idActividad, idEstudiante, nombreEstudiante) {
+  sgnShowConfirm({
+    title: "Aplicar Nuevamente el Quiz (Nuevo Examen Barajeado)",
+    message: `
+      <div class="text-start">
+        <p class="mb-2">¿Desea habilitar un <strong>nuevo intento de evaluación online</strong> para el estudiante <strong>${escapeHtmlDashboard(nombreEstudiante)}</strong>?</p>
+        <ul class="small text-muted mb-0">
+          <li>Se anulará el intento anterior y su nota previa se reiniciará para esta evaluación.</li>
+          <li>Al iniciar nuevamente, el sistema <strong>sorteará y barajeará preguntas nuevas del banco</strong> (distintas a las que ya vio y con opciones en orden aleatorio).</li>
+          <li>Incluso si la fecha límite había vencido, quedará autorizado para presentar este nuevo intento.</li>
+        </ul>
+      </div>
+    `,
+    confirmText: "Sí, Habilitar Nuevo Examen Barajeado",
+    onConfirm: function () {
+      sgnApiCall("reaplicarQuizEstudiante", {
+        id_actividades_asignadas: idActividad,
+        id_estudiante: idEstudiante,
+        alcance: "INDIVIDUAL"
+      }, { showLoading: true }).then(function (res) {
+        if (res && res.success) {
+          sgnShowModal({
+            title: "Nuevo Examen Habilitado",
+            message: res.message,
+            type: "success"
+          });
+          if ($('#modalEntregasActividad').hasClass('show') && String(currentEntregasState.idActividad) === String(idActividad)) {
+            openModalEntregas(idActividad);
+          }
+          loadDashboardData(true);
+        } else {
+          sgnShowModal({
+            title: "Atención",
+            message: (res && res.message) || "No se pudo reiniciar el intento del estudiante.",
+            type: "warning"
+          });
+        }
+      });
+    }
+  });
+}
+
+/**
+ * Solicita confirmación para aplicar nuevamente el Quiz a los estudiantes AFECTADOS o a TODOS desde el Modal de Entregas
+ */
+function reaplicarQuizActividadPrompt(alcance, idActividadOverride = null) {
+  const idActividad = idActividadOverride || currentEntregasState.idActividad;
+  if (!idActividad) return;
+
+  const isAfectados = String(alcance).toUpperCase() === 'AFECTADOS';
+  const titulo = isAfectados
+    ? "Repetir Quiz a Estudiantes Afectados por Fallas"
+    : "Aplicar Nuevamente el Quiz a Todos los Estudiantes";
+
+  const descripcion = isAfectados
+    ? `<p class="mb-2">¿Está seguro de habilitar un <strong>nuevo examen barajeado</strong> para todos los estudiantes que registran <strong>posibles fallas de conectividad, preguntas en blanco, tiempo expirado sin cierre o solicitudes de repetición</strong>?</p>
+       <ul class="small text-muted mb-0">
+         <li>Los estudiantes que completaron su evaluación sin incidencias <strong>conservarán su nota intacta</strong>.</li>
+         <li>A los estudiantes afectados se les sorteará un <strong>examen nuevo con preguntas y opciones barajeadas</strong>.</li>
+       </ul>`
+    : `<p class="mb-2">¿Está seguro de <strong>reiniciar y aplicar nuevamente esta evaluación online a TODOS los estudiantes</strong>?</p>
+       <ul class="small text-muted mb-0">
+         <li>Se reiniciarán todos los intentos registrados en esta actividad y sus notas asociadas en el acta.</li>
+         <li>Cada estudiante recibirá un <strong>examen nuevo con preguntas y opciones barajeadas</strong> al volver a ingresar.</li>
+       </ul>`;
+
+  sgnShowConfirm({
+    title: titulo,
+    message: `<div class="text-start">${descripcion}</div>`,
+    confirmText: isAfectados ? "Sí, Repetir a Afectados" : "Sí, Reaplicar a Todos",
+    onConfirm: function () {
+      sgnApiCall("reaplicarQuizEstudiante", {
+        id_actividades_asignadas: idActividad,
+        alcance: isAfectados ? "AFECTADOS" : "TODOS"
+      }, { showLoading: true }).then(function (res) {
+        if (res && res.success) {
+          sgnShowModal({
+            title: "Evaluación Reaplicada Exitosamente",
+            message: res.message,
+            type: "success"
+          });
+          if ($('#modalEntregasActividad').hasClass('show')) {
+            openModalEntregas(idActividad);
+          }
+          loadDashboardData(true);
+        } else {
+          sgnShowModal({
+            title: "Información",
+            message: (res && res.message) || "No se realizaron cambios.",
+            type: "info"
+          });
+        }
+      });
+    }
+  });
+}
+
+/**
+ * Abre directamente el modal de entregas de la actividad Quiz para gestionar reaplicación individual, a afectados o a todos
+ */
+function reaplicarQuizDesdeTablaPrompt(idActividad) {
+  openModalEntregas(idActividad);
 }
 
 function aplicarNotaMasivaEntregas(modo) {
@@ -4153,8 +4964,8 @@ function evaluarPendientesConIAModal() {
   });
 }
 
-// Mantener scroll del modal de entregas si se cierra un modal superior de notificación
-$(document).on('hidden.bs.modal', '#sgnUniversalModal', function () {
+// Mantener scroll del modal de entregas si se cierra un modal superior de notificación o diagnóstico
+$(document).on('hidden.bs.modal', '#sgnUniversalModal, #modalDiagnosticoQuizDocente', function () {
   if ($('#modalEntregasActividad').hasClass('show') || $('#modalCalificacionesEstudiante').hasClass('show')) {
     $('body').addClass('modal-open');
   }

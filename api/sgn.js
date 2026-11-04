@@ -290,15 +290,38 @@ module.exports = async function handler(req, res) {
             const isEnCurso = tipoAct === "QUIZ" && ent && String(ent.entrega || "").trim() === "EN_CURSO";
             const hasEntrega = !isEnCurso && ent && !!(ent.entrega || ent.quiz_detalle_json);
 
-            // Validar nota real: debe ser un número válido mayor a 0, y no un 0 asignado por fallo de IA
+            let quizDiagnostico = null;
+            let quizReintentoAutorizado = false;
+            let quizIntentoNumero = 1;
+            if (tipoAct === "QUIZ") {
+              try {
+                const fullCfg = act.quiz_config_json ? JSON.parse(act.quiz_config_json) : {};
+                const hist = fullCfg.historial_reinicios && fullCfg.historial_reinicios[String(student.id)];
+                if (hist) {
+                  quizIntentoNumero = parseInt(hist.intento_numero, 10) || 1;
+                  if (hist.autorizado && !hasEntrega) {
+                    quizReintentoAutorizado = true;
+                  }
+                }
+              } catch (eHist) {}
+              if (ent) {
+                quizDiagnostico = analyzeQuizDiagnostico(ent, act);
+                if (quizDiagnostico && quizDiagnostico.intento_numero) {
+                  quizIntentoNumero = quizDiagnostico.intento_numero;
+                }
+              }
+            }
+
+            // Validar nota real: para QUIZ finalizado, el 0 también es una calificación numérica válida
             const entNotaNum = (ent && ent.nota !== undefined && ent.nota !== null && ent.nota !== "") ? parseFloat(ent.nota) : NaN;
             const isIaComment = ent && ent.comentario && (ent.comentario.includes("Evaluado por IA") || ent.comentario.includes("DeepSeek"));
             const isFailedIaNota = isIaComment && (isNaN(entNotaNum) || entNotaNum === 0);
+            const isQuizConCeroValido = tipoAct === "QUIZ" && hasEntrega && !isNaN(entNotaNum) && entNotaNum === 0 && !isFailedIaNota;
 
             let finalActNota = null;
             let calificado = false;
 
-            if (!isNaN(entNotaNum) && entNotaNum > 0 && !isFailedIaNota) {
+            if ((!isNaN(entNotaNum) && entNotaNum > 0 && !isFailedIaNota) || isQuizConCeroValido) {
               finalActNota = entNotaNum;
               calificado = true;
             } else if (unifiedEvalScore > 0) {
@@ -321,7 +344,7 @@ module.exports = async function handler(req, res) {
               dias_restantes: lapsoInfo.dias_restantes,
               porcentaje_restante: lapsoInfo.porcentaje_restante,
               vence_hoy: lapsoInfo.vence_hoy,
-              lapso_vencido: lapsoInfo.vencida,
+              lapso_vencido: quizReintentoAutorizado ? false : lapsoInfo.vencida,
               numero_evaluacion: numEvalKey,
               descripcion: act.descripcion,
               tipo_actividad: tipoAct,
@@ -329,6 +352,9 @@ module.exports = async function handler(req, res) {
               quiz_config: quizConfigSafe,
               quiz_en_curso: !!isEnCurso,
               quiz_completado: !!hasQuizAttempt,
+              quiz_reintento_autorizado: quizReintentoAutorizado,
+              quiz_intento_numero: quizIntentoNumero,
+              quiz_diagnostico: quizDiagnostico,
               hora_inicio: ent ? (ent.hora_inicio || "") : "",
               hora_fin: ent ? (ent.hora_fin || "") : "",
               entrega: (ent && !isEnCurso) ? ent.entrega : "",
@@ -1082,6 +1108,15 @@ module.exports = async function handler(req, res) {
           try {
             cfgObj = quizConfigJson ? JSON.parse(quizConfigJson) : {};
           } catch (eCfg) {}
+          if (params.id) {
+            try {
+              const prevRows = await query("SELECT quiz_config_json FROM actividades_asignadas WHERE id = ?", [params.id]);
+              const prevCfg = prevRows[0] && prevRows[0].quiz_config_json ? JSON.parse(prevRows[0].quiz_config_json) : {};
+              if (prevCfg && prevCfg.historial_reinicios && !cfgObj.historial_reinicios) {
+                cfgObj.historial_reinicios = prevCfg.historial_reinicios;
+              }
+            } catch (ePrevCfg) {}
+          }
           tiempoMinutos = Math.max(1, parseInt(params.tiempo_minutos) || parseInt(cfgObj.tiempo_minutos) || 30);
           cfgObj.tiempo_minutos = tiempoMinutos;
           quizConfigJson = JSON.stringify(cfgObj);
@@ -1152,8 +1187,8 @@ module.exports = async function handler(req, res) {
         const idAct = params.id_actividades_asignadas || params.id;
         const batchResults = await batch([
           { sql: "SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ?", args: [idAct] },
-          { sql: "SELECT id, cedula, nombre_completo FROM estudiantes", args: [] },
-          { sql: "SELECT id, id_unidad_curricular, numero_evaluacion FROM actividades_asignadas WHERE id = ?", args: [idAct] },
+          { sql: "SELECT id, cedula, nombre_completo, id_programa_formacion, seccion FROM estudiantes", args: [] },
+          { sql: "SELECT * FROM actividades_asignadas WHERE id = ?", args: [idAct] },
           { sql: "SELECT * FROM relacion_programa_notas WHERE id_unidad_curricular IN (SELECT id_unidad_curricular FROM actividades_asignadas WHERE id = ?)", args: [idAct] }
         ], "read");
 
@@ -1162,6 +1197,28 @@ module.exports = async function handler(req, res) {
         const actObj = (batchResults[2]?.rows || [])[0] || null;
         const relNotas = batchResults[3]?.rows || [];
         const evKey = actObj ? (actObj.numero_evaluacion || "e1").toString().toLowerCase().trim() : "e1";
+        const tipoAct = actObj ? String(actObj.tipo_actividad || "ENTREGA").toUpperCase().trim() : "ENTREGA";
+
+        let historialReinicios = {};
+        if (actObj && actObj.quiz_config_json) {
+          try {
+            const parsedCfg = JSON.parse(actObj.quiz_config_json);
+            if (parsedCfg && parsedCfg.historial_reinicios) {
+              historialReinicios = parsedCfg.historial_reinicios;
+            }
+          } catch (eCfg) {}
+        }
+
+        const resumenQuiz = {
+          es_quiz: tipoAct === "QUIZ",
+          total_entregas: entregas.length,
+          completados_ok: 0,
+          con_alerta_conectividad: 0,
+          en_curso_activos: 0,
+          en_curso_expirados: 0,
+          con_solicitud_repeticion: 0,
+          reinicios_autorizados_pendientes: Object.values(historialReinicios).filter(h => h && h.autorizado).length
+        };
 
         const detalle = entregas.map(ent => {
           const est = estudiantes.find(s => s.id == ent.id_estudiante);
@@ -1170,9 +1227,28 @@ module.exports = async function handler(req, res) {
           const hasEntNota = ent.nota !== undefined && ent.nota !== null && ent.nota !== "" && !isNaN(parseFloat(ent.nota));
           const entVal = hasEntNota ? (parseFloat(ent.nota) || 0) : 0;
           const isFailedIaComment = ent.comentario && (ent.comentario.includes("Evaluado por IA") || ent.comentario.includes("DeepSeek")) && entVal === 0;
+          const isEnCurso = String(ent.entrega || "").trim() === "EN_CURSO";
+          const isQuizEnt = tipoAct === "QUIZ" || String(ent.entrega || "").startsWith("QUIZ_ONLINE:") || isEnCurso || !!ent.quiz_detalle_json;
+
+          const quizDiagnostico = isQuizEnt ? analyzeQuizDiagnostico(ent, actObj) : null;
+
+          if (quizDiagnostico) {
+            if (quizDiagnostico.estado === "EN_CURSO_ACTIVO") resumenQuiz.en_curso_activos++;
+            else if (quizDiagnostico.estado === "EN_CURSO_EXPIRADO") {
+              resumenQuiz.en_curso_expirados++;
+              resumenQuiz.con_alerta_conectividad++;
+            } else if (quizDiagnostico.alerta_conectividad) {
+              resumenQuiz.con_alerta_conectividad++;
+            } else {
+              resumenQuiz.completados_ok++;
+            }
+            if (quizDiagnostico.solicitud_repeticion && quizDiagnostico.solicitud_repeticion.solicitada) {
+              resumenQuiz.con_solicitud_repeticion++;
+            }
+          }
 
           let finalNota = "";
-          if (hasEntNota && entVal > 0 && !isFailedIaComment) {
+          if (hasEntNota && (entVal > 0 || (isQuizEnt && !isEnCurso && entVal === 0)) && !isFailedIaComment) {
             finalNota = Math.max(entVal, maxRelVal);
           } else if (maxRelVal > 0) {
             finalNota = maxRelVal;
@@ -1189,12 +1265,17 @@ module.exports = async function handler(req, res) {
             nota: finalNota,
             comentario: isFailedIaComment ? "" : (ent.comentario || ""),
             quiz_detalle_json: ent.quiz_detalle_json || "",
+            quiz_diagnostico: quizDiagnostico,
             hora_inicio: ent.hora_inicio || "",
             hora_fin: ent.hora_fin || ""
           };
         });
 
         detalle.sort((a, b) => {
+          const aAlert = a.quiz_diagnostico && (a.quiz_diagnostico.alerta_conectividad || (a.quiz_diagnostico.solicitud_repeticion && a.quiz_diagnostico.solicitud_repeticion.solicitada)) ? 1 : 0;
+          const bAlert = b.quiz_diagnostico && (b.quiz_diagnostico.alerta_conectividad || (b.quiz_diagnostico.solicitud_repeticion && b.quiz_diagnostico.solicitud_repeticion.solicitada)) ? 1 : 0;
+          if (aAlert !== bAlert) return bAlert - aAlert;
+
           const aHasNota = (a.nota !== "" && a.nota !== null && a.nota !== undefined && !isNaN(a.nota));
           const bHasNota = (b.nota !== "" && b.nota !== null && b.nota !== undefined && !isNaN(b.nota));
           if (aHasNota !== bHasNota) {
@@ -1203,7 +1284,12 @@ module.exports = async function handler(req, res) {
           return (a.nombre_estudiante || "").localeCompare(b.nombre_estudiante || "");
         });
 
-        return res.status(200).json({ success: true, entregas: detalle });
+        return res.status(200).json({
+          success: true,
+          entregas: detalle,
+          resumen_quiz: resumenQuiz,
+          actividad_tipo: tipoAct
+        });
       }
 
       case "saveNotaEntrega": {
@@ -1529,13 +1615,24 @@ module.exports = async function handler(req, res) {
             });
           }
 
-          // Si está EN_CURSO, devolver preguntas previamente sorteadas
+          // Si está EN_CURSO, devolver preguntas previamente sorteadas y respuestas parciales guardadas
           if (savedDetail && Array.isArray(savedDetail.preguntas_sorteadas) && savedDetail.preguntas_sorteadas.length > 0) {
             const nowMs = Date.now();
             const startMs = parseInt(savedDetail.hora_inicio_ms) || nowMs;
             const elapsedSec = Math.max(0, Math.floor((nowMs - startMs) / 1000));
             const remainingSec = Math.max(0, duracionSegundosTotal - elapsedSec);
             const valPorPregunta = Number((puntajeMaximo / savedDetail.preguntas_sorteadas.length).toFixed(2));
+
+            // Registrar evento de reconexión / reanudación del examen
+            savedDetail.eventos_conexion = savedDetail.eventos_conexion || { reconexiones: 0, errores_red: 0 };
+            savedDetail.eventos_conexion.reconexiones = (parseInt(savedDetail.eventos_conexion.reconexiones, 10) || 0) + 1;
+            savedDetail.ultima_reconexion_ms = nowMs;
+            try {
+              await execute(
+                "UPDATE actividades_entregadas SET quiz_detalle_json = ? WHERE id = ?",
+                [JSON.stringify(savedDetail), existingEnt.id]
+              );
+            } catch (eUpdRec) {}
 
             return res.status(200).json({
               success: true,
@@ -1553,13 +1650,23 @@ module.exports = async function handler(req, res) {
               segundos_restantes: remainingSec,
               hora_inicio: existingEnt.hora_inicio || savedDetail.hora_inicio || "",
               hora_inicio_ms: startMs,
+              intento_numero: savedDetail.intento_numero || 1,
+              respuestas_parciales: savedDetail.respuestas_parciales || {},
               preguntas: savedDetail.preguntas_sorteadas
             });
           }
         }
 
+        // Revisar si este estudiante tiene un reintento autorizado por el docente
+        const histMap = (config && config.historial_reinicios && typeof config.historial_reinicios === "object")
+          ? config.historial_reinicios
+          : {};
+        const studentHist = histMap[String(idEstudiante)] || null;
+        const tieneReintentoAutorizado = !!(studentHist && studentHist.autorizado);
+        const intentoNumeroActual = studentHist && studentHist.intento_numero ? parseInt(studentHist.intento_numero, 10) : 1;
+
         const lapsoInfo = evaluateLapsoActividad(act);
-        if (lapsoInfo.vencida) {
+        if (lapsoInfo.vencida && !tieneReintentoAutorizado) {
           return res.status(200).json({
             success: false,
             lapso_vencido: true,
@@ -1568,10 +1675,28 @@ module.exports = async function handler(req, res) {
         }
 
         const cantMostrar = Math.min(Math.max(1, parseInt(config.cantidad_mostrar) || 10), bank.length);
-        const selectedQuestions = shuffleArrayFisherYates(bank).slice(0, cantMostrar);
+
+        // Si es una repetición de examen, priorizar preguntas que NO hayan salido en el intento anterior y barajear todo
+        let selectedQuestions = [];
+        const qidsVistosList = (studentHist && Array.isArray(studentHist.qids_vistos)) ? studentHist.qids_vistos.map(x => String(x).trim()) : [];
+        if (qidsVistosList.length > 0 && bank.length > 1) {
+          const vistosSet = new Set(qidsVistosList);
+          const unseenPool = shuffleArrayFisherYates(bank.filter(q => !vistosSet.has(String(q.id).trim())));
+          const seenPool = shuffleArrayFisherYates(bank.filter(q => vistosSet.has(String(q.id).trim())));
+
+          if (unseenPool.length >= cantMostrar) {
+            selectedQuestions = unseenPool.slice(0, cantMostrar);
+          } else {
+            const neededFromSeen = cantMostrar - unseenPool.length;
+            selectedQuestions = shuffleArrayFisherYates(unseenPool.concat(seenPool.slice(0, neededFromSeen)));
+          }
+        } else {
+          selectedQuestions = shuffleArrayFisherYates(bank).slice(0, cantMostrar);
+        }
+
         const valorCadaPregunta = Number((puntajeMaximo / selectedQuestions.length).toFixed(2));
 
-        // NUNCA incluir isCorrect ni feedback
+        // NUNCA incluir isCorrect ni feedback, y barajear las opciones de cada pregunta
         const safeQuestions = selectedQuestions.map(q => {
           const rawOpts = q.opciones || q.options || [];
           const shuffledOptions = shuffleArrayFisherYates(rawOpts);
@@ -1589,20 +1714,39 @@ module.exports = async function handler(req, res) {
         const nowMs = nowDate.getTime();
         const horaInicioStr = formatServerDateTime(nowDate);
 
+        // Actualizar historial de reinicios para marcar que el nuevo intento ya fue iniciado y registrar las nuevas preguntas sorteadas
+        if (studentHist) {
+          const nuevosQids = safeQuestions.map(q => String(q.id).trim());
+          // Si ya se agotó el banco no visto, rotar con las recién sorteadas; de lo contrario acumular
+          const combinedVistos = Array.from(new Set(qidsVistosList.concat(nuevosQids)));
+          studentHist.qids_vistos = combinedVistos.length >= bank.length ? nuevosQids : combinedVistos;
+          studentHist.autorizado = false;
+          studentHist.ultimo_inicio = horaInicioStr;
+          histMap[String(idEstudiante)] = studentHist;
+          config.historial_reinicios = histMap;
+          try {
+            await execute("UPDATE actividades_asignadas SET quiz_config_json = ? WHERE id = ?", [JSON.stringify(config), act.id]);
+          } catch (eCfgUpd) {}
+        }
+
         const estadoEnCurso = {
           estado: "EN_CURSO",
           id_actividad: act.id,
+          intento_numero: intentoNumeroActual,
+          es_repeticion_barajeada: intentoNumeroActual > 1,
           hora_inicio: horaInicioStr,
           hora_inicio_ms: nowMs,
           tiempo_minutos: tiempoMinutos,
           duracion_segundos: duracionSegundosTotal,
           puntaje_maximo: puntajeMaximo,
+          respuestas_parciales: {},
+          eventos_conexion: { reconexiones: 0, errores_red: 0 },
           preguntas_sorteadas: safeQuestions
         };
 
         if (existingEnt) {
           await execute(
-            "UPDATE actividades_entregadas SET entrega = 'EN_CURSO', fecha_entrega = ?, quiz_detalle_json = ?, hora_inicio = ? WHERE id = ?",
+            "UPDATE actividades_entregadas SET entrega = 'EN_CURSO', fecha_entrega = ?, nota = NULL, comentario = NULL, quiz_detalle_json = ?, hora_inicio = ?, hora_fin = NULL WHERE id = ?",
             [horaInicioStr, JSON.stringify(estadoEnCurso), horaInicioStr, existingEnt.id]
           );
         } else {
@@ -1628,7 +1772,56 @@ module.exports = async function handler(req, res) {
           segundos_restantes: duracionSegundosTotal,
           hora_inicio: horaInicioStr,
           hora_inicio_ms: nowMs,
+          intento_numero: intentoNumeroActual,
+          respuestas_parciales: {},
           preguntas: safeQuestions
+        });
+      }
+
+      case "saveQuizProgressEstudiante": {
+        const idActividad = params.id_actividades_asignadas;
+        const idEstudiante = params.id_estudiante;
+        if (!idActividad || !idEstudiante) {
+          return res.status(200).json({ success: false, message: "Faltan datos de sesión del quiz." });
+        }
+
+        const entRows = await query(
+          "SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?",
+          [idActividad, idEstudiante]
+        );
+        const existingEnt = entRows[0];
+        if (!existingEnt || String(existingEnt.entrega || "").trim() !== "EN_CURSO") {
+          return res.status(200).json({ success: false, message: "El intento ya no se encuentra en curso." });
+        }
+
+        let detail = {};
+        try {
+          detail = existingEnt.quiz_detalle_json ? JSON.parse(existingEnt.quiz_detalle_json) : {};
+        } catch (e) {}
+
+        let nuevasParciales = params.respuestas_parciales || {};
+        if (typeof nuevasParciales === "string") {
+          try { nuevasParciales = JSON.parse(nuevasParciales); } catch (e) { nuevasParciales = {}; }
+        }
+
+        detail.respuestas_parciales = Object.assign({}, detail.respuestas_parciales || {}, nuevasParciales);
+        detail.ultimo_guardado_ms = Date.now();
+        if (params.errores_red !== undefined) {
+          detail.eventos_conexion = detail.eventos_conexion || { reconexiones: 0, errores_red: 0 };
+          detail.eventos_conexion.errores_red = Math.max(
+            parseInt(detail.eventos_conexion.errores_red, 10) || 0,
+            parseInt(params.errores_red, 10) || 0
+          );
+        }
+
+        await execute(
+          "UPDATE actividades_entregadas SET quiz_detalle_json = ? WHERE id = ?",
+          [JSON.stringify(detail), existingEnt.id]
+        );
+
+        return res.status(200).json({
+          success: true,
+          guardadas: Object.keys(detail.respuestas_parciales).filter(k => detail.respuestas_parciales[k]).length
         });
       }
 
@@ -1697,12 +1890,20 @@ module.exports = async function handler(req, res) {
           ? prevDetail.preguntas_sorteadas
           : null;
 
+        // Respaldar primero con respuestas parciales guardadas en el servidor (en caso de reconexión tras apagón o recarga)
         const ansMap = {};
+        if (prevDetail && prevDetail.respuestas_parciales && typeof prevDetail.respuestas_parciales === "object") {
+          Object.keys(prevDetail.respuestas_parciales).forEach(qId => {
+            const val = String(prevDetail.respuestas_parciales[qId] || "").trim();
+            if (val) ansMap[String(qId).trim()] = val;
+          });
+        }
+
         if (Array.isArray(respuestas)) {
           respuestas.forEach(ans => {
             const qId = String(ans.id_pregunta || ans.questionId || ans.pregunta_id || "").trim();
             const optId = String(ans.id_opcion_seleccionada || ans.optionId || ans.opcion_id || "").trim();
-            if (qId) ansMap[qId] = optId;
+            if (qId && optId) ansMap[qId] = optId;
           });
         }
 
@@ -1717,6 +1918,7 @@ module.exports = async function handler(req, res) {
         const seenQuestionIds = new Set();
         const resumen = [];
         let correctas = 0;
+        let respondidasCount = 0;
 
         questionIdsToGrade.forEach(qId => {
           if (!qId || seenQuestionIds.has(qId)) return;
@@ -1728,6 +1930,8 @@ module.exports = async function handler(req, res) {
           const optionsList = realQ.opciones || realQ.options || [];
           const selectedOpt = optionsList.find(o => String(o.id).trim() === optId);
           const correctOpt = optionsList.find(o => o.isCorrect === true);
+
+          if (selectedOpt) respondidasCount++;
 
           const acertada = !!(selectedOpt && correctOpt && String(selectedOpt.id).trim() === String(correctOpt.id).trim());
           if (acertada) correctas++;
@@ -1760,30 +1964,52 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ success: false, message: "Las preguntas enviadas no coinciden con el banco." });
         }
 
+        const enBlancoCount = Math.max(0, totalPreguntas - respondidasCount);
         const valorCadaPregunta = Number((puntajeMaximo / totalPreguntas).toFixed(2));
         const notaFinal = Number(((correctas / totalPreguntas) * puntajeMaximo).toFixed(2));
         const nowFin = new Date();
+        const nowFinMs = nowFin.getTime();
         const horaFinStr = formatServerDateTime(nowFin);
         const horaInicioStr = (existingEnt && existingEnt.hora_inicio)
           ? String(existingEnt.hora_inicio)
           : (prevDetail && prevDetail.hora_inicio ? prevDetail.hora_inicio : horaFinStr);
+        const horaInicioMs = (prevDetail && prevDetail.hora_inicio_ms)
+          ? parseInt(prevDetail.hora_inicio_ms, 10)
+          : parseSpanishDateTimeApproxMs(horaInicioStr);
 
         const isAutoEval = String(act.ia_evaluacion || "").trim().toUpperCase() === "SI" || act.ia_evaluacion === true || act.ia_evaluacion == "1";
+        const fuePorTiempo = params.fue_por_tiempo === true || params.fue_por_tiempo === "true" || enBlancoCount > 0;
+        const cierreMotivo = params.cierre_motivo || (fuePorTiempo ? "TIEMPO_AGOTADO_AUTO" : "ENVIO_MANUAL");
+        const intentoNumero = (prevDetail && prevDetail.intento_numero) ? parseInt(prevDetail.intento_numero, 10) : 1;
+        const eventosConexion = Object.assign(
+          { reconexiones: 0, errores_red: 0 },
+          (prevDetail && prevDetail.eventos_conexion) ? prevDetail.eventos_conexion : {}
+        );
+        if (params.errores_red) {
+          eventosConexion.errores_red = Math.max(eventosConexion.errores_red, parseInt(params.errores_red, 10) || 0);
+        }
 
         const resultadoResumen = {
           estado: isAutoEval ? "FINALIZADO" : "PENDIENTE_CALIFICACION",
           id_actividad: act.id,
+          intento_numero: intentoNumero,
           descripcion: act.descripcion,
           numero_evaluacion: (act.numero_evaluacion || "e1").toString().toLowerCase(),
           hora_inicio: horaInicioStr,
+          hora_inicio_ms: !isNaN(horaInicioMs) ? horaInicioMs : nowFinMs,
           hora_fin: horaFinStr,
+          hora_fin_ms: nowFinMs,
           tiempo_minutos: tiempoMinutos,
           fecha_entrega: horaFinStr,
           correctas: correctas,
           aciertos: correctas,
+          respondidas_count: respondidasCount,
+          en_blanco_count: enBlancoCount,
           total_preguntas: totalPreguntas,
           puntaje_maximo: puntajeMaximo,
           valor_por_pregunta: valorCadaPregunta,
+          cierre_motivo: cierreMotivo,
+          eventos_conexion: eventosConexion,
           autoevaluado: isAutoEval,
           nota: isAutoEval ? notaFinal : null,
           resumen: resumen
@@ -1813,6 +2039,16 @@ module.exports = async function handler(req, res) {
           await syncNotaToRelacionSql(idActividad, idEstudiante, notaNormalizada20);
         }
 
+        const tempEntObj = {
+          id_estudiante: idEstudiante,
+          entrega: entregaLabel,
+          nota: notaParaGuardar,
+          hora_inicio: horaInicioStr,
+          hora_fin: horaFinStr,
+          quiz_detalle_json: JSON.stringify(resultadoResumen)
+        };
+        const quizDiagnostico = analyzeQuizDiagnostico(tempEntObj, act);
+
         return res.status(200).json({
           success: true,
           message: isAutoEval
@@ -1822,6 +2058,8 @@ module.exports = async function handler(req, res) {
           puntaje_maximo: puntajeMaximo,
           correctas: correctas,
           aciertos: correctas,
+          respondidas_count: respondidasCount,
+          en_blanco_count: enBlancoCount,
           total_preguntas: totalPreguntas,
           tiempo_minutos: tiempoMinutos,
           hora_inicio: horaInicioStr,
@@ -1829,6 +2067,7 @@ module.exports = async function handler(req, res) {
           fecha_entrega: horaFinStr,
           entrega: entregaLabel,
           autoevaluado: isAutoEval,
+          quiz_diagnostico: quizDiagnostico,
           resumen: resumen,
           resultado: resultadoResumen
         });
@@ -1838,14 +2077,23 @@ module.exports = async function handler(req, res) {
         const idActividad = params.id_actividades_asignadas;
         const idEstudiante = params.id_estudiante;
 
-        const entRows = await query(
-          "SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?",
-          [idActividad, idEstudiante]
-        );
-        const ent = entRows[0];
+        const [actRows, entRows, estRows] = await Promise.all([
+          query("SELECT * FROM actividades_asignadas WHERE id = ?", [idActividad]),
+          query("SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?", [idActividad, idEstudiante]),
+          query("SELECT id, cedula, nombre_completo FROM estudiantes WHERE id = ?", [idEstudiante])
+        ]);
 
-        if (!ent || String(ent.entrega || "").trim() === "EN_CURSO") {
-          return res.status(200).json({ success: false, message: "No se encontró un intento finalizado para esta evaluación." });
+        const act = actRows[0] || null;
+        const ent = entRows[0] || null;
+        const est = estRows[0] || null;
+
+        if (!ent) {
+          return res.status(200).json({ success: false, message: "No se encontró ningún registro de intento para este estudiante." });
+        }
+
+        const isEnCurso = String(ent.entrega || "").trim() === "EN_CURSO";
+        if (isEnCurso && !params.modo_docente) {
+          return res.status(200).json({ success: false, message: "La evaluación aún figura en curso." });
         }
 
         let resultado = null;
@@ -1853,27 +2101,246 @@ module.exports = async function handler(req, res) {
           resultado = ent.quiz_detalle_json ? JSON.parse(ent.quiz_detalle_json) : null;
         } catch (e) {}
 
-        const resumen = resultado ? (resultado.resumen || resultado.detalles || []) : [];
+        let resumen = resultado ? (resultado.resumen || resultado.detalles || []) : [];
+
+        // Si el docente consulta un intento EN_CURSO (por ejemplo interrumpido por falla eléctrica), reconstruir el detalle de las preguntas sorteadas y respuestas parciales
+        if (resumen.length === 0 && resultado && Array.isArray(resultado.preguntas_sorteadas) && act && act.quiz_preguntas_json) {
+          try {
+            const bank = JSON.parse(act.quiz_preguntas_json);
+            const parciales = resultado.respuestas_parciales || {};
+            resumen = resultado.preguntas_sorteadas.map(qSort => {
+              const qId = String(qSort.id).trim();
+              const realQ = bank.find(b => String(b.id).trim() === qId) || qSort;
+              const optId = String(parciales[qId] || "").trim();
+              const optionsList = realQ.opciones || realQ.options || [];
+              const selectedOpt = optionsList.find(o => String(o.id).trim() === optId);
+              const correctOpt = optionsList.find(o => o.isCorrect === true);
+              const acertada = !!(selectedOpt && correctOpt && String(selectedOpt.id).trim() === String(correctOpt.id).trim());
+              return {
+                id_pregunta: realQ.id,
+                enunciado: realQ.enunciado || realQ.question || "",
+                acertada: acertada,
+                id_opcion_seleccionada: selectedOpt ? selectedOpt.id : "",
+                texto_seleccionada: selectedOpt ? (selectedOpt.texto || selectedOpt.text || "") : "Sin respuesta registrada (Intento en curso / Interrumpido)",
+                feedback_seleccionada: selectedOpt ? (selectedOpt.feedback || "") : "",
+                id_opcion_correcta: correctOpt ? correctOpt.id : "",
+                texto_correcta: correctOpt ? (correctOpt.texto || correctOpt.text || "") : "",
+                feedback_correcta: correctOpt ? (correctOpt.feedback || "") : "",
+                opciones_detalle: optionsList.map(o => ({
+                  id: o.id,
+                  texto: o.texto || o.text || "",
+                  es_correcta: !!o.isCorrect,
+                  seleccionada: !!(selectedOpt && String(selectedOpt.id).trim() === String(o.id).trim()),
+                  feedback: o.feedback || ""
+                }))
+              };
+            });
+          } catch (eRebuild) {}
+        }
+
         const correctas = resultado && resultado.correctas !== undefined
           ? resultado.correctas
           : (resultado && resultado.aciertos !== undefined ? resultado.aciertos : resumen.filter(r => r.acertada || r.isCorrect).length);
         const totalPreg = resultado && resultado.total_preguntas ? resultado.total_preguntas : resumen.length;
         const puntajeMax = resultado && resultado.puntaje_maximo ? resultado.puntaje_maximo : 20;
+        const valorPregunta = resultado && resultado.valor_por_pregunta
+          ? resultado.valor_por_pregunta
+          : (totalPreg > 0 ? Math.round((puntajeMax / totalPreg) * 100) / 100 : 1);
+        const quizDiagnostico = analyzeQuizDiagnostico(ent, act);
 
         return res.status(200).json({
           success: true,
-          nota: ent.nota,
+          id_actividad: idActividad,
+          id_estudiante: idEstudiante,
+          actividad_descripcion: act ? (act.descripcion || "") : (resultado ? resultado.descripcion || "" : ""),
+          numero_evaluacion: act ? String(act.numero_evaluacion || "e1").toUpperCase() : "E1",
+          estudiante: est ? { id: est.id, cedula: est.cedula, nombre_completo: est.nombre_completo } : null,
+          en_curso: isEnCurso,
+          nota: (ent.nota !== null && ent.nota !== undefined && ent.nota !== "") ? ent.nota : (quizDiagnostico ? quizDiagnostico.nota_calculada : 0),
           puntaje_maximo: puntajeMax,
+          valor_por_pregunta: valorPregunta,
           correctas: correctas,
+          respondidas_count: quizDiagnostico ? quizDiagnostico.respondidas : totalPreg,
+          en_blanco_count: quizDiagnostico ? quizDiagnostico.en_blanco : 0,
           total_preguntas: totalPreg,
           hora_inicio: ent.hora_inicio || (resultado ? resultado.hora_inicio : ""),
           hora_fin: ent.hora_fin || (resultado ? resultado.hora_fin : ""),
-          tiempo_minutos: resultado ? (resultado.tiempo_minutos || 30) : 30,
+          tiempo_minutos: resultado ? (resultado.tiempo_minutos || 30) : (act ? act.tiempo_minutos || 30 : 30),
           fecha_entrega: ent.fecha_entrega,
           entrega: ent.entrega,
           comentario: ent.comentario || "",
+          quiz_diagnostico: quizDiagnostico,
           resumen: resumen,
           resultado: resultado
+        });
+      }
+
+      case "solicitarRepetirQuizEstudiante": {
+        const idActividad = params.id_actividades_asignadas;
+        const idEstudiante = params.id_estudiante;
+        const motivo = String(params.motivo || "Falla eléctrica o de conectividad durante la evaluación").trim();
+
+        if (!idActividad || !idEstudiante) {
+          return res.status(200).json({ success: false, message: "Faltan datos de la evaluación o del estudiante." });
+        }
+
+        const entRows = await query(
+          "SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?",
+          [idActividad, idEstudiante]
+        );
+        const ent = entRows[0];
+        if (!ent) {
+          return res.status(200).json({ success: false, message: "No tienes un intento registrado en esta evaluación para solicitar repetición." });
+        }
+
+        let detail = {};
+        try {
+          detail = ent.quiz_detalle_json ? JSON.parse(ent.quiz_detalle_json) : {};
+        } catch (e) {}
+
+        const fechaSolicitud = formatServerDateTime(new Date());
+        detail.solicitud_repeticion = {
+          solicitada: true,
+          fecha: fechaSolicitud,
+          motivo: motivo
+        };
+
+        await execute(
+          "UPDATE actividades_entregadas SET quiz_detalle_json = ? WHERE id = ?",
+          [JSON.stringify(detail), ent.id]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: "Tu solicitud para presentar nuevamente la evaluación fue registrada y enviada al docente. Una vez aprobada, se te asignará un nuevo examen con preguntas barajeadas.",
+          solicitud_repeticion: detail.solicitud_repeticion
+        });
+      }
+
+      case "reaplicarQuizEstudiante": {
+        const idActividad = params.id_actividades_asignadas;
+        const idEstudiante = params.id_estudiante;
+        const alcance = String(params.alcance || (idEstudiante ? "INDIVIDUAL" : "TODOS")).toUpperCase().trim();
+
+        if (!idActividad) {
+          return res.status(200).json({ success: false, message: "Debe especificar la actividad de tipo Evaluación Online (Quiz)." });
+        }
+
+        const actRows = await query("SELECT * FROM actividades_asignadas WHERE id = ?", [idActividad]);
+        const act = actRows[0];
+        if (!act) {
+          return res.status(200).json({ success: false, message: "La actividad solicitada no existe." });
+        }
+
+        let config = { cantidad_mostrar: 10, puntaje_maximo: 20, tiempo_minutos: 30 };
+        try {
+          if (act.quiz_config_json) config = Object.assign(config, JSON.parse(act.quiz_config_json));
+        } catch (eCfg) {}
+        config.historial_reinicios = (config.historial_reinicios && typeof config.historial_reinicios === "object")
+          ? config.historial_reinicios
+          : {};
+
+        const entRows = await query("SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ?", [idActividad]);
+        let targetEntregas = [];
+
+        if (alcance === "INDIVIDUAL") {
+          if (!idEstudiante) {
+            return res.status(200).json({ success: false, message: "Debe indicar el estudiante al que se le reaplicará el Quiz." });
+          }
+          targetEntregas = entRows.filter(e => String(e.id_estudiante) === String(idEstudiante));
+        } else if (alcance === "AFECTADOS") {
+          targetEntregas = entRows.filter(e => {
+            const diag = analyzeQuizDiagnostico(e, act);
+            return diag && (diag.alerta_conectividad || (diag.solicitud_repeticion && diag.solicitud_repeticion.solicitada));
+          });
+          if (targetEntregas.length === 0) {
+            return res.status(200).json({
+              success: false,
+              message: "No se detectaron estudiantes con alertas de conectividad, preguntas en blanco o solicitudes de repetición en esta evaluación."
+            });
+          }
+        } else {
+          // TODOS
+          targetEntregas = entRows;
+        }
+
+        const targetStudentIds = new Set();
+        if (alcance === "INDIVIDUAL" && idEstudiante) {
+          targetStudentIds.add(String(idEstudiante));
+        }
+        targetEntregas.forEach(e => {
+          if (e.id_estudiante) targetStudentIds.add(String(e.id_estudiante));
+        });
+
+        const fechaReinicio = formatServerDateTime(new Date());
+
+        // Registrar para cada estudiante las preguntas que ya vio para excluirlas/rotarlas en el nuevo sorteo
+        targetStudentIds.forEach(stId => {
+          const prevHist = config.historial_reinicios[stId] || { intento_numero: 1, qids_vistos: [] };
+          const vistosSet = new Set(Array.isArray(prevHist.qids_vistos) ? prevHist.qids_vistos.map(x => String(x).trim()) : []);
+
+          const stEnts = targetEntregas.filter(e => String(e.id_estudiante) === stId);
+          let maxPrevIntento = parseInt(prevHist.intento_numero, 10) || 1;
+
+          stEnts.forEach(ent => {
+            try {
+              const det = ent.quiz_detalle_json ? JSON.parse(ent.quiz_detalle_json) : null;
+              if (det) {
+                if (det.intento_numero && parseInt(det.intento_numero, 10) > maxPrevIntento) {
+                  maxPrevIntento = parseInt(det.intento_numero, 10);
+                }
+                if (Array.isArray(det.preguntas_sorteadas)) {
+                  det.preguntas_sorteadas.forEach(q => {
+                    if (q && q.id) vistosSet.add(String(q.id).trim());
+                  });
+                }
+                if (Array.isArray(det.resumen)) {
+                  det.resumen.forEach(r => {
+                    if (r && r.id_pregunta) vistosSet.add(String(r.id_pregunta).trim());
+                  });
+                }
+              }
+            } catch (eDet) {}
+          });
+
+          config.historial_reinicios[stId] = {
+            intento_numero: maxPrevIntento + 1,
+            qids_vistos: Array.from(vistosSet),
+            autorizado: true,
+            fecha_reinicio: fechaReinicio
+          };
+        });
+
+        // Guardar configuración actualizada con historial de preguntas previas para barajear examen nuevo
+        await execute(
+          "UPDATE actividades_asignadas SET quiz_config_json = ? WHERE id = ?",
+          [JSON.stringify(config), idActividad]
+        );
+
+        // Eliminar intentos anteriores y limpiar la nota de esta evaluación en relacion_programa_notas
+        for (const stId of targetStudentIds) {
+          await execute(
+            "DELETE FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?",
+            [idActividad, stId]
+          );
+          await syncNotaToRelacionSql(idActividad, stId, 0);
+        }
+
+        const countReiniciados = targetStudentIds.size;
+        let msgExito = "";
+        if (alcance === "INDIVIDUAL") {
+          msgExito = "Se anuló el intento previo y se habilitó un nuevo examen con preguntas y opciones barajeadas para el estudiante.";
+        } else if (alcance === "AFECTADOS") {
+          msgExito = `Se habilitaron nuevos exámenes (con preguntas barajeadas) para ${countReiniciados} estudiante(s) que presentaban fallas de conexión, tiempo agotado o solicitudes de repetición.`;
+        } else {
+          msgExito = `Se reinició la evaluación online para todos los estudiantes (${countReiniciados} intento(s) reiniciado(s)). Al ingresar nuevamente, a cada estudiante se le aplicará un examen nuevo con preguntas barajeadas.`;
+        }
+
+        return res.status(200).json({
+          success: true,
+          alcance: alcance,
+          reiniciados: countReiniciados,
+          message: msgExito
         });
       }
 
@@ -2551,3 +3018,190 @@ Responde ESTRICTAMENTE en formato JSON con la siguiente estructura:
 
   return { success: false, message: "No se pudo interpretar una calificación válida de la IA." };
 }
+
+/**
+ * Convierte cadenas de fecha/hora en formato local es-VE (ej: "3/11/2026, 8:31:06 p. m.") a milisegundos UTC aproximados
+ */
+function parseSpanishDateTimeApproxMs(str) {
+  if (!str) return NaN;
+  const s = String(str).trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?/i);
+  if (m) {
+    const day = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10) - 1;
+    const year = parseInt(m[3], 10);
+    let hour = parseInt(m[4], 10);
+    const min = parseInt(m[5], 10);
+    const sec = parseInt(m[6] || "0", 10);
+    const ampm = (m[7] || "").toLowerCase();
+    if (ampm.includes("p") && hour < 12) hour += 12;
+    if (ampm.includes("a") && hour === 12) hour = 0;
+    return Date.UTC(year, month, day, hour + 4, min, sec);
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? NaN : d.getTime();
+}
+
+function formatSecondsDurationEs(totalSeconds) {
+  const sec = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m > 0 && s > 0) return `${m}m ${s}s`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}
+
+/**
+ * Analiza un intento de Evaluación Online (Quiz) para detectar fallas de conectividad,
+ * cierres por tiempo agotado, preguntas en blanco o solicitudes de repetición.
+ */
+function analyzeQuizDiagnostico(ent, act) {
+  if (!ent) return null;
+  const tipoAct = act ? String(act.tipo_actividad || "").toUpperCase().trim() : "";
+  const isEnCurso = String(ent.entrega || "").trim() === "EN_CURSO";
+  const isQuizEnt = tipoAct === "QUIZ" || String(ent.entrega || "").startsWith("QUIZ_ONLINE:") || isEnCurso || !!ent.quiz_detalle_json;
+  if (!isQuizEnt) return null;
+
+  let detail = null;
+  try {
+    detail = ent.quiz_detalle_json ? JSON.parse(ent.quiz_detalle_json) : null;
+  } catch (e) {}
+
+  let cfg = {};
+  try {
+    cfg = act && act.quiz_config_json ? JSON.parse(act.quiz_config_json) : {};
+  } catch (e) {}
+
+  const tiempoMinutos = Math.max(1, parseInt(act && act.tiempo_minutos) || parseInt(cfg.tiempo_minutos) || parseInt(detail && detail.tiempo_minutos) || 30);
+  const duracionConfigSeg = tiempoMinutos * 60;
+  const puntajeMaximo = parseFloat(cfg.puntaje_maximo) || parseFloat(detail && detail.puntaje_maximo) || 20;
+
+  const reintentoCfg = (cfg.historial_reinicios && ent.id_estudiante)
+    ? cfg.historial_reinicios[String(ent.id_estudiante)]
+    : null;
+  const intentoNumero = (detail && detail.intento_numero)
+    ? parseInt(detail.intento_numero, 10)
+    : (reintentoCfg && reintentoCfg.intento_numero ? parseInt(reintentoCfg.intento_numero, 10) : 1);
+
+  const solicitudRepeticion = (detail && detail.solicitud_repeticion) ? detail.solicitud_repeticion : null;
+  const reconexiones = (detail && detail.eventos_conexion && detail.eventos_conexion.reconexiones)
+    ? parseInt(detail.eventos_conexion.reconexiones, 10)
+    : 0;
+  const erroresRed = (detail && detail.eventos_conexion && detail.eventos_conexion.errores_red)
+    ? parseInt(detail.eventos_conexion.errores_red, 10)
+    : 0;
+
+  const horaInicioStr = ent.hora_inicio || (detail && detail.hora_inicio) || "";
+  const horaFinStr = ent.hora_fin || (detail && detail.hora_fin) || "";
+  const startMs = (detail && detail.hora_inicio_ms) ? parseInt(detail.hora_inicio_ms, 10) : parseSpanishDateTimeApproxMs(horaInicioStr);
+  const endMs = (detail && detail.hora_fin_ms) ? parseInt(detail.hora_fin_ms, 10) : parseSpanishDateTimeApproxMs(horaFinStr);
+
+  if (isEnCurso) {
+    const totalPreguntas = (detail && Array.isArray(detail.preguntas_sorteadas))
+      ? detail.preguntas_sorteadas.length
+      : (parseInt(cfg.cantidad_mostrar, 10) || 10);
+    const parcialesMap = (detail && detail.respuestas_parciales && typeof detail.respuestas_parciales === "object")
+      ? detail.respuestas_parciales
+      : {};
+    const respondidas = Object.values(parcialesMap).filter(v => v && String(v).trim() !== "").length;
+    const enBlanco = Math.max(0, totalPreguntas - respondidas);
+    const elapsedSec = !isNaN(startMs) ? Math.max(0, Math.floor((Date.now() - startMs) / 1000)) : 0;
+    const excesoSeg = Math.max(0, elapsedSec - duracionConfigSeg);
+    const isExpired = elapsedSec > (duracionConfigSeg + 30);
+
+    return {
+      es_quiz: true,
+      estado: isExpired ? "EN_CURSO_EXPIRADO" : "EN_CURSO_ACTIVO",
+      intento_numero: intentoNumero,
+      total_preguntas: totalPreguntas,
+      respondidas: respondidas,
+      en_blanco: enBlanco,
+      correctas: 0,
+      puntaje_maximo: puntajeMaximo,
+      nota_calculada: 0,
+      hora_inicio: horaInicioStr,
+      hora_fin: "",
+      tiempo_minutos: tiempoMinutos,
+      duracion_config_seg: duracionConfigSeg,
+      tiempo_empleado_seg: elapsedSec,
+      tiempo_empleado_texto: formatSecondsDurationEs(elapsedSec),
+      exceso_tiempo_seg: excesoSeg,
+      reconexiones: reconexiones,
+      errores_red: erroresRed,
+      solicitud_repeticion: solicitudRepeticion,
+      alerta_conectividad: isExpired || !!(solicitudRepeticion && solicitudRepeticion.solicitada),
+      tipo_alerta: isExpired ? "ABANDONO_CONEXION" : "EN_CURSO",
+      diagnostico_corto: isExpired
+        ? `Interrumpido sin cierre (${respondidas}/${totalPreguntas} guardadas)`
+        : `En curso (${respondidas}/${totalPreguntas} respondidas)`,
+      diagnostico_detalle: isExpired
+        ? `El estudiante inició la evaluación a las ${horaInicioStr || "N/A"}, pero el tiempo límite (${tiempoMinutos} min) venció hace ${formatSecondsDurationEs(excesoSeg)} sin recibir el envío final del navegador (posible falla eléctrica o pérdida total de internet).`
+        : `El estudiante se encuentra presentando la evaluación dentro del tiempo reglamentario (${respondidas} de ${totalPreguntas} respondidas hasta ahora).`
+    };
+  }
+
+  const resumen = (detail && Array.isArray(detail.resumen)) ? detail.resumen : [];
+  const totalPreguntas = parseInt(detail && detail.total_preguntas, 10) || resumen.length || (parseInt(cfg.cantidad_mostrar, 10) || 10);
+  const respondidas = resumen.length > 0
+    ? resumen.filter(r => r.id_opcion_seleccionada && String(r.id_opcion_seleccionada).trim() !== "" && !String(r.texto_seleccionada || "").startsWith("Sin respuesta")).length
+    : (detail && detail.respondidas_count !== undefined ? parseInt(detail.respondidas_count, 10) : totalPreguntas);
+  const enBlanco = Math.max(0, totalPreguntas - respondidas);
+  const correctas = (detail && detail.correctas !== undefined)
+    ? Number(detail.correctas)
+    : ((detail && detail.aciertos !== undefined) ? Number(detail.aciertos) : resumen.filter(r => r.acertada).length);
+  const notaCalculada = totalPreguntas > 0 ? Number(((correctas / totalPreguntas) * puntajeMaximo).toFixed(2)) : 0;
+
+  const tiempoEmpleadoSeg = (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs)
+    ? Math.round((endMs - startMs) / 1000)
+    : null;
+  const excesoSeg = tiempoEmpleadoSeg !== null ? Math.max(0, tiempoEmpleadoSeg - duracionConfigSeg) : 0;
+
+  let alertaConectividad = false;
+  let tipoAlerta = "OK";
+  let diagnosticoCorto = `Completado (${respondidas}/${totalPreguntas} resp.)`;
+  let diagnosticoDetalle = `Evaluación respondida en su totalidad (${respondidas}/${totalPreguntas} preguntas) y enviada correctamente${tiempoEmpleadoSeg !== null ? ` en ${formatSecondsDurationEs(tiempoEmpleadoSeg)}` : ""}.`;
+
+  if (respondidas === 0 && totalPreguntas > 0) {
+    alertaConectividad = true;
+    tipoAlerta = "SIN_RESPUESTAS_CONEXION";
+    diagnosticoCorto = `0/${totalPreguntas} respondidas (Falla conexión / Tiempo agotado)`;
+    diagnosticoDetalle = `El intento se cerró con las ${totalPreguntas} preguntas en blanco${tiempoEmpleadoSeg !== null ? ` tras ${formatSecondsDurationEs(tiempoEmpleadoSeg)}` : ""}${excesoSeg > 5 ? ` (+${formatSecondsDurationEs(excesoSeg)} después del límite de ${tiempoMinutos} min por reconexión tardía)` : ""}. Esto ocurre cuando el estudiante sufre una caída eléctrica/conectividad o recarga la página tras expirar el tiempo sin haber podido enviar sus respuestas.`;
+  } else if (enBlanco > 0) {
+    alertaConectividad = true;
+    tipoAlerta = "INCOMPLETO_TIEMPO_O_RED";
+    diagnosticoCorto = `Incompleto: ${respondidas}/${totalPreguntas} resp. (${enBlanco} en blanco)`;
+    diagnosticoDetalle = `El estudiante solo logró responder ${respondidas} de ${totalPreguntas} preguntas y dejó ${enBlanco} en blanco al cerrarse por agotamiento de tiempo${excesoSeg > 5 ? ` o reconexión tardía (+${formatSecondsDurationEs(excesoSeg)})` : ""}.`;
+  } else if (solicitudRepeticion && solicitudRepeticion.solicitada) {
+    alertaConectividad = true;
+    tipoAlerta = "SOLICITUD_ESTUDIANTE";
+    diagnosticoCorto = `Solicita repetir evaluación`;
+    diagnosticoDetalle = `El estudiante solicitó repetir la evaluación indicando: "${solicitudRepeticion.motivo || "Inconveniente técnico"}".`;
+  }
+
+  return {
+    es_quiz: true,
+    estado: (detail && detail.estado) || "FINALIZADO",
+    intento_numero: intentoNumero,
+    total_preguntas: totalPreguntas,
+    respondidas: respondidas,
+    en_blanco: enBlanco,
+    correctas: correctas,
+    puntaje_maximo: puntajeMaximo,
+    nota_calculada: notaCalculada,
+    hora_inicio: horaInicioStr,
+    hora_fin: horaFinStr,
+    tiempo_minutos: tiempoMinutos,
+    duracion_config_seg: duracionConfigSeg,
+    tiempo_empleado_seg: tiempoEmpleadoSeg,
+    tiempo_empleado_texto: tiempoEmpleadoSeg !== null ? formatSecondsDurationEs(tiempoEmpleadoSeg) : "N/A",
+    exceso_tiempo_seg: excesoSeg,
+    reconexiones: reconexiones,
+    errores_red: erroresRed,
+    solicitud_repeticion: solicitudRepeticion,
+    alerta_conectividad: alertaConectividad,
+    tipo_alerta: tipoAlerta,
+    diagnostico_corto: diagnosticoCorto,
+    diagnostico_detalle: diagnosticoDetalle
+  };
+}
+

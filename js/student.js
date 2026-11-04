@@ -510,11 +510,15 @@ function renderStudentAcademicProfile(res) {
       const barraLapsoHtml = renderBarraLapsoStudentHtml(act);
       
       let estadoBadge = '';
+      const reintentoAut = isQuiz && !!act.quiz_reintento_autorizado;
+      const numIntento = act.quiz_intento_numero || 1;
       if (isQuiz) {
         if (hasEntrega) {
           estadoBadge = `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Evaluación Presentada (${act.fecha_entrega || ''})</span>`;
         } else if (isQuizEnCurso) {
           estadoBadge = `<span class="badge bg-info text-dark fw-bold"><i class="fa-solid fa-hourglass-half fa-spin me-1"></i> En Curso (Inicio: ${act.hora_inicio || ''})</span>`;
+        } else if (reintentoAut) {
+          estadoBadge = `<span class="badge bg-info text-dark fw-bold"><i class="fa-solid fa-shuffle me-1"></i> Nuevo Intento Habilitado (#${numIntento} — Examen Barajeado)</span>`;
         } else if (lapso.vencida) {
           estadoBadge = `<span class="badge bg-danger"><i class="fa-solid fa-calendar-xmark me-1"></i> Lapso Vencido (Cerrada)</span>`;
         } else {
@@ -532,7 +536,8 @@ function renderStudentAcademicProfile(res) {
 
       let notaDisplay = '';
       const actNotaNum = (act.nota !== undefined && act.nota !== "" && act.nota !== null) ? parseFloat(act.nota) : NaN;
-      if (act.calificado && !isNaN(actNotaNum) && actNotaNum > 0) {
+      const isCalificadoValido = act.calificado && !isNaN(actNotaNum) && (isQuiz ? actNotaNum >= 0 : actNotaNum > 0);
+      if (isCalificadoValido) {
         notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(actNotaNum)}</span>`;
       } else if (hasEntrega) {
         notaDisplay = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>`;
@@ -540,6 +545,7 @@ function renderStudentAcademicProfile(res) {
 
       let tipoTagHtml = '';
       let actionButtonsHtml = '';
+      let alertaDiagnosticoQuizHtml = '';
 
       if (isQuiz) {
         const cantP = (act.quiz_config && act.quiz_config.cantidad_mostrar) ? act.quiz_config.cantidad_mostrar : '';
@@ -547,15 +553,45 @@ function renderStudentAcademicProfile(res) {
         tipoTagHtml = `
           <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-2 mb-1"><i class="fa-solid fa-bolt me-1"></i> Evaluación Online (Quiz${cantP ? ': ' + cantP + ' preg.' : ''} | Base ${pMax} pts)</span>
           <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-2 mb-1"><i class="fa-solid fa-stopwatch me-1"></i> Tiempo: ${tiempoMin} min</span>
+          ${numIntento > 1 ? `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle me-2 mb-1"><i class="fa-solid fa-shuffle me-1"></i> Intento #${numIntento}</span>` : ''}
         `;
+
+        const diag = act.quiz_diagnostico || null;
+        const solRep = diag && diag.solicitud_repeticion && diag.solicitud_repeticion.solicitada;
+
+        if (hasEntrega && diag && (diag.alerta_conectividad || diag.en_blanco > 0)) {
+          alertaDiagnosticoQuizHtml = `
+            <div class="alert alert-warning border-warning-subtle p-2 mt-2 mb-1 rounded-2 small d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <div>
+                <i class="fa-solid fa-plug-circle-exclamation text-danger me-1"></i>
+                <strong>Aviso de Telemetría:</strong> Se registraron <strong>${diag.respondidas}/${diag.total_preguntas}</strong> respuestas (${diag.en_blanco} sin responder). Si tuviste una falla eléctrica o de internet durante el examen, puedes notificar al docente para solicitar un nuevo intento con preguntas barajeadas.
+              </div>
+              ${solRep
+                ? `<span class="badge bg-warning text-dark px-2 py-1"><i class="fa-solid fa-clock me-1"></i> Solicitud enviada al docente</span>`
+                : `<button type="button" class="btn btn-xs btn-warning text-dark fw-bold py-1 px-2" onclick="solicitarRepetirQuizPrompt(${act.id}, ${student.id})"><i class="fa-solid fa-hand-paper me-1"></i> Solicitar Repetir por Falla</button>`
+              }
+            </div>
+          `;
+        } else if (reintentoAut) {
+          alertaDiagnosticoQuizHtml = `
+            <div class="alert alert-info border-info-subtle p-2 mt-2 mb-1 rounded-2 small">
+              <i class="fa-solid fa-shuffle me-1"></i>
+              <strong>Reaplicación Autorizada por el Docente:</strong> Tienes habilitado un nuevo intento (<strong>Intento #${numIntento}</strong>). Al iniciar se sorteará un examen nuevo con preguntas y opciones barajeadas.
+            </div>
+          `;
+        }
 
         if (hasEntrega) {
           const btnResetTest = isTestUser
             ? `<button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold" onclick="resetTestStudentFromPortal(${act.id})"><i class="fa-solid fa-rotate-left me-1"></i> Reiniciar Intento (Prueba)</button>`
             : '';
+          const btnSolicitarRep = solRep
+            ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning px-2 py-2"><i class="fa-solid fa-paper-plane me-1"></i> Solicitud de Repetición Enviada</span>`
+            : `<button type="button" class="btn btn-sm btn-outline-danger fw-bold" onclick="solicitarRepetirQuizPrompt(${act.id}, ${student.id})" title="Solicitar al docente repetir la evaluación por falla eléctrica o de conectividad"><i class="fa-solid fa-rotate me-1"></i> Solicitar Repetir Evaluación</button>`;
           actionButtonsHtml = `
             <span class="text-success small fw-semibold me-2"><i class="fa-solid fa-lock me-1"></i> Intento registrado ${act.hora_inicio ? `(Inicio: ${act.hora_inicio})` : ''}</span>
             ${btnResetTest}
+            ${btnSolicitarRep}
             <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="openQuizResultadoEstudiante(${act.id}, ${student.id})">
               <i class="fa-solid fa-list-check me-1"></i> Ver Resultados y Retroalimentación
             </button>
@@ -566,7 +602,7 @@ function renderStudentAcademicProfile(res) {
               <i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Continuar Evaluación en Curso (Duración: ${tiempoMin} min)
             </button>
           `;
-        } else if (lapso.vencida) {
+        } else if (lapso.vencida && !reintentoAut) {
           actionButtonsHtml = `
             <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se reciben más evaluaciones.">
               <i class="fa-solid fa-lock me-1"></i> Recepción Cerrada (Lapso Vencido el ${lapso.fecha_limite})
@@ -575,7 +611,7 @@ function renderStudentAcademicProfile(res) {
         } else {
           actionButtonsHtml = `
             <button type="button" class="btn btn-sm btn-primary-sgn fw-bold shadow-sm" onclick="confirmarInicioQuizEstudiante(${act.id}, ${student.id}, ${tiempoMin})">
-              <i class="fa-solid fa-stopwatch me-1"></i> Iniciar Evaluación Online (Duración: ${tiempoMin} min)
+              <i class="fa-solid ${reintentoAut ? 'fa-shuffle' : 'fa-stopwatch'} me-1"></i> ${reintentoAut ? `Iniciar Nuevo Examen Barajeado (Intento #${numIntento} | ${tiempoMin} min)` : `Iniciar Evaluación Online (Duración: ${tiempoMin} min)`}
             </button>
           `;
         }
@@ -623,7 +659,7 @@ function renderStudentAcademicProfile(res) {
       }
 
       itemsHtml += `
-        <div class="card border-0 shadow-sm mb-3 border-start border-4 ${lapso.vencida ? 'border-danger' : 'border-primary'}">
+        <div class="card border-0 shadow-sm mb-3 border-start border-4 ${lapso.vencida && !reintentoAut ? 'border-danger' : 'border-primary'}">
           <div class="card-body p-3">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
               <div class="overflow-hidden flex-grow-1" style="min-width: 0; max-width: 100%;">
@@ -633,6 +669,7 @@ function renderStudentAcademicProfile(res) {
                 <div class="fw-bold text-navy mt-2 fs-6 desc-actividad-box text-break">${descFormatted}</div>
                 <div class="text-muted small mt-2"><i class="fa-solid fa-user-chalkboard me-1"></i> Prof. ${act.profesor}</div>
                 ${barraLapsoHtml}
+                ${alertaDiagnosticoQuizHtml}
                 ${comentarioTopDisplay}
               </div>
               <div class="d-flex align-items-center flex-wrap gap-2">
@@ -680,8 +717,9 @@ function renderStudentAcademicProfile(res) {
         const actDeEval = (n.actividades || []).find(a => String(a.numero_evaluacion || '').toLowerCase() === evalNumStr);
         
         let evalBadgeHtml = '';
+        const isActQuiz = actDeEval && String(actDeEval.tipo_actividad || '').toUpperCase() === 'QUIZ';
         const hasActEntrega = actDeEval && (!!actDeEval.entrega || !!actDeEval.quiz_completado || actDeEval.estado_calificacion === 'A_LA_ESPERA');
-        const isActCalificado = actDeEval && actDeEval.calificado && actDeEval.nota !== null && !isNaN(parseFloat(actDeEval.nota)) && parseFloat(actDeEval.nota) > 0;
+        const isActCalificado = actDeEval && actDeEval.calificado && actDeEval.nota !== null && actDeEval.nota !== "" && !isNaN(parseFloat(actDeEval.nota)) && (isActQuiz ? parseFloat(actDeEval.nota) >= 0 : parseFloat(actDeEval.nota) > 0);
         const valNum = parseFloat(val);
         const hasValScore = !isNaN(valNum) && valNum > 0;
 
@@ -735,6 +773,8 @@ function renderStudentAcademicProfile(res) {
           const isQuiz = String(act.tipo_actividad || 'ENTREGA').toUpperCase() === 'QUIZ';
           const hasEntrega = isQuiz ? !!act.quiz_completado : !!act.entrega;
           const isQuizEnCurso = isQuiz && !!act.quiz_en_curso && !act.quiz_completado;
+          const reintentoAut = isQuiz && !!act.quiz_reintento_autorizado;
+          const numIntento = act.quiz_intento_numero || 1;
           const tiempoMin = parseInt(act.tiempo_minutos, 10) || (act.quiz_config && parseInt(act.quiz_config.tiempo_minutos, 10)) || 30;
           const lapso = calcularLapsoEntregaStudent(act);
           const barraLapsoHtml = renderBarraLapsoStudentHtml(act);
@@ -745,6 +785,8 @@ function renderStudentAcademicProfile(res) {
               estadoBadge = `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Evaluación Presentada (${act.fecha_entrega || ''})</span>`;
             } else if (isQuizEnCurso) {
               estadoBadge = `<span class="badge bg-info text-dark fw-bold"><i class="fa-solid fa-hourglass-half fa-spin me-1"></i> En Curso (Inicio: ${act.hora_inicio || ''})</span>`;
+            } else if (reintentoAut) {
+              estadoBadge = `<span class="badge bg-info text-dark fw-bold"><i class="fa-solid fa-shuffle me-1"></i> Nuevo Intento Habilitado (#${numIntento} — Examen Barajeado)</span>`;
             } else if (lapso.vencida) {
               estadoBadge = `<span class="badge bg-danger"><i class="fa-solid fa-calendar-xmark me-1"></i> Lapso Vencido (Cerrada)</span>`;
             } else {
@@ -762,7 +804,8 @@ function renderStudentAcademicProfile(res) {
 
           let notaDisplay = '';
           const actNotaNum = (act.nota !== undefined && act.nota !== "" && act.nota !== null) ? parseFloat(act.nota) : NaN;
-          if (act.calificado && !isNaN(actNotaNum) && actNotaNum > 0) {
+          const isCalificadoValido = act.calificado && !isNaN(actNotaNum) && (isQuiz ? actNotaNum >= 0 : actNotaNum > 0);
+          if (isCalificadoValido) {
             notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(actNotaNum)}</span>`;
           } else if (hasEntrega) {
             notaDisplay = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>`;
@@ -770,6 +813,7 @@ function renderStudentAcademicProfile(res) {
 
           let tipoTagHtml = '';
           let actionButtonsHtml = '';
+          let alertaDiagnosticoQuizSubHtml = '';
 
           if (isQuiz) {
             const cantP = (act.quiz_config && act.quiz_config.cantidad_mostrar) ? act.quiz_config.cantidad_mostrar : '';
@@ -777,15 +821,45 @@ function renderStudentAcademicProfile(res) {
             tipoTagHtml = `
               <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-2 mb-1"><i class="fa-solid fa-bolt me-1"></i> Evaluación Online (Quiz${cantP ? ': ' + cantP + ' preg.' : ''} | Base ${pMax} pts)</span>
               <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-2 mb-1"><i class="fa-solid fa-stopwatch me-1"></i> Tiempo: ${tiempoMin} min</span>
+              ${numIntento > 1 ? `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle me-2 mb-1"><i class="fa-solid fa-shuffle me-1"></i> Intento #${numIntento}</span>` : ''}
             `;
+
+            const diag = act.quiz_diagnostico || null;
+            const solRep = diag && diag.solicitud_repeticion && diag.solicitud_repeticion.solicitada;
+
+            if (hasEntrega && diag && (diag.alerta_conectividad || diag.en_blanco > 0)) {
+              alertaDiagnosticoQuizSubHtml = `
+                <div class="alert alert-warning border-warning-subtle p-2 mt-2 mb-1 rounded-2 small d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <div>
+                    <i class="fa-solid fa-plug-circle-exclamation text-danger me-1"></i>
+                    <strong>Aviso de Telemetría:</strong> Se registraron <strong>${diag.respondidas}/${diag.total_preguntas}</strong> respuestas (${diag.en_blanco} sin responder). Si tuviste una falla eléctrica o de internet durante el examen, puedes notificar al docente para solicitar un nuevo intento con preguntas barajeadas.
+                  </div>
+                  ${solRep
+                    ? `<span class="badge bg-warning text-dark px-2 py-1"><i class="fa-solid fa-clock me-1"></i> Solicitud enviada al docente</span>`
+                    : `<button type="button" class="btn btn-xs btn-warning text-dark fw-bold py-1 px-2" onclick="solicitarRepetirQuizPrompt(${act.id}, ${student.id})"><i class="fa-solid fa-hand-paper me-1"></i> Solicitar Repetir por Falla</button>`
+                  }
+                </div>
+              `;
+            } else if (reintentoAut) {
+              alertaDiagnosticoQuizSubHtml = `
+                <div class="alert alert-info border-info-subtle p-2 mt-2 mb-1 rounded-2 small">
+                  <i class="fa-solid fa-shuffle me-1"></i>
+                  <strong>Reaplicación Autorizada por el Docente:</strong> Tienes habilitado un nuevo intento (<strong>Intento #${numIntento}</strong>). Al iniciar se sorteará un examen nuevo con preguntas y opciones barajeadas.
+                </div>
+              `;
+            }
 
             if (hasEntrega) {
               const btnResetTest = isTestUser
                 ? `<button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold" onclick="resetTestStudentFromPortal(${act.id})"><i class="fa-solid fa-rotate-left me-1"></i> Reiniciar Intento (Prueba)</button>`
                 : '';
+              const btnSolicitarRep = solRep
+                ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning px-2 py-2"><i class="fa-solid fa-paper-plane me-1"></i> Solicitud de Repetición Enviada</span>`
+                : `<button type="button" class="btn btn-sm btn-outline-danger fw-bold" onclick="solicitarRepetirQuizPrompt(${act.id}, ${student.id})" title="Solicitar al docente repetir la evaluación por falla eléctrica o de conectividad"><i class="fa-solid fa-rotate me-1"></i> Solicitar Repetir Evaluación</button>`;
               actionButtonsHtml = `
                 <span class="text-success small fw-semibold me-2"><i class="fa-solid fa-lock me-1"></i> Intento registrado ${act.hora_inicio ? `(Inicio: ${act.hora_inicio})` : ''}</span>
                 ${btnResetTest}
+                ${btnSolicitarRep}
                 <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="openQuizResultadoEstudiante(${act.id}, ${student.id})">
                   <i class="fa-solid fa-list-check me-1"></i> Ver Resultados y Retroalimentación
                 </button>
@@ -796,7 +870,7 @@ function renderStudentAcademicProfile(res) {
                   <i class="fa-solid fa-hourglass-half fa-spin me-1"></i> Continuar Evaluación en Curso (Duración: ${tiempoMin} min)
                 </button>
               `;
-            } else if (lapso.vencida) {
+            } else if (lapso.vencida && !reintentoAut) {
               actionButtonsHtml = `
                 <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se reciben más evaluaciones.">
                   <i class="fa-solid fa-lock me-1"></i> Recepción Cerrada (Lapso Vencido el ${lapso.fecha_limite})
@@ -805,7 +879,7 @@ function renderStudentAcademicProfile(res) {
             } else {
               actionButtonsHtml = `
                 <button type="button" class="btn btn-sm btn-primary-sgn fw-bold shadow-sm" onclick="confirmarInicioQuizEstudiante(${act.id}, ${student.id}, ${tiempoMin})">
-                  <i class="fa-solid fa-stopwatch me-1"></i> Iniciar Evaluación Online (Duración: ${tiempoMin} min)
+                  <i class="fa-solid ${reintentoAut ? 'fa-shuffle' : 'fa-stopwatch'} me-1"></i> ${reintentoAut ? `Iniciar Nuevo Examen Barajeado (Intento #${numIntento} | ${tiempoMin} min)` : `Iniciar Evaluación Online (Duración: ${tiempoMin} min)`}
                 </button>
               `;
             }
@@ -853,13 +927,14 @@ function renderStudentAcademicProfile(res) {
           }
 
           itemsHtml += `
-            <div class="border rounded-3 p-3 bg-white mb-2 shadow-sm border-start border-4 ${lapso.vencida ? 'border-danger' : 'border-primary'}">
+            <div class="border rounded-3 p-3 bg-white mb-2 shadow-sm border-start border-4 ${lapso.vencida && !reintentoAut ? 'border-danger' : 'border-primary'}">
               <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
                 <div class="overflow-hidden flex-grow-1" style="min-width: 0; max-width: 100%;">
                   <span class="badge bg-navy text-white me-2 mb-1"><i class="fa-solid fa-clipboard-list me-1"></i> ${evalUpper}</span>
                   ${tipoTagHtml}
                   <div class="fw-bold text-navy fs-6 mt-1 desc-actividad-box text-break">${descFormatted}</div>
                   ${barraLapsoHtml}
+                  ${alertaDiagnosticoQuizSubHtml}
                   ${comentarioSubjectDisplay}
                 </div>
                 <div class="d-flex align-items-center flex-wrap gap-2">
@@ -1861,6 +1936,53 @@ function formatQuizEnunciadoHtml(rawText) {
   }).join('');
 }
 
+let _quizAutoSaveTimeout = null;
+
+function getQuizDraftStorageKey(idActividad, idEstudiante) {
+  return `sgn_quiz_draft_${idActividad}_${idEstudiante}`;
+}
+
+function loadQuizDraftAnswers(idActividad, idEstudiante, horaInicioStr, serverPartialArray) {
+  const map = {};
+  if (Array.isArray(serverPartialArray)) {
+    serverPartialArray.forEach(r => {
+      if (r && r.id_pregunta && r.id_opcion_seleccionada) {
+        map[String(r.id_pregunta)] = String(r.id_opcion_seleccionada);
+      }
+    });
+  }
+  try {
+    const raw = localStorage.getItem(getQuizDraftStorageKey(idActividad, idEstudiante));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && (!horaInicioStr || !parsed.horaInicio || parsed.horaInicio === horaInicioStr) && parsed.answers) {
+        Object.keys(parsed.answers).forEach(qid => {
+          if (parsed.answers[qid]) {
+            map[String(qid)] = String(parsed.answers[qid]);
+          }
+        });
+      }
+    }
+  } catch (_) {}
+  return map;
+}
+
+function saveQuizDraftAnswersLocal(idActividad, idEstudiante, horaInicioStr, answersMap) {
+  try {
+    localStorage.setItem(getQuizDraftStorageKey(idActividad, idEstudiante), JSON.stringify({
+      horaInicio: horaInicioStr || "",
+      updatedAt: Date.now(),
+      answers: answersMap || {}
+    }));
+  } catch (_) {}
+}
+
+function clearQuizDraftAnswersLocal(idActividad, idEstudiante) {
+  try {
+    localStorage.removeItem(getQuizDraftStorageKey(idActividad, idEstudiante));
+  } catch (_) {}
+}
+
 function iniciarQuizEstudiante(idActividad, idEstudiante) {
   sgnApiCall("startQuizEstudiante", {
     id_actividades_asignadas: idActividad,
@@ -1897,6 +2019,8 @@ function iniciarQuizEstudiante(idActividad, idEstudiante) {
       ? parseInt(res.segundos_restantes, 10)
       : duracionSeg;
 
+    const savedAnswersMap = loadQuizDraftAnswers(idActividad, idEstudiante, res.hora_inicio || "", res.respuestas_parciales || []);
+
     currentQuizSession = {
       idActividad: idActividad,
       idEstudiante: idEstudiante,
@@ -1907,12 +2031,14 @@ function iniciarQuizEstudiante(idActividad, idEstudiante) {
       duracionSegundos: duracionSeg,
       segundosRestantes: segRestantes,
       horaInicio: res.hora_inicio || "",
+      intentoNumero: res.intento_numero || 1,
+      savedAnswersMap: savedAnswersMap,
       timerIntervalId: null,
       targetEndMs: 0,
       submitting: false
     };
 
-    renderQuizPreguntasModal(res);
+    renderQuizPreguntasModal(res, savedAnswersMap);
     const bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('sgnQuizModal'));
     bsModal.show();
 
@@ -1925,36 +2051,48 @@ function iniciarQuizEstudiante(idActividad, idEstudiante) {
   });
 }
 
-function renderQuizPreguntasModal(res) {
+function renderQuizPreguntasModal(res, savedAnswersMap = {}) {
   const preguntas = res.preguntas || [];
   const evalUpper = String(res.numero_evaluacion || 'E1').toUpperCase();
   const totalP = preguntas.length;
   const pMax = res.puntaje_maximo || 20;
   const tiempoMin = parseInt(res.tiempo_minutos, 10) || 30;
   const valCadaUna = res.valor_por_pregunta || (totalP > 0 ? Math.round((pMax / totalP) * 100) / 100 : 0);
+  const intentoNum = res.intento_numero || 1;
 
-  $('#quizModalTitle').html(`<i class="fa-solid fa-bolt me-2"></i> Evaluación Online (${evalUpper}) - ${escapeQuizHtml(res.descripcion || '')}`);
+  $('#quizModalTitle').html(`<i class="fa-solid fa-bolt me-2"></i> Evaluación Online (${evalUpper}) - ${escapeQuizHtml(res.descripcion || '')} ${intentoNum > 1 ? `<span class="badge bg-info text-dark ms-2">Intento #${intentoNum} (Barajeado)</span>` : ''}`);
   $('#quizModalSubtitle').html(`Total: <strong>${totalP} preguntas sorteadas</strong> | Valor c/u: <strong>${valCadaUna} pts</strong> | Puntaje Máx: <strong>${pMax} pts</strong> | Duración: <strong>${tiempoMin} min</strong>`);
 
+  const restoredCount = Object.keys(savedAnswersMap || {}).length;
+  const bannerRestauradoHtml = restoredCount > 0
+    ? `<div class="alert alert-success border-success-subtle py-2 px-3 mb-3 small shadow-xs">
+         <i class="fa-solid fa-cloud-arrow-down me-1"></i>
+         <strong>Respaldo Anticaídas Activo:</strong> Se restauraron automáticamente <strong>${restoredCount}</strong> respuesta(s) seleccionada(s) previamente antes de la desconexión.
+       </div>`
+    : '';
+
   let html = `
-    <div class="alert alert-primary border-primary-subtle d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4 shadow-sm">
+    <div class="alert alert-primary border-primary-subtle d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 shadow-sm">
       <div>
         <i class="fa-solid fa-shield-halved me-2"></i>
-        <strong>Instrucciones:</strong> Seleccione la respuesta correcta en cada pregunta antes de que finalice la barra de tiempo. Una vez enviada la evaluación, se calificará automáticamente.
+        <strong>Instrucciones:</strong> Seleccione la respuesta correcta en cada pregunta antes de que finalice la barra de tiempo. Sus selecciones se respaldan automáticamente contra caídas eléctricas o de internet.
       </div>
       <span class="badge bg-primary fs-6">${totalP} Preguntas | Base ${pMax} pts</span>
     </div>
+    ${bannerRestauradoHtml}
   `;
 
   preguntas.forEach((q, idx) => {
     const qNum = idx + 1;
     let opcionesHtml = '';
+    const preselectedOptId = savedAnswersMap && savedAnswersMap[String(q.id)] ? String(savedAnswersMap[String(q.id)]) : '';
 
     (q.opciones || []).forEach((opt) => {
       const inputId = `quizOpt_${q.id}_${opt.id}`;
+      const isChecked = preselectedOptId && preselectedOptId === String(opt.id) ? 'checked' : '';
       opcionesHtml += `
         <label class="list-group-item list-group-item-action d-flex align-items-start gap-3 py-3 px-3 rounded-3 mb-2 border quiz-option-label" for="${inputId}" style="cursor: pointer;">
-          <input class="form-check-input mt-1 flex-shrink-0 quiz-radio-input" type="radio" name="quiz_q_${q.id}" id="${inputId}" value="${opt.id}" data-question-id="${q.id}" onchange="onQuizOptionSelect()">
+          <input class="form-check-input mt-1 flex-shrink-0 quiz-radio-input" type="radio" name="quiz_q_${q.id}" id="${inputId}" value="${opt.id}" data-question-id="${q.id}" ${isChecked} onchange="onQuizOptionSelect(true)">
           <span class="text-dark fw-medium text-break">${escapeQuizHtml(opt.texto)}</span>
         </label>
       `;
@@ -1978,40 +2116,83 @@ function renderQuizPreguntasModal(res) {
 
   $('#quizModalBody').html(html);
   $('#btnSubmitQuizEstudiante').show().prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Evaluación');
-  onQuizOptionSelect();
+  onQuizOptionSelect(false);
 }
 
-function onQuizOptionSelect() {
+function onQuizOptionSelect(triggerRemoteSave = false) {
   const total = (currentQuizSession.preguntas || []).length;
   let respondidas = 0;
+  const answersMap = {};
+  const partialList = [];
 
   (currentQuizSession.preguntas || []).forEach(q => {
     const selected = $(`input[name="quiz_q_${q.id}"]:checked`).val();
-    if (selected) respondidas++;
+    if (selected) {
+      respondidas++;
+      answersMap[String(q.id)] = String(selected);
+    }
+    partialList.push({
+      id_pregunta: q.id,
+      id_opcion_seleccionada: selected || ""
+    });
   });
+
+  currentQuizSession.savedAnswersMap = answersMap;
+  if (currentQuizSession.idActividad && currentQuizSession.idEstudiante) {
+    saveQuizDraftAnswersLocal(currentQuizSession.idActividad, currentQuizSession.idEstudiante, currentQuizSession.horaInicio, answersMap);
+  }
 
   $('#quizFooterStatus').html(`
     <span class="fw-bold ${respondidas === total ? 'text-success' : 'text-navy'}">
       <i class="fa-solid ${respondidas === total ? 'fa-circle-check' : 'fa-list-ol'} me-1"></i>
       Respondidas: ${respondidas} de ${total} preguntas
+      <small class="text-muted fw-normal ms-2" id="quizAutoSaveIndicator"><i class="fa-solid fa-cloud-check text-success me-1"></i>Guardado</small>
     </span>
   `);
+
+  if (triggerRemoteSave && currentQuizSession.idActividad && currentQuizSession.idEstudiante && !currentQuizSession.submitting) {
+    $('#quizAutoSaveIndicator').html('<i class="fa-solid fa-rotate fa-spin text-primary me-1"></i>Respaldando...');
+    if (_quizAutoSaveTimeout) clearTimeout(_quizAutoSaveTimeout);
+    _quizAutoSaveTimeout = setTimeout(function () {
+      if (currentQuizSession.submitting || !currentQuizSession.idActividad) return;
+      sgnApiCall("saveQuizProgressEstudiante", {
+        id_actividades_asignadas: currentQuizSession.idActividad,
+        id_estudiante: currentQuizSession.idEstudiante,
+        respuestas_parciales: partialList
+      }, { showLoading: false }).then(function () {
+        $('#quizAutoSaveIndicator').html('<i class="fa-solid fa-cloud-arrow-up text-success me-1"></i>Respaldado en nube');
+      }).catch(function () {
+        $('#quizAutoSaveIndicator').html('<i class="fa-solid fa-hard-drive text-warning me-1"></i>Guardado local');
+      });
+    }, 800);
+  }
 }
 
 function ejecutarEnvioQuizBackend(respuestas, fuePorTiempoAgotado = false) {
   if (currentQuizSession.submitting) return;
   currentQuizSession.submitting = true;
+  if (_quizAutoSaveTimeout) {
+    clearTimeout(_quizAutoSaveTimeout);
+    _quizAutoSaveTimeout = null;
+  }
   stopQuizCountdownTimer();
+
+  const idAct = currentQuizSession.idActividad;
+  const idEst = currentQuizSession.idEstudiante;
 
   $('#btnSubmitQuizEstudiante').prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-2"></i> Calificando Evaluación...');
 
   sgnApiCall("submitQuizEstudiante", {
-    id_actividades_asignadas: currentQuizSession.idActividad,
-    id_estudiante: currentQuizSession.idEstudiante,
-    respuestas: respuestas
+    id_actividades_asignadas: idAct,
+    id_estudiante: idEst,
+    respuestas: respuestas,
+    cierre_motivo: fuePorTiempoAgotado ? "TIEMPO_AGOTADO" : "ENVIO_MANUAL"
   }, { showLoading: true }).then(function (res) {
     currentQuizSession.submitting = false;
     if (res && res.success) {
+      clearQuizDraftAnswersLocal(idAct, idEst);
+      res._idActividad = idAct;
+      res._idEstudiante = idEst;
       if (fuePorTiempoAgotado) {
         sgnShowModal({
           title: "Tiempo de Evaluación Finalizado",
@@ -2037,7 +2218,7 @@ function ejecutarEnvioQuizBackend(respuestas, fuePorTiempoAgotado = false) {
     $('#btnSubmitQuizEstudiante').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Evaluación');
     sgnShowModal({
       title: "Error de Conexión",
-      message: "No se pudo conectar con el servidor. Verifique su conexión e intente de nuevo.",
+      message: "No se pudo conectar con el servidor. Sus respuestas están resguardadas en el dispositivo; verifique su conexión e intente enviar de nuevo.",
       type: "danger"
     });
   });
@@ -2051,9 +2232,11 @@ function enviarQuizEstudianteSubmit(forceAutoSubmit = false) {
 
   const respuestas = [];
   let faltantes = [];
+  const fallbackMap = currentQuizSession.savedAnswersMap || {};
 
   preguntas.forEach((q, idx) => {
-    const selected = $(`input[name="quiz_q_${q.id}"]:checked`).val();
+    const selectedDom = $(`input[name="quiz_q_${q.id}"]:checked`).val();
+    const selected = selectedDom || fallbackMap[String(q.id)] || "";
     if (!selected) {
       faltantes.push(idx + 1);
     }
@@ -2093,6 +2276,8 @@ function openQuizResultadoEstudiante(idActividad, idEstudiante) {
     id_estudiante: idEstudiante
   }, { showLoading: true }).then(function (res) {
     if (res && res.success) {
+      res._idActividad = idActividad;
+      res._idEstudiante = idEstudiante;
       renderQuizResultadosModal(res);
       const bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('sgnQuizModal'));
       bsModal.show();
@@ -2119,6 +2304,9 @@ function renderQuizResultadosModal(res) {
   const horaInicio = res.hora_inicio || '';
   const horaFin = res.hora_fin || '';
   const resumen = res.resumen || [];
+  const diag = res.quiz_diagnostico || null;
+  const idAct = res._idActividad || (currentQuizSession && currentQuizSession.idActividad) || 0;
+  const idEst = res._idEstudiante || (currentQuizSession && currentQuizSession.idEstudiante) || (currentStudentData && currentStudentData.id) || 0;
 
   $('#quizModalTitle').html(`<i class="fa-solid fa-award me-2"></i> Resultados y Retroalimentación de Evaluación`);
   $('#quizModalSubtitle').html(`Calificación obtenida: <strong>${nota} / ${pMax} pts</strong> | Aciertos: <strong>${correctas} de ${totalP}</strong> ${fechaStr ? `| Fecha: ${fechaStr}` : ''}`);
@@ -2149,8 +2337,27 @@ function renderQuizResultadosModal(res) {
     `;
   }
 
+  let alertaFallaModalHtml = '';
+  if (idAct && idEst) {
+    const solEnviada = diag && diag.solicitud_repeticion && diag.solicitud_repeticion.solicitada;
+    const tieneBlanco = diag && (diag.en_blanco > 0 || diag.alerta_conectividad);
+    alertaFallaModalHtml = `
+      <div class="alert ${tieneBlanco ? 'alert-warning border-warning' : 'alert-light border'} d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4 rounded-3 shadow-xs">
+        <div class="small">
+          <i class="fa-solid fa-plug-circle-exclamation ${tieneBlanco ? 'text-danger' : 'text-secondary'} me-1"></i>
+          <strong>¿Tuviste un corte eléctrico o falla de conectividad durante el examen?</strong>
+          ${tieneBlanco ? `<span class="d-block text-muted">El sistema detectó <strong>${diag.en_blanco} pregunta(s) sin responder</strong> (${diag.causa_probable || ''}).</span>` : `<span class="d-block text-muted">Puedes enviar una solicitud justificada al docente para que evalúe habilitar un nuevo intento con preguntas barajeadas.</span>`}
+        </div>
+        ${solEnviada
+          ? `<span class="badge bg-warning text-dark px-3 py-2"><i class="fa-solid fa-paper-plane me-1"></i> Solicitud enviada al docente (${escapeQuizHtml(diag.solicitud_repeticion.motivo || '')})</span>`
+          : `<button type="button" class="btn btn-sm btn-warning text-dark fw-bold shadow-xs" onclick="solicitarRepetirQuizPrompt(${idAct}, ${idEst})"><i class="fa-solid fa-rotate me-1"></i> Solicitar Repetir Evaluación</button>`
+        }
+      </div>
+    `;
+  }
+
   let html = `
-    <div class="card border-2 ${headerBannerClass} shadow-sm mb-4 rounded-3">
+    <div class="card border-2 ${headerBannerClass} shadow-sm mb-3 rounded-3">
       <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
           <h4 class="fw-extrabold mb-1">
@@ -2170,6 +2377,7 @@ function renderQuizResultadosModal(res) {
         </div>
       </div>
     </div>
+    ${alertaFallaModalHtml}
   `;
 
   resumen.forEach((item, idx) => {
@@ -2247,5 +2455,38 @@ function renderQuizResultadosModal(res) {
   $('#btnSubmitQuizEstudiante').hide();
   $('#quizFooterStatus').html(`<span class="text-success fw-bold"><i class="fa-solid fa-circle-check me-1"></i> Evaluación finalizada y registrada en el acta de calificaciones.</span>`);
 }
+
+function solicitarRepetirQuizPrompt(idActividad, idEstudiante) {
+  const motivo = window.prompt(
+    "Indique brevemente el motivo por el cual solicita repetir la evaluación (Ej: Falla eléctrica durante el examen, caída de internet, cierre inesperado del navegador):",
+    "Falla eléctrica / caída de conexión a internet durante la evaluación"
+  );
+  if (motivo === null) return;
+  const motivoLimpio = String(motivo).trim() || "Falla eléctrica o de conectividad reportada por el estudiante";
+
+  sgnApiCall("solicitarRepetirQuizEstudiante", {
+    id_actividades_asignadas: idActividad,
+    id_estudiante: idEstudiante,
+    motivo: motivoLimpio
+  }, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      sgnShowModal({
+        title: "Solicitud Enviada al Docente",
+        message: res.message || "Su solicitud fue registrada y aparecerá destacada en el panel del docente para que autorice un nuevo examen barajeado.",
+        type: "info"
+      });
+      if (currentStudentData && currentStudentData.cedula) {
+        performStudentSearch(currentStudentData.cedula);
+      }
+    } else {
+      sgnShowModal({
+        title: "No se pudo registrar la solicitud",
+        message: (res && res.message) || "Error al enviar la solicitud.",
+        type: "warning"
+      });
+    }
+  });
+}
+
 
 

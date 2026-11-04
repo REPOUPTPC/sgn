@@ -840,3 +840,122 @@ img, video, canvas, svg {
 .toggle-password:focus {
   box-shadow: none;
 }
+
+/* ==================== SUBMODAL 100% RESPONSIVE DE RESUMEN DE RESPUESTAS QUIZ (DOCENTE) ==================== */
+#modalDiagnosticoQuizDocente {
+  z-index: 1065 !important;
+}
+
+.modal-backdrop.submodal-backdrop-stacked {
+  z-index: 1060 !important;
+}
+
+.quiz-submodal-kpi-card {
+  border-radius: 0.75rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  height: 100%;
+}
+
+.quiz-submodal-kpi-card:hover {
+  transform: translateY(-2px);
+}
+
+.quiz-qnav-pill {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.quiz-qnav-pill:hover {
+  transform: scale(1.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.quiz-qnav-pill.qnav-correcta {
+  background-color: #dcfce7;
+  color: #166534;
+  border-color: #22c55e;
+}
+
+.quiz-qnav-pill.qnav-incorrecta {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-color: #ef4444;
+}
+
+.quiz-qnav-pill.qnav-blanco {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.quiz-submodal-sticky-bar {
+  position: sticky;
+  top: -1rem;
+  z-index: 10;
+  background: rgba(248, 250, 252, 0.96);
+  backdrop-filter: blur(6px);
+  margin-left: -0.5rem;
+  margin-right: -0.5rem;
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.quiz-compare-box {
+  border-radius: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  height: 100%;
+}
+
+.quiz-question-card-highlight {
+  animation: highlightPulseQuiz 1.5s ease-out;
+}
+
+@keyframes highlightPulseQuiz {
+  0% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.45); }
+  100% { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+}
+
+@media (max-width: 768px) {
+  #modalDiagnosticoQuizDocente .modal-dialog {
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+  }
+
+  #modalDiagnosticoQuizDocente .modal-content {
+    border-radius: 0 !important;
+    min-height: 100vh;
+    border: none;
+  }
+
+  #modalDiagnosticoQuizDocente .modal-body {
+    max-height: none !important;
+    padding: 0.75rem !important;
+  }
+
+  .quiz-submodal-sticky-bar {
+    top: -0.75rem;
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .quiz-qnav-pill {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    font-size: 0.75rem;
+  }
+}
