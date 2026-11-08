@@ -407,11 +407,19 @@ function renderEstudianteInscripcionesTable() {
       }
     }
 
-    const isFinalizado = (item.estado_curso === "FINALIZADO");
-    let certHTML = isFinalizado ? `
+    const isCursoFinalizado = (String(item.estado_curso || '').toUpperCase() === "FINALIZADO");
+    const isAlumnoVisto = (
+      String(item.estado || '').toUpperCase() === "TRUE" ||
+      String(item.estado_pago || '').toUpperCase() === "TRUE" ||
+      String(item.estado_alumno || '').toUpperCase() === "TRUE"
+    );
+    const isImpartido = isCursoFinalizado || isAlumnoVisto;
+    const cedulaEstudiante = (item.cedula || (sgnExt.currentStudent && sgnExt.currentStudent.cedula) || $('#extCedulaBusqueda').val() || '').trim();
+
+    let certHTML = isImpartido ? `
       <span class="badge bg-success d-block mb-1"><i class="fa-solid fa-graduation-cap me-1"></i> Impartido</span>
-      <a href="https://cyt.uptpc.edu.ve/certificaciones/consulta.html" target="_blank" class="btn btn-sm btn-success text-white fw-bold py-1 px-2">
-        <i class="fa-solid fa-certificate me-1"></i> Descargar Certificado
+      <a href="https://certificados.uptpc.edu.ve/consulta.html?ID=${encodeURIComponent(cedulaEstudiante)}" target="_blank" class="btn btn-sm btn-success text-white fw-bold py-1 px-2 shadow-sm">
+        <i class="fa-solid fa-certificate me-1"></i> VER CERTIFICADO
       </a>
     ` : `
       <span class="badge bg-warning text-dark d-block mb-1"><i class="fa-solid fa-clock me-1"></i> En Desarrollo</span>

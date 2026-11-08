@@ -397,7 +397,10 @@ module.exports = async function handler(req, res) {
             numero_transferencia: p.numero_transferencia,
             fecha_transferencia: p.fecha_transferencia,
             capture: p.capture,
-            estado_pago: p.estado || "VERIFICADO"
+            estado: p.estado || "FALSE",
+            estado_pago: p.estado || "VERIFICADO",
+            estado_alumno: p.estado || "FALSE",
+            cedula: student ? student.cedula : ""
           };
         });
 
@@ -2508,7 +2511,10 @@ module.exports = async function handler(req, res) {
             numero_transferencia: p.numero_transferencia,
             fecha_transferencia: p.fecha_transferencia,
             capture: p.capture,
-            estado_pago: p.estado || "VERIFICADO"
+            estado: p.estado || "FALSE",
+            estado_pago: p.estado || "VERIFICADO",
+            estado_alumno: p.estado || "FALSE",
+            cedula: student ? student.cedula : cleanCed
           };
         });
 

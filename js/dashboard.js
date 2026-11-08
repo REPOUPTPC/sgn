@@ -5081,7 +5081,7 @@ function renderExtensionTable() {
             </div>
             <div class="d-flex align-items-center gap-2">
               ${btnHTML}
-              <a href="https://cyt.uptpc.edu.ve/certificaciones/consulta.html" target="_blank" class="btn btn-outline-success btn-sm fw-bold">
+              <a href="https://certificados.uptpc.edu.ve/consulta.html" target="_blank" class="btn btn-outline-success btn-sm fw-bold">
                 <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Portal de Certificados
               </a>
             </div>
@@ -5136,6 +5136,10 @@ function renderExtensionTable() {
       ? `<button class="btn btn-sm btn-outline-secondary fw-bold" onclick="togglePagoEstado(${p.id}, 'FALSE')" title="Cambiar a Por Ver (FALSE)"><i class="fa-solid fa-rotate-left"></i></button>`
       : `<button class="btn btn-sm btn-outline-success fw-bold" onclick="togglePagoEstado(${p.id}, 'TRUE')" title="Marcar como Visto (TRUE)"><i class="fa-solid fa-check"></i></button>`;
 
+    const btnCertAction = (isVisto && p.cedula && p.cedula !== 'N/A')
+      ? `<a href="https://certificados.uptpc.edu.ve/consulta.html?ID=${encodeURIComponent(p.cedula)}" target="_blank" class="btn btn-sm btn-outline-success fw-bold" title="Ver Certificado Digital"><i class="fa-solid fa-certificate"></i></a>`
+      : '';
+
     const btnEditAction = `<button class="btn btn-sm btn-outline-primary" onclick="openPagoExtensionModal(${p.id})" title="Editar Declaración de Pago"><i class="fa-solid fa-pen"></i></button>`;
     const btnDeleteAction = `<button class="btn btn-sm btn-outline-danger" onclick="deletePagoExtension(${p.id})" title="Eliminar Declaración de Pago"><i class="fa-solid fa-trash"></i></button>`;
 
@@ -5154,6 +5158,7 @@ function renderExtensionTable() {
         <td>
           <div class="d-flex align-items-center gap-1 flex-nowrap">
             ${btnToggleAction}
+            ${btnCertAction}
             ${btnEditAction}
             ${btnDeleteAction}
           </div>
