@@ -419,7 +419,7 @@ module.exports = async function handler(req, res) {
         let activeMensajes = [];
         try {
           await ensureSchemaColumns();
-          activeMensajes = await query("SELECT * FROM mensajes WHERE activo = 1 ORDER BY id DESC");
+          activeMensajes = await query("SELECT * FROM mensajes WHERE (activo = 1 OR activo = '1') ORDER BY id DESC");
         } catch (eMsg) {
           activeMensajes = [];
         }
@@ -2975,9 +2975,10 @@ module.exports = async function handler(req, res) {
       case "toggleMensaje": {
         await ensureSchemaColumns();
         const msgId = params.id;
+        if (!msgId) return res.status(200).json({ success: false, message: "ID de mensaje requerido." });
         const nuevoEstado = (params.activo === 1 || params.activo === "1" || params.activo === true) ? 1 : 0;
         await execute("UPDATE mensajes SET activo = ? WHERE id = ?", [nuevoEstado, msgId]);
-        return res.status(200).json({ success: true, message: "Estado del mensaje actualizado exitosamente." });
+        return res.status(200).json({ success: true, message: `Estado del mensaje #${msgId} actualizado a ${nuevoEstado === 1 ? 'Activo' : 'Pausado'}.` });
       }
 
       case "getMensajes": {

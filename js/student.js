@@ -54,7 +54,7 @@ $(document).ready(function () {
         if (cachedStudent && cachedStudent.student && Array.isArray(cachedStudent.notas)) {
           currentStudentData = cachedStudent.student;
           currentStudentResponse = cachedStudent;
-          renderStudentAcademicProfile(cachedStudent);
+          renderStudentAcademicProfile(cachedStudent, true);
           // Sincronizar en segundo plano sin mostrar overlay de carga
           performStudentSearch(cleaned.full, { showLoading: false });
         } else {
@@ -227,7 +227,7 @@ function performStudentSearch(cedula, options = {}) {
       currentStudentData = res.student;
       currentStudentResponse = res;
       $('#btnLimpiarConsulta').show();
-      renderStudentAcademicProfile(res);
+      renderStudentAcademicProfile(res, false);
 
       // Persistir sesión y caché del estudiante para compartirlo con extension.html
       if (typeof sgnSaveActiveStudentSession === 'function') {
@@ -440,7 +440,7 @@ function renderBarraLapsoStudentHtml(act) {
 /**
  * Renderizar Resumen Académico del Estudiante
  */
-function renderStudentAcademicProfile(res) {
+function renderStudentAcademicProfile(res, isFromCache = false) {
   window.currentStudentPortalData = res;
   const student = res.student;
   const notas = res.notas || [];
@@ -453,7 +453,7 @@ function renderStudentAcademicProfile(res) {
   $('#stProgramaDisplay').text(student.programa);
   
   // Renderizar y mostrar avisos y alertas del docente (Modal Alert y Div Alert)
-  renderStudentAlertMessages(res.mensajes);
+  renderStudentAlertMessages(res.mensajes, isFromCache);
   
   // Badge y Acciones de Rol
   const $rolBadge = $('#stRolBadge');
@@ -2498,13 +2498,18 @@ function solicitarRepetirQuizPrompt(idActividad, idEstudiante) {
  */
 let currentStudentMensajesList = [];
 
-function renderStudentAlertMessages(mensajes) {
+function renderStudentAlertMessages(mensajes, isFromCache = false) {
   const $alertContainer = $('#stAlertMessagesContainer');
   $alertContainer.empty();
   currentStudentMensajesList = Array.isArray(mensajes) ? mensajes : [];
 
   if (currentStudentMensajesList.length === 0) {
-    $alertContainer.hide();
+    $alertContainer.hide().empty();
+    const modalEl = document.getElementById('sgnStudentMessageModal');
+    if (modalEl) {
+      const bsModal = bootstrap.Modal.getInstance(modalEl);
+      if (bsModal) bsModal.hide();
+    }
     return;
   }
 
@@ -2539,7 +2544,9 @@ function renderStudentAlertMessages(mensajes) {
     }
 
     const cursoLabel = m.curso_nombre || (m.id_unidad_curricular == 0 ? 'Todos los Cursos Existentes' : 'Clase Asignada');
-    const safeMsg = $('<div>').text(m.mensaje || '').html();
+    const safeMsg = typeof formatMessageContentWithLinks === 'function'
+      ? formatMessageContentWithLinks(m.mensaje || '')
+      : $('<div>').text(m.mensaje || '').html();
 
     let docenteNombre = (m.nombre_profesor || '').trim();
     if (!docenteNombre || docenteNombre.toUpperCase() === 'SUPER ADMINISTRADOR' || docenteNombre.toUpperCase() === 'DOCENTE') {
@@ -2588,8 +2595,10 @@ function renderStudentAlertMessages(mensajes) {
 
   $alertContainer.html(divAlertsHtml).slideDown(300);
 
-  // 2. DISPARAR MODAL ALERT EMERGENTE
-  showStudentMessagesModal(currentStudentMensajesList);
+  // 2. DISPARAR MODAL ALERT EMERGENTE (Solo para respuestas frescas del servidor)
+  if (!isFromCache) {
+    showStudentMessagesModal(currentStudentMensajesList);
+  }
 }
 
 function showStudentMessagesModal(mensajes) {
@@ -2645,7 +2654,9 @@ function showStudentMessagesModal(mensajes) {
     }
 
     const cursoLabel = m.curso_nombre || (m.id_unidad_curricular == 0 ? 'Todos los Cursos Existentes' : 'Clase Asignada');
-    const safeMsg = $('<div>').text(m.mensaje || '').html();
+    const safeMsg = typeof formatMessageContentWithLinks === 'function'
+      ? formatMessageContentWithLinks(m.mensaje || '')
+      : $('<div>').text(m.mensaje || '').html();
 
     let docenteModal = (m.nombre_profesor || '').trim();
     if (!docenteModal || docenteModal.toUpperCase() === 'SUPER ADMINISTRADOR' || docenteModal.toUpperCase() === 'DOCENTE') {

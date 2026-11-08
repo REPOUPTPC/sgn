@@ -140,3 +140,83 @@ function sgnShowLoading(show) {
     $('#sgnLoadingOverlay').remove();
   }
 }
+
+/**
+ * Muestra una notificación emergente tipo Toast no intrusiva
+ */
+function sgnShowToast(message, type = 'success') {
+  let toastContainer = document.getElementById('sgnToastContainer');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.id = 'sgnToastContainer';
+    toastContainer.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10050;display:flex;flex-direction:column;gap:10px;pointer-events:none;';
+    document.body.appendChild(toastContainer);
+  }
+
+  const bgClass = type === 'danger' ? 'bg-danger text-white' : (type === 'warning' ? 'bg-warning text-dark' : 'bg-success text-white');
+  const icon = type === 'danger' ? 'fa-triangle-exclamation' : (type === 'warning' ? 'fa-circle-exclamation' : 'fa-circle-check');
+  
+  const toastEl = document.createElement('div');
+  toastEl.className = `toast align-items-center ${bgClass} border-0 shadow-lg show`;
+  toastEl.style.cssText = 'pointer-events:auto;min-width:280px;animation:fadeIn 0.25s ease;';
+  toastEl.setAttribute('role', 'alert');
+  toastEl.setAttribute('aria-live', 'assertive');
+  toastEl.setAttribute('aria-atomic', 'true');
+  
+  toastEl.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body fw-bold d-flex align-items-center gap-2 py-2 px-3">
+        <i class="fa-solid ${icon} fs-5"></i>
+        <span>${message}</span>
+      </div>
+      <button type="button" class="btn-close ${type === 'warning' ? '' : 'btn-close-white'} me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+    </div>
+  `;
+  
+  toastContainer.appendChild(toastEl);
+  
+  const btnClose = toastEl.querySelector('.btn-close');
+  if (btnClose) {
+    btnClose.addEventListener('click', () => toastEl.remove());
+  }
+
+  setTimeout(() => {
+    $(toastEl).fadeOut(350, () => toastEl.remove());
+  }, 3500);
+}
+window.sgnShowToast = sgnShowToast;
+
+/**
+ * Formatea el texto de mensajes y avisos:
+ * 1. Escapa entidades HTML para evitar inyecciones XSS.
+ * 2. Convierte automáticamente URLs (HTTP, HTTPS, WhatsApp, etc.) en un botón verde pequeño "ACCEDE AQUI".
+ */
+function formatMessageContentWithLinks(rawText) {
+  if (!rawText) return '';
+  
+  // Escapar HTML básico de forma segura
+  const escaped = String(rawText)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+  // 1. Detectar enlaces con protocolo http:// o https://
+  const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/gi;
+  let formatted = escaped.replace(urlRegex, function(url) {
+    const cleanUrl = url.replace(/&quot;/g, '').replace(/&#039;/g, '');
+    return `<span class="d-inline-block my-1"><a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-success text-white fw-bold py-1 px-3 shadow-sm d-inline-flex align-items-center gap-1" style="font-size: 0.85rem; border-radius: 6px; text-decoration: none;"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i> ACCEDE AQUI</a></span>`;
+  });
+
+  // 2. Detectar enlaces conocidos sin protocolo (chat.whatsapp.com, wa.me, www.)
+  const noProtoRegex = /(^|\s)((?:chat\.whatsapp\.com|wa\.me|www\.)[^\s<]+[^<.,:;"')\]\s])/gi;
+  formatted = formatted.replace(noProtoRegex, function(match, prefix, url) {
+    const cleanUrl = url.replace(/&quot;/g, '').replace(/&#039;/g, '');
+    const href = 'https://' + cleanUrl;
+    return `${prefix}<span class="d-inline-block my-1"><a href="${href}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-success text-white fw-bold py-1 px-3 shadow-sm d-inline-flex align-items-center gap-1" style="font-size: 0.85rem; border-radius: 6px; text-decoration: none;"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i> ACCEDE AQUI</a></span>`;
+  });
+
+  return formatted;
+}
+window.formatMessageContentWithLinks = formatMessageContentWithLinks;

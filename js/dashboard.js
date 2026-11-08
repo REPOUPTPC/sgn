@@ -2410,6 +2410,7 @@ const HASH_TAB_MAP = {
   '#programas': '#tab-programas-btn',
   '#calificaciones': '#tab-notas-btn',
   '#actividades': '#tab-actividades-btn',
+  '#mensajes': '#tab-mensajes-btn',
   '#extension': '#tab-extension-btn',
   '#api': '#tab-api-btn'
 };
@@ -2421,6 +2422,7 @@ const TAB_HASH_MAP = {
   'tab-programas-btn': '#programas',
   'tab-notas-btn': '#calificaciones',
   'tab-actividades-btn': '#actividades',
+  'tab-mensajes-btn': '#mensajes',
   'tab-extension-btn': '#extension',
   'tab-api-btn': '#api'
 };
@@ -2431,6 +2433,9 @@ function setupHashNavigation() {
     const hash = TAB_HASH_MAP[btnId];
     if (btnId === 'tab-api-btn') {
       loadApiKeysTable();
+    }
+    if (btnId === 'tab-mensajes-btn') {
+      renderMensajesTable();
     }
     if (hash && history.pushState) {
       history.pushState(null, null, hash);
@@ -2455,6 +2460,9 @@ function restoreTabFromHash() {
     if ($btn.length > 0 && $btn.is(':visible')) {
       const bsTab = bootstrap.Tab.getOrCreateInstance($btn[0]);
       bsTab.show();
+      if (hash === '#mensajes') {
+        renderMensajesTable();
+      }
     }
   }
 }
@@ -5969,7 +5977,7 @@ function getMensajesFiltrados() {
   }
 
   // Filtro por estado
-  const filtroEstado = $('#filtroMensajesEstado').val() || 'activos';
+  const filtroEstado = $('#filtroMensajesEstado').val() || 'todos';
   if (filtroEstado === 'activos') {
     list = list.filter(m => m.activo === 1 || m.activo === '1' || m.activo === true);
   } else if (filtroEstado === 'inactivos') {
@@ -6233,7 +6241,9 @@ function updateMensajeLivePreview() {
   }
 
   const safeTitulo = $('<div>').text(titulo).html();
-  const safeContenido = $('<div>').text(contenido).html();
+  const safeContenido = typeof formatMessageContentWithLinks === 'function'
+    ? formatMessageContentWithLinks(contenido)
+    : $('<div>').text(contenido).html();
   const nombreDocente = ($('#mensajeNombreProfesor').val() || resolveNombreDocenteDefault(destinoVal)).trim();
 
   const previewHtml = `
@@ -6315,11 +6325,29 @@ function submitGuardarMensaje(e) {
 }
 
 function toggleMensajeEstado(id, nuevoEstado) {
+  // 1. Actualización optimista inmediata en la interfaz para feedback instantáneo (0ms)
+  const targetMsg = (sgnDb.mensajes || []).find(m => String(m.id) === String(id));
+  const prevEstado = targetMsg ? targetMsg.activo : 0;
+  if (targetMsg) targetMsg.activo = nuevoEstado;
+  renderMensajesTable();
+
   sgnApiCall("toggleMensaje", { id: id, activo: nuevoEstado }, { showLoading: true }).then(function (res) {
     if (res && res.success) {
-      sgnShowToast(`Aviso ${nuevoEstado === 1 ? 'activado' : 'pausado'} con éxito`);
+      if (typeof sgnShowToast === 'function') {
+        sgnShowToast(`Aviso #${id} ${nuevoEstado === 1 ? 'activado y visible' : 'pausado (oculto)'} con éxito`);
+      } else {
+        sgnShowModal({ title: "Estado Actualizado", message: res.message || "Aviso actualizado.", type: "success" });
+      }
       loadDashboardData();
+    } else {
+      if (targetMsg) targetMsg.activo = prevEstado;
+      renderMensajesTable();
+      sgnShowModal({ title: "Error", message: res.message || "No se pudo actualizar el estado del aviso.", type: "danger" });
     }
+  }).catch(function (err) {
+    if (targetMsg) targetMsg.activo = prevEstado;
+    renderMensajesTable();
+    sgnShowModal({ title: "Error de Red", message: "Error al comunicarse con el servidor.", type: "danger" });
   });
 }
 
@@ -6380,7 +6408,9 @@ function previewMensajeComoEstudiante(id) {
   }
 
   const safeTitulo = $('<div>').text(m.titulo || '').html();
-  const safeContenido = $('<div>').text(m.mensaje || '').html();
+  const safeContenido = typeof formatMessageContentWithLinks === 'function'
+    ? formatMessageContentWithLinks(m.mensaje || '')
+    : $('<div>').text(m.mensaje || '').html();
 
   let nombreProfPreview = (m.nombre_profesor || '').trim();
   if (!nombreProfPreview || nombreProfPreview.toUpperCase() === "SUPER ADMINISTRADOR" || nombreProfPreview.toUpperCase() === "DOCENTE") {
