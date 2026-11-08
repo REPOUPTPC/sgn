@@ -2541,6 +2541,19 @@ function renderStudentAlertMessages(mensajes) {
     const cursoLabel = m.curso_nombre || (m.id_unidad_curricular == 0 ? 'Todos los Cursos Existentes' : 'Clase Asignada');
     const safeMsg = $('<div>').text(m.mensaje || '').html();
 
+    let docenteNombre = (m.nombre_profesor || '').trim();
+    if (!docenteNombre || docenteNombre.toUpperCase() === 'SUPER ADMINISTRADOR' || docenteNombre.toUpperCase() === 'DOCENTE') {
+      if (window.currentStudentPortalData && window.currentStudentPortalData.notas) {
+        const ucMatch = window.currentStudentPortalData.notas.find(n => String(n.id_unidad_curricular) === String(m.id_unidad_curricular));
+        if (ucMatch && ucMatch.profesor && ucMatch.profesor.toUpperCase() !== 'SUPER ADMINISTRADOR') {
+          docenteNombre = ucMatch.profesor;
+        }
+      }
+      if (!docenteNombre || docenteNombre.toUpperCase() === 'SUPER ADMINISTRADOR') {
+        docenteNombre = 'JOSE HERRERA';
+      }
+    }
+
     divAlertsHtml += `
       <div class="sgn-alert-box ${themeClass} p-3 p-md-4 mb-3 rounded-3 shadow position-relative" style="border-left: 8px solid ${borderAccent};">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
@@ -2559,7 +2572,7 @@ function renderStudentAlertMessages(mensajes) {
         </h4>
 
         <div class="d-flex flex-wrap align-items-center gap-3 text-secondary small mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-          <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${m.nombre_profesor || 'Docente'}</strong></span>
+          <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${docenteNombre}</strong></span>
           <span><i class="fa-solid fa-chalkboard-user text-success me-1"></i> Dirigido a: <strong class="text-dark">${cursoLabel}</strong></span>
           ${m.fecha_creacion ? `<span><i class="fa-regular fa-clock text-muted me-1"></i> Fecha: <strong class="text-dark">${m.fecha_creacion}</strong></span>` : ''}
         </div>
@@ -2634,6 +2647,19 @@ function showStudentMessagesModal(mensajes) {
     const cursoLabel = m.curso_nombre || (m.id_unidad_curricular == 0 ? 'Todos los Cursos Existentes' : 'Clase Asignada');
     const safeMsg = $('<div>').text(m.mensaje || '').html();
 
+    let docenteModal = (m.nombre_profesor || '').trim();
+    if (!docenteModal || docenteModal.toUpperCase() === 'SUPER ADMINISTRADOR' || docenteModal.toUpperCase() === 'DOCENTE') {
+      if (window.currentStudentPortalData && window.currentStudentPortalData.notas) {
+        const ucMatch = window.currentStudentPortalData.notas.find(n => String(n.id_unidad_curricular) === String(m.id_unidad_curricular));
+        if (ucMatch && ucMatch.profesor && ucMatch.profesor.toUpperCase() !== 'SUPER ADMINISTRADOR') {
+          docenteModal = ucMatch.profesor;
+        }
+      }
+      if (!docenteModal || docenteModal.toUpperCase() === 'SUPER ADMINISTRADOR') {
+        docenteModal = 'JOSE HERRERA';
+      }
+    }
+
     modalItemsHtml += `
       <div class="card border-2 ${borderAccent} shadow-sm mb-3 rounded-3 overflow-hidden">
         <div class="card-header bg-white d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
@@ -2645,7 +2671,7 @@ function showStudentMessagesModal(mensajes) {
         <div class="card-body p-3 p-md-4 bg-white">
           <h4 class="fw-extrabold text-navy mb-2">${m.titulo}</h4>
           <div class="text-secondary small mb-3 pb-2 border-bottom">
-            <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${m.nombre_profesor || 'Docente'}</strong></span> &bull; 
+            <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${docenteModal}</strong></span> &bull; 
             <span><i class="fa-regular fa-calendar-check text-muted me-1"></i> Publicado: <strong class="text-dark">${m.fecha_creacion || ''}</strong></span>
           </div>
           <div class="fs-6 text-dark" style="white-space: pre-line; line-height: 1.65;">${safeMsg}</div>

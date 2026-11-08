@@ -6051,6 +6051,11 @@ function renderMensajesTable() {
     const safeTitulo = $('<div>').text(m.titulo || '').html();
     const safeMsgPreview = $('<div>').text(m.mensaje || '').html();
 
+    let nombreProfTable = (m.nombre_profesor || '').trim();
+    if (!nombreProfTable || nombreProfTable.toUpperCase() === "SUPER ADMINISTRADOR" || nombreProfTable.toUpperCase() === "DOCENTE") {
+      nombreProfTable = resolveNombreDocenteDefault(m.id_unidad_curricular);
+    }
+
     $tbody.append(`
       <tr>
         <td class="fw-bold text-muted">${m.id}</td>
@@ -6060,7 +6065,7 @@ function renderMensajesTable() {
           <div class="text-muted small text-truncate" style="max-width: 280px;" title="${safeMsgPreview}">${safeMsgPreview}</div>
         </td>
         <td>${tipoBadge}</td>
-        <td><small class="text-secondary"><i class="fa-solid fa-user-tie text-primary me-1"></i> ${m.nombre_profesor || 'Docente'}</small></td>
+        <td><small class="text-secondary"><i class="fa-solid fa-user-tie text-primary me-1"></i> ${nombreProfTable}</small></td>
         <td><small class="text-muted"><i class="fa-regular fa-clock me-1"></i> ${m.fecha_creacion || 'Reciente'}</small></td>
         <td>${estadoBadge}</td>
         <td class="text-center">
@@ -6084,6 +6089,44 @@ function renderMensajesTable() {
   });
 }
 
+function resolveNombreDocenteDefault(idUnidad) {
+  // 1. Si se eligió una unidad curricular específica, buscar el docente asignado a esa materia
+  if (idUnidad && idUnidad !== 'ALL' && idUnidad !== '0') {
+    const uc = (sgnDb.unidades || []).find(u => String(u.id) === String(idUnidad));
+    if (uc && uc.id_prof) {
+      const p = (sgnDb.profesores || []).find(pr => String(pr.id) === String(uc.id_prof));
+      if (p && p.nombre_profesor && p.nombre_profesor.trim() && p.nombre_profesor.trim().toUpperCase() !== "SUPER ADMINISTRADOR") {
+        return p.nombre_profesor.trim();
+      }
+    }
+  }
+
+  // 2. Si el usuario logueado es un docente normal
+  if (currentUser && currentUser.rol === "DOCENTE" && currentUser.nombre && currentUser.nombre.trim().toUpperCase() !== "SUPER ADMINISTRADOR") {
+    return currentUser.nombre.trim();
+  }
+
+  // 3. Si el usuario logueado es Super Admin, buscar en profesores por su cédula
+  if (currentUser) {
+    const cleanUserCed = (currentUser.cedula || '').replace(/^'/, '').trim();
+    const matchedProf = (sgnDb.profesores || []).find(p => p.cedula === cleanUserCed || p.cedula === 'V-15949430');
+    if (matchedProf && matchedProf.nombre_profesor && matchedProf.nombre_profesor.trim().toUpperCase() !== "SUPER ADMINISTRADOR") {
+      return matchedProf.nombre_profesor.trim();
+    }
+  }
+
+  // 4. Fallback al primer profesor docente registrado o JOSE HERRERA
+  const firstProf = (sgnDb.profesores || []).find(p => p.nombre_profesor && p.nombre_profesor.trim().toUpperCase() !== "SUPER ADMINISTRADOR");
+  return firstProf ? firstProf.nombre_profesor.trim() : "JOSE HERRERA";
+}
+
+function onDestinoMensajeChange() {
+  const destinoVal = $('#mensajeDestino').val();
+  const defaultDoc = resolveNombreDocenteDefault(destinoVal);
+  $('#mensajeNombreProfesor').val(defaultDoc);
+  updateMensajeLivePreview();
+}
+
 function openNuevoMensajeModal() {
   $('#formGestionMensaje')[0].reset();
   $('#mensajeId').val('');
@@ -6100,7 +6143,7 @@ function openNuevoMensajeModal() {
     $('#mensajeDestino').val('ALL');
   }
 
-  updateMensajeLivePreview();
+  onDestinoMensajeChange();
   const modalEl = document.getElementById('modalGestionMensaje');
   if (modalEl) {
     const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -6128,6 +6171,12 @@ function openEditarMensajeModal(id) {
   $('#mensajeTitulo').val(m.titulo || '');
   $('#mensajeContenido').val(m.mensaje || '');
   $('#mensajeActivo').prop('checked', (m.activo === 1 || m.activo === '1' || m.activo === true));
+
+  let nombreDoc = (m.nombre_profesor || '').trim();
+  if (!nombreDoc || nombreDoc.toUpperCase() === "SUPER ADMINISTRADOR") {
+    nombreDoc = resolveNombreDocenteDefault(idDestino);
+  }
+  $('#mensajeNombreProfesor').val(nombreDoc);
 
   updateMensajeLivePreview();
   const modalEl = document.getElementById('modalGestionMensaje');
@@ -6180,7 +6229,7 @@ function updateMensajeLivePreview() {
 
   const safeTitulo = $('<div>').text(titulo).html();
   const safeContenido = $('<div>').text(contenido).html();
-  const nombreDocente = currentUser ? (currentUser.nombre || 'Docente') : 'Docente';
+  const nombreDocente = ($('#mensajeNombreProfesor').val() || resolveNombreDocenteDefault(destinoVal)).trim();
 
   const previewHtml = `
     <div class="sgn-alert-box ${themeClass} p-3 rounded-3 shadow-sm" style="border-left: 8px solid ${borderAccent};">
@@ -6220,6 +6269,11 @@ function submitGuardarMensaje(e) {
     return;
   }
 
+  let nombreProfesor = ($('#mensajeNombreProfesor').val() || '').trim();
+  if (!nombreProfesor || nombreProfesor.toUpperCase() === "SUPER ADMINISTRADOR") {
+    nombreProfesor = resolveNombreDocenteDefault(idUnidad);
+  }
+
   let seccion = "";
   if (idUnidad && idUnidad !== "ALL" && idUnidad !== "0") {
     const uc = (sgnDb.unidades || []).find(u => String(u.id) === String(idUnidad));
@@ -6229,7 +6283,7 @@ function submitGuardarMensaje(e) {
   const payload = {
     id: id || undefined,
     id_profesor: currentUser ? currentUser.id : 0,
-    nombre_profesor: currentUser ? (currentUser.nombre || "Docente") : "Docente",
+    nombre_profesor: nombreProfesor,
     id_unidad_curricular: (idUnidad === "ALL" || !idUnidad) ? 0 : idUnidad,
     seccion: seccion,
     titulo: titulo,
@@ -6237,6 +6291,23 @@ function submitGuardarMensaje(e) {
     tipo: tipo,
     activo: activo
   };
+
+  sgnApiCall("saveMensaje", payload, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      const modalEl = document.getElementById('modalGestionMensaje');
+      if (modalEl) {
+        const bsModal = bootstrap.Modal.getInstance(modalEl);
+        if (bsModal) bsModal.hide();
+      }
+      sgnShowModal({
+        title: "¡Mensaje Publicado con Éxito!",
+        message: res.message || "El mensaje ha sido publicado y estará visible para los estudiantes al ingresar su cédula.",
+        type: "success"
+      });
+      loadDashboardData();
+    }
+  });
+}
 
   sgnApiCall("saveMensaje", payload, { showLoading: true }).then(function (res) {
     if (res && res.success) {
@@ -6323,6 +6394,11 @@ function previewMensajeComoEstudiante(id) {
   const safeTitulo = $('<div>').text(m.titulo || '').html();
   const safeContenido = $('<div>').text(m.mensaje || '').html();
 
+  let nombreProfPreview = (m.nombre_profesor || '').trim();
+  if (!nombreProfPreview || nombreProfPreview.toUpperCase() === "SUPER ADMINISTRADOR" || nombreProfPreview.toUpperCase() === "DOCENTE") {
+    nombreProfPreview = resolveNombreDocenteDefault(m.id_unidad_curricular);
+  }
+
   // 1. Simulación Modal Alert
   const modalPreviewHtml = `
     <div class="card shadow-sm border overflow-hidden rounded-3">
@@ -6338,7 +6414,7 @@ function previewMensajeComoEstudiante(id) {
           <div class="card-body p-4 bg-white">
             <h4 class="fw-extrabold text-navy mb-2">${safeTitulo}</h4>
             <div class="text-secondary small mb-3 pb-2 border-bottom">
-              <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong>${m.nombre_profesor || 'Docente'}</strong></span> &bull; 
+              <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong>${nombreProfPreview}</strong></span> &bull; 
               <span><i class="fa-regular fa-calendar-check text-muted me-1"></i> Publicado: <strong>${m.fecha_creacion || ''}</strong></span>
             </div>
             <div class="fs-6 text-dark" style="white-space: pre-line; line-height: 1.65;">${safeContenido}</div>
@@ -6367,7 +6443,7 @@ function previewMensajeComoEstudiante(id) {
       </div>
       <h4 class="fw-extrabold text-navy mt-2 mb-2">${safeTitulo}</h4>
       <div class="d-flex flex-wrap align-items-center gap-3 text-secondary small mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-        <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${m.nombre_profesor || 'Docente'}</strong></span>
+        <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${nombreProfPreview}</strong></span>
         <span><i class="fa-solid fa-chalkboard-user text-success me-1"></i> Para: <strong class="text-dark">${cursoLabel}</strong></span>
         <span><i class="fa-regular fa-clock text-muted me-1"></i> Fecha: <strong class="text-dark">${m.fecha_creacion || ''}</strong></span>
       </div>

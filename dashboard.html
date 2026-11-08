@@ -1907,7 +1907,7 @@ if (!empty($data['success'])) {
                 <label for="mensajeDestino" class="form-label fw-bold text-navy mb-1 small">
                   <i class="fa-solid fa-chalkboard-user text-primary me-1"></i> Destinatario / Curso *
                 </label>
-                <select id="mensajeDestino" class="form-select border-primary shadow-sm" required onchange="updateMensajeLivePreview()">
+                <select id="mensajeDestino" class="form-select border-primary shadow-sm" required onchange="onDestinoMensajeChange()">
                   <option value="ALL">📢 Todos los Cursos Existentes (Aviso Global para Todos los Estudiantes)</option>
                   <!-- Opciones dinámicas de cursos -->
                 </select>
@@ -1925,6 +1925,18 @@ if (!empty($data['success'])) {
                   <option value="info">📢 Informativo / Comunicado (Azul Eléctrico)</option>
                   <option value="success">✅ Notificación / Positivo (Verde Esmeralda)</option>
                 </select>
+              </div>
+
+              <!-- Nombre del Docente / Emisor -->
+              <div class="col-12">
+                <label for="mensajeNombreProfesor" class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-user-tie text-primary me-1"></i> Nombre del Docente / Emisor que Firma el Aviso *
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-white text-primary border-primary"><i class="fa-solid fa-signature"></i></span>
+                  <input type="text" id="mensajeNombreProfesor" class="form-control border-primary shadow-sm" placeholder="Ej: PROF. JOSE HERRERA" required oninput="updateMensajeLivePreview()">
+                </div>
+                <div class="form-text small">Este es el nombre del Docente que verán los estudiantes en el Modal Alert y en el Div Alert.</div>
               </div>
 
               <!-- Título del Mensaje -->
@@ -2032,9 +2044,9 @@ if (!empty($data['success'])) {
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
   
   <!-- SGN Modulos -->
-  <script src="js/config.js?v=1.7"></script>
-  <script src="js/modals.js?v=1.7"></script>
-  <script src="js/auth.js?v=1.7"></script>
-  <script src="js/dashboard.js?v=1.7"></script>
+  <script src="js/config.js?v=1.8"></script>
+  <script src="js/modals.js?v=1.8"></script>
+  <script src="js/auth.js?v=1.8"></script>
+  <script src="js/dashboard.js?v=1.8"></script>
 </body>
 </html>

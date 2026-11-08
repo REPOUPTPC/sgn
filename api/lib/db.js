@@ -222,6 +222,17 @@ async function ensureSchemaColumns() {
       await execute("CREATE INDEX IF NOT EXISTS idx_mensajes_activo ON mensajes(activo)");
     } catch (eIdx) {}
 
+    // Corregir mensajes existentes que tengan 'Super Administrador' por el nombre del Docente
+    try {
+      await execute(`
+        UPDATE mensajes
+        SET nombre_profesor = 'JOSE HERRERA'
+        WHERE UPPER(TRIM(nombre_profesor)) = 'SUPER ADMINISTRADOR'
+           OR nombre_profesor IS NULL
+           OR TRIM(nombre_profesor) = ''
+      `);
+    } catch (eFixMsg) {}
+
     // Limpiar entregas que quedaron con nota 0 por fallo o apagado de la IA
     try {
       await execute(`

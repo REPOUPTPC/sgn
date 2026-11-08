@@ -49,12 +49,12 @@ async function runMensajesTests() {
   if (!r1.success || !r1.id) throw new Error("Fallo al crear mensaje global");
   const msgGlobalId = r1.id;
 
-  // 2. Crear un mensaje para un CURSO EN PARTICULAR (ej. Unidad 1)
-  console.log("\n2. Probando saveMensaje (Para un curso en particular - Unidad 1)...");
+  // 2. Crear un mensaje con nombre "Super Administrador" para verificar que se resuelva al Docente real
+  console.log("\n2. Probando saveMensaje con nombre 'Super Administrador' (debe auto-corregir al Docente real)...");
   const t2 = createMockReqRes({
     action: "saveMensaje",
-    id_profesor: 1,
-    nombre_profesor: "PROF. JOSE HERRERA",
+    id_profesor: 0,
+    nombre_profesor: "Super Administrador",
     id_unidad_curricular: 1,
     seccion: "170",
     titulo: "¡ALERTA URGENTE: Entrega de Evaluación 1 de Programación!",
@@ -96,8 +96,12 @@ async function runMensajesTests() {
   console.log("   Detalle de primer mensaje recibido por el estudiante:", {
     titulo: r5.mensajes[0].titulo,
     tipo: r5.mensajes[0].tipo,
-    curso_nombre: r5.mensajes[0].curso_nombre
+    curso_nombre: r5.mensajes[0].curso_nombre,
+    nombre_profesor: r5.mensajes[0].nombre_profesor
   });
+  if (r5.mensajes.some(m => m.nombre_profesor === "Super Administrador")) {
+    throw new Error("El mensaje recibido por el estudiante todavía muestra 'Super Administrador'!");
+  }
 
   // 6. Probar toggleMensaje (Pausar el mensaje)
   console.log("\n6. Probando toggleMensaje (Pausar mensaje)...");

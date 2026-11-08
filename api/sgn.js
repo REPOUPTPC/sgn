@@ -429,16 +429,29 @@ module.exports = async function handler(req, res) {
           return studentUcIds.includes(String(m.id_unidad_curricular));
         }).map(m => {
           let cursoDesc = "Todos los Cursos Existentes";
+          let profFinal = (m.nombre_profesor || "").trim();
+
           if (m.id_unidad_curricular && m.id_unidad_curricular != 0) {
             const matchedUc = unidades.find(u => String(u.id) === String(m.id_unidad_curricular));
             if (matchedUc) {
               const cleanSec = String(matchedUc.seccion || "170").replace(/^'/, "");
               cursoDesc = `${matchedUc.unidad_curricular} (Sec. ${cleanSec})`;
+              if (!profFinal || profFinal.toUpperCase() === "SUPER ADMINISTRADOR" || profFinal.toUpperCase() === "DOCENTE") {
+                const p = profesores.find(pr => String(pr.id) === String(matchedUc.id_prof));
+                if (p && p.nombre_profesor) profFinal = p.nombre_profesor.trim();
+              }
             }
           }
+
+          if (!profFinal || profFinal.toUpperCase() === "SUPER ADMINISTRADOR" || profFinal.toUpperCase() === "DOCENTE") {
+            const defaultProf = profesores.find(pr => pr.nombre_profesor && pr.nombre_profesor.toUpperCase() !== "SUPER ADMINISTRADOR");
+            profFinal = defaultProf ? defaultProf.nombre_profesor.trim() : "JOSE HERRERA";
+          }
+
           return {
             ...m,
-            curso_nombre: cursoDesc
+            curso_nombre: cursoDesc,
+            nombre_profesor: profFinal
           };
         });
 
@@ -2898,8 +2911,8 @@ module.exports = async function handler(req, res) {
       // ==================== MENSAJES & AVISOS A LA CLASE ====================
       case "saveMensaje": {
         await ensureSchemaColumns();
-        const idProfesor = params.id_profesor || 0;
-        const nombreProfesor = (params.nombre_profesor || "").trim() || "Docente";
+        let idProfesor = params.id_profesor || 0;
+        let nombreProfesor = (params.nombre_profesor || "").trim();
         const idUnidad = (params.id_unidad_curricular === "ALL" || !params.id_unidad_curricular) ? 0 : parseInt(params.id_unidad_curricular);
         const seccion = (params.seccion || "").toString().trim();
         const titulo = (params.titulo || "").toString().trim();
@@ -2907,6 +2920,23 @@ module.exports = async function handler(req, res) {
         const tipo = (params.tipo || "warning").toString().trim().toLowerCase();
         const activo = (params.activo === 0 || params.activo === "0" || params.activo === false) ? 0 : 1;
         const nowStr = formatServerDateTime(new Date());
+
+        // Si el nombre enviado es "Super Administrador" o está vacío, resolver el nombre real del docente
+        if (!nombreProfesor || nombreProfesor.toUpperCase() === "SUPER ADMINISTRADOR" || nombreProfesor.toUpperCase() === "DOCENTE") {
+          const catalog = await getCatalogData();
+          if (idUnidad > 0) {
+            const uc = (catalog.unidades || []).find(u => String(u.id) === String(idUnidad));
+            if (uc && uc.id_prof) {
+              idProfesor = uc.id_prof;
+              const p = (catalog.profesores || []).find(pr => String(pr.id) === String(uc.id_prof));
+              if (p && p.nombre_profesor) nombreProfesor = p.nombre_profesor.trim();
+            }
+          }
+          if (!nombreProfesor || nombreProfesor.toUpperCase() === "SUPER ADMINISTRADOR") {
+            const defaultDoc = (catalog.profesores || []).find(p => p.nombre_profesor && p.nombre_profesor.toUpperCase() !== "SUPER ADMINISTRADOR");
+            nombreProfesor = defaultDoc ? defaultDoc.nombre_profesor.trim() : "JOSE HERRERA";
+          }
+        }
 
         if (!titulo || !mensaje) {
           return res.status(200).json({ success: false, message: "El título y el mensaje son obligatorios." });
