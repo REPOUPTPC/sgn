@@ -6309,23 +6309,6 @@ function submitGuardarMensaje(e) {
   });
 }
 
-  sgnApiCall("saveMensaje", payload, { showLoading: true }).then(function (res) {
-    if (res && res.success) {
-      const modalEl = document.getElementById('modalGestionMensaje');
-      if (modalEl) {
-        const bsModal = bootstrap.Modal.getInstance(modalEl);
-        if (bsModal) bsModal.hide();
-      }
-      sgnShowModal({
-        title: "¡Mensaje Publicado con Éxito!",
-        message: res.message || "El mensaje ha sido publicado y estará visible para los estudiantes al ingresar su cédula.",
-        type: "success"
-      });
-      loadDashboardData();
-    }
-  });
-}
-
 function toggleMensajeEstado(id, nuevoEstado) {
   sgnApiCall("toggleMensaje", { id: id, activo: nuevoEstado }, { showLoading: true }).then(function (res) {
     if (res && res.success) {
