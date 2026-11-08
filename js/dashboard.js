@@ -15,7 +15,8 @@ let sgnDb = {
   extension: [],
   pagos: [],
   banco: [],
-  pagosExtJoined: []
+  pagosExtJoined: [],
+  mensajes: []
 };
 
 let currentUser = null;
@@ -212,6 +213,7 @@ function setupUserInterface() {
     $('#tab-extension-nav').show();
     $('#tab-api-nav').show();
   }
+  $('#tab-mensajes-nav').show();
 }
 
 /**
@@ -231,6 +233,7 @@ function loadDashboardData(keepSelectedCant = false) {
       sgnDb.extension = res.extension || [];
       sgnDb.pagos = res.pagos || [];
       sgnDb.banco = res.banco || [];
+      sgnDb.mensajes = res.mensajes || [];
 
       buildPagosExtJoined();
       renderAllDashboardTables(keepSelectedCant);
@@ -253,6 +256,7 @@ function renderAllDashboardTables(keepSelectedCant = false) {
   renderProgramasTable();
   renderNotasTable(keepSelectedCant);
   renderActividadesTable();
+  renderMensajesTable();
 }
 
 /**
@@ -370,6 +374,34 @@ function populateDropdownOptions() {
 
   if (valorPrevioFiltroEst && listUnidades.some(u => String(u.id) === String(valorPrevioFiltroEst))) {
     $filtroEstudiantes.val(valorPrevioFiltroEst);
+  }
+
+  // Select para filtro de mensajes y destino en creación de mensajes
+  const $filtroMsgCurso = $('#filtroMensajesCurso');
+  const valorPrevioFiltroMsg = $filtroMsgCurso.val();
+  $filtroMsgCurso.empty();
+  $filtroMsgCurso.append('<option value="">-- Todos los Mensajes --</option>');
+  $filtroMsgCurso.append('<option value="ALL">📢 Avisos Generales (Todos los Cursos)</option>');
+
+  const $selectMsgDestino = $('#mensajeDestino');
+  const valorPrevioDestino = $selectMsgDestino.val();
+  $selectMsgDestino.empty();
+  $selectMsgDestino.append('<option value="ALL">📢 Todos los Cursos Existentes (Aviso Global para Todos los Estudiantes)</option>');
+
+  listUnidades.forEach(u => {
+    const prog = sgnDb.programas.find(p => p.id == u.id_programa_formacion);
+    const progNombre = prog ? prog.programa : "Desc.";
+    const cleanSec = String(u.seccion || "170").replace(/^'/, '');
+    const optLabel = `${u.unidad_curricular || u['unidad curricular']} - Sección ${cleanSec} (${progNombre})`;
+    $filtroMsgCurso.append(`<option value="${u.id}">${optLabel}</option>`);
+    $selectMsgDestino.append(`<option value="${u.id}">${optLabel}</option>`);
+  });
+
+  if (valorPrevioFiltroMsg) {
+    $filtroMsgCurso.val(valorPrevioFiltroMsg);
+  }
+  if (valorPrevioDestino) {
+    $selectMsgDestino.val(valorPrevioDestino);
   }
 
   // Actualizar badge en la navegación
@@ -5908,4 +5940,452 @@ function ejecutarPruebaApi() {
       $code.text(JSON.stringify(err, null, 2));
     });
 }
+
+// ==========================================================================
+// 10. MÓDULO MENSAJES Y AVISOS A LA CLASE (DOCENTE Y ADMIN)
+// ==========================================================================
+
+function getMensajesFiltrados() {
+  let list = sgnDb.mensajes || [];
+
+  // Si no es Super Admin, filtrar para que el docente vea sus propios mensajes y los de sus materias
+  if (!sgnAuth.isSuperAdmin() && currentUser) {
+    const misUnidades = (sgnDb.unidades || []).filter(u => String(u.id_prof) === String(currentUser.id));
+    const misUnidadesIds = misUnidades.map(u => String(u.id));
+    list = list.filter(m => String(m.id_profesor) === String(currentUser.id) || misUnidadesIds.includes(String(m.id_unidad_curricular)));
+  }
+
+  // Filtro por curso / alcance
+  const filtroCurso = $('#filtroMensajesCurso').val();
+  if (filtroCurso === 'ALL') {
+    list = list.filter(m => !m.id_unidad_curricular || m.id_unidad_curricular == 0 || String(m.id_unidad_curricular) === '0' || String(m.id_unidad_curricular) === 'ALL');
+  } else if (filtroCurso) {
+    list = list.filter(m => String(m.id_unidad_curricular) === String(filtroCurso));
+  }
+
+  // Filtro por estado
+  const filtroEstado = $('#filtroMensajesEstado').val() || 'activos';
+  if (filtroEstado === 'activos') {
+    list = list.filter(m => m.activo === 1 || m.activo === '1' || m.activo === true);
+  } else if (filtroEstado === 'inactivos') {
+    list = list.filter(m => m.activo === 0 || m.activo === '0' || m.activo === false);
+  }
+
+  // Búsqueda en tiempo real
+  const search = ($('#searchMensajes').val() || '').trim().toLowerCase();
+  if (search) {
+    list = list.filter(m => {
+      const tit = (m.titulo || '').toLowerCase();
+      const txt = (m.mensaje || '').toLowerCase();
+      const prof = (m.nombre_profesor || '').toLowerCase();
+      return tit.includes(search) || txt.includes(search) || prof.includes(search);
+    });
+  }
+
+  return list;
+}
+
+function renderMensajesTable() {
+  const $tbody = $('#tbodyMensajes');
+  $tbody.empty();
+
+  const totalActivos = (sgnDb.mensajes || []).filter(m => m.activo === 1 || m.activo === '1' || m.activo === true).length;
+  const $badgeNav = $('#badgeNavMensajes');
+  if (totalActivos > 0) {
+    $badgeNav.text(totalActivos).show();
+  } else {
+    $badgeNav.hide();
+  }
+
+  const list = getMensajesFiltrados();
+
+  if (list.length === 0) {
+    $tbody.html(`
+      <tr>
+        <td colspan="8" class="text-center py-5 text-muted">
+          <div class="mb-3"><i class="fa-solid fa-bullhorn fa-3x text-warning opacity-50"></i></div>
+          <h5 class="fw-bold">No hay mensajes o avisos registrados</h5>
+          <p class="mb-3 small">Haga clic en el botón superior para redactar y publicar un nuevo aviso a sus estudiantes.</p>
+          <button type="button" class="btn btn-warning text-dark fw-bold btn-sm shadow-sm" onclick="openNuevoMensajeModal()">
+            <i class="fa-solid fa-plus-circle me-1"></i> Redactar Nuevo Mensaje
+          </button>
+        </td>
+      </tr>
+    `);
+    return;
+  }
+
+  list.forEach(m => {
+    let cursoBadge = '';
+    if (!m.id_unidad_curricular || m.id_unidad_curricular == 0 || String(m.id_unidad_curricular) === '0' || String(m.id_unidad_curricular) === 'ALL') {
+      cursoBadge = `<span class="badge bg-primary px-2 py-1"><i class="fa-solid fa-bullhorn me-1"></i> Todos los Cursos</span>`;
+    } else {
+      const matchedUc = (sgnDb.unidades || []).find(u => String(u.id) === String(m.id_unidad_curricular));
+      if (matchedUc) {
+        const cleanSec = String(matchedUc.seccion || '170').replace(/^'/, '');
+        cursoBadge = `<span class="badge bg-navy px-2 py-1"><i class="fa-solid fa-chalkboard-user me-1"></i> ${matchedUc.unidad_curricular} (Sec. ${cleanSec})</span>`;
+      } else {
+        cursoBadge = `<span class="badge bg-secondary px-2 py-1">Curso #${m.id_unidad_curricular}</span>`;
+      }
+    }
+
+    const tipo = (m.tipo || 'warning').toLowerCase();
+    let tipoBadge = `<span class="badge bg-warning text-dark"><i class="fa-solid fa-triangle-exclamation me-1"></i> Alerta / Atención</span>`;
+    if (tipo === 'danger') {
+      tipoBadge = `<span class="badge bg-danger"><i class="fa-solid fa-fire me-1"></i> Urgente</span>`;
+    } else if (tipo === 'info') {
+      tipoBadge = `<span class="badge bg-primary"><i class="fa-solid fa-circle-info me-1"></i> Informativo</span>`;
+    } else if (tipo === 'success') {
+      tipoBadge = `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Notificación</span>`;
+    }
+
+    const isActivo = (m.activo === 1 || m.activo === '1' || m.activo === true);
+    const estadoBadge = isActivo
+      ? `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Activo (Visible)</span>`
+      : `<span class="badge bg-secondary"><i class="fa-solid fa-circle-pause me-1"></i> Inactivo</span>`;
+
+    const toggleBtnTitle = isActivo ? 'Pausar aviso (dejar de mostrar a estudiantes)' : 'Reactivar aviso para estudiantes';
+    const toggleBtnIcon = isActivo ? 'fa-pause' : 'fa-play';
+    const toggleBtnClass = isActivo ? 'btn-outline-warning text-dark' : 'btn-outline-success';
+
+    const safeTitulo = $('<div>').text(m.titulo || '').html();
+    const safeMsgPreview = $('<div>').text(m.mensaje || '').html();
+
+    $tbody.append(`
+      <tr>
+        <td class="fw-bold text-muted">${m.id}</td>
+        <td>${cursoBadge}</td>
+        <td>
+          <div class="fw-bold text-navy">${safeTitulo}</div>
+          <div class="text-muted small text-truncate" style="max-width: 280px;" title="${safeMsgPreview}">${safeMsgPreview}</div>
+        </td>
+        <td>${tipoBadge}</td>
+        <td><small class="text-secondary"><i class="fa-solid fa-user-tie text-primary me-1"></i> ${m.nombre_profesor || 'Docente'}</small></td>
+        <td><small class="text-muted"><i class="fa-regular fa-clock me-1"></i> ${m.fecha_creacion || 'Reciente'}</small></td>
+        <td>${estadoBadge}</td>
+        <td class="text-center">
+          <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-info" onclick="previewMensajeComoEstudiante(${m.id})" title="Ver previsualización exacta del Modal Alert y Div Alert">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+            <button type="button" class="btn btn-outline-primary" onclick="openEditarMensajeModal(${m.id})" title="Editar título o contenido del aviso">
+              <i class="fa-solid fa-pen-to-square"></i>
+            </button>
+            <button type="button" class="btn ${toggleBtnClass}" onclick="toggleMensajeEstado(${m.id}, ${isActivo ? 0 : 1})" title="${toggleBtnTitle}">
+              <i class="fa-solid ${toggleBtnIcon}"></i>
+            </button>
+            <button type="button" class="btn btn-outline-danger" onclick="deleteMensajePrompt(${m.id})" title="Eliminar definitivamente este aviso">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `);
+  });
+}
+
+function openNuevoMensajeModal() {
+  $('#formGestionMensaje')[0].reset();
+  $('#mensajeId').val('');
+  $('#modalGestionMensajeTitle').html('<i class="fa-solid fa-bullhorn me-2"></i> Nuevo Mensaje / Aviso a la Clase');
+  $('#btnGuardarMensaje').html('<i class="fa-solid fa-paper-plane me-2"></i> Publicar Mensaje a la Clase');
+  $('#mensajeTipo').val('warning');
+  $('#mensajeActivo').prop('checked', true);
+  
+  // Si hay filtro seleccionado en el curso, seleccionarlo por defecto
+  const filtroVal = $('#filtroMensajesCurso').val();
+  if (filtroVal) {
+    $('#mensajeDestino').val(filtroVal);
+  } else {
+    $('#mensajeDestino').val('ALL');
+  }
+
+  updateMensajeLivePreview();
+  const modalEl = document.getElementById('modalGestionMensaje');
+  if (modalEl) {
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    bsModal.show();
+  }
+}
+
+function openEditarMensajeModal(id) {
+  const m = (sgnDb.mensajes || []).find(msg => String(msg.id) === String(id));
+  if (!m) {
+    sgnShowModal({ title: "Mensaje no encontrado", message: "No se localizó el mensaje seleccionado.", type: "warning" });
+    return;
+  }
+
+  $('#mensajeId').val(m.id);
+  $('#modalGestionMensajeTitle').html(`<i class="fa-solid fa-pen-to-square me-2"></i> Editar Mensaje #${m.id}`);
+  $('#btnGuardarMensaje').html('<i class="fa-solid fa-floppy-disk me-2"></i> Guardar Cambios del Mensaje');
+
+  const idDestino = (!m.id_unidad_curricular || m.id_unidad_curricular == 0 || String(m.id_unidad_curricular) === '0' || String(m.id_unidad_curricular) === 'ALL')
+    ? 'ALL'
+    : String(m.id_unidad_curricular);
+
+  $('#mensajeDestino').val(idDestino);
+  $('#mensajeTipo').val(m.tipo || 'warning');
+  $('#mensajeTitulo').val(m.titulo || '');
+  $('#mensajeContenido').val(m.mensaje || '');
+  $('#mensajeActivo').prop('checked', (m.activo === 1 || m.activo === '1' || m.activo === true));
+
+  updateMensajeLivePreview();
+  const modalEl = document.getElementById('modalGestionMensaje');
+  if (modalEl) {
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    bsModal.show();
+  }
+}
+
+function updateMensajeLivePreview() {
+  const tipo = ($('#mensajeTipo').val() || 'warning').toLowerCase();
+  const titulo = ($('#mensajeTitulo').val() || 'Título del Mensaje o Comunicado').trim();
+  const contenido = ($('#mensajeContenido').val() || 'Aquí se mostrará el contenido del mensaje tal como lo leerán los estudiantes en su pantalla...').trim();
+  const destinoVal = $('#mensajeDestino').val();
+
+  let destinoNombre = 'Todos los Cursos Existentes';
+  if (destinoVal && destinoVal !== 'ALL') {
+    const uc = (sgnDb.unidades || []).find(u => String(u.id) === String(destinoVal));
+    if (uc) {
+      const cleanSec = String(uc.seccion || '170').replace(/^'/, '');
+      destinoNombre = `${uc.unidad_curricular} (Sec. ${cleanSec})`;
+    }
+  }
+
+  let themeClass = 'sgn-alert-warning';
+  let badgeText = 'AVISO OFICIAL DEL DOCENTE';
+  let badgeBg = 'bg-warning text-dark';
+  let iconClass = 'fa-triangle-exclamation fa-beat';
+  let borderAccent = '#f59e0b';
+
+  if (tipo === 'danger') {
+    themeClass = 'sgn-alert-danger';
+    badgeText = 'COMUNICADO URGENTE / FECHA LÍMITE';
+    badgeBg = 'bg-danger text-white';
+    iconClass = 'fa-fire fa-beat';
+    borderAccent = '#ef4444';
+  } else if (tipo === 'info') {
+    themeClass = 'sgn-alert-info';
+    badgeText = 'NOTICIA / COMUNICADO OFICIAL';
+    badgeBg = 'bg-primary text-white';
+    iconClass = 'fa-bullhorn fa-beat';
+    borderAccent = '#2563eb';
+  } else if (tipo === 'success') {
+    themeClass = 'sgn-alert-success';
+    badgeText = 'AVISO INFORMATIVO';
+    badgeBg = 'bg-success text-white';
+    iconClass = 'fa-circle-check';
+    borderAccent = '#10b981';
+  }
+
+  const safeTitulo = $('<div>').text(titulo).html();
+  const safeContenido = $('<div>').text(contenido).html();
+  const nombreDocente = currentUser ? (currentUser.nombre || 'Docente') : 'Docente';
+
+  const previewHtml = `
+    <div class="sgn-alert-box ${themeClass} p-3 rounded-3 shadow-sm" style="border-left: 8px solid ${borderAccent};">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="badge ${badgeBg} px-2 py-1 small fw-bold">
+          <i class="fa-solid ${iconClass} me-1"></i> ${badgeText}
+        </span>
+        <span class="badge bg-secondary text-white small">${destinoNombre}</span>
+      </div>
+      <h5 class="fw-bold text-navy mb-1">${safeTitulo}</h5>
+      <div class="text-secondary small mb-2 pb-1 border-bottom border-secondary border-opacity-25">
+        <i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong>${nombreDocente}</strong>
+      </div>
+      <div class="fs-6 text-dark" style="white-space: pre-line; line-height: 1.5;">${safeContenido}</div>
+    </div>
+  `;
+
+  $('#mensajeLivePreview').html(previewHtml);
+}
+
+function submitGuardarMensaje(e) {
+  if (e) e.preventDefault();
+
+  const id = $('#mensajeId').val();
+  const idUnidad = $('#mensajeDestino').val();
+  const tipo = $('#mensajeTipo').val();
+  const titulo = $('#mensajeTitulo').val().trim();
+  const mensaje = $('#mensajeContenido').val().trim();
+  const activo = $('#mensajeActivo').is(':checked') ? 1 : 0;
+
+  if (!titulo || !mensaje) {
+    sgnShowModal({
+      title: "Campos Requeridos",
+      message: "Por favor ingrese el título y el contenido del mensaje antes de publicar.",
+      type: "warning"
+    });
+    return;
+  }
+
+  let seccion = "";
+  if (idUnidad && idUnidad !== "ALL" && idUnidad !== "0") {
+    const uc = (sgnDb.unidades || []).find(u => String(u.id) === String(idUnidad));
+    if (uc) seccion = String(uc.seccion || "").replace(/^'/, '');
+  }
+
+  const payload = {
+    id: id || undefined,
+    id_profesor: currentUser ? currentUser.id : 0,
+    nombre_profesor: currentUser ? (currentUser.nombre || "Docente") : "Docente",
+    id_unidad_curricular: (idUnidad === "ALL" || !idUnidad) ? 0 : idUnidad,
+    seccion: seccion,
+    titulo: titulo,
+    mensaje: mensaje,
+    tipo: tipo,
+    activo: activo
+  };
+
+  sgnApiCall("saveMensaje", payload, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      const modalEl = document.getElementById('modalGestionMensaje');
+      if (modalEl) {
+        const bsModal = bootstrap.Modal.getInstance(modalEl);
+        if (bsModal) bsModal.hide();
+      }
+      sgnShowModal({
+        title: "¡Mensaje Publicado con Éxito!",
+        message: res.message || "El mensaje ha sido publicado y estará visible para los estudiantes al ingresar su cédula.",
+        type: "success"
+      });
+      loadDashboardData();
+    }
+  });
+}
+
+function toggleMensajeEstado(id, nuevoEstado) {
+  sgnApiCall("toggleMensaje", { id: id, activo: nuevoEstado }, { showLoading: true }).then(function (res) {
+    if (res && res.success) {
+      sgnShowToast(`Aviso ${nuevoEstado === 1 ? 'activado' : 'pausado'} con éxito`);
+      loadDashboardData();
+    }
+  });
+}
+
+function deleteMensajePrompt(id) {
+  sgnShowConfirm({
+    title: "Eliminar Mensaje / Aviso",
+    message: "¿Está completamente seguro de eliminar este mensaje? Ya no se mostrará a los estudiantes ni en el modal alert ni en el div alert.",
+    confirmText: "Eliminar Mensaje",
+    onConfirm: function () {
+      sgnApiCall("deleteMensaje", { id: id }, { showLoading: true }).then(function (res) {
+        if (res && res.success) {
+          sgnShowModal({ title: "Mensaje Eliminado", message: res.message || "El mensaje ha sido eliminado.", type: "success" });
+          loadDashboardData();
+        }
+      });
+    }
+  });
+}
+
+function previewMensajeComoEstudiante(id) {
+  const m = (sgnDb.mensajes || []).find(msg => String(msg.id) === String(id));
+  if (!m) return;
+
+  const tipo = (m.tipo || 'warning').toLowerCase();
+  let cursoLabel = 'Todos los Cursos Existentes';
+  if (m.id_unidad_curricular && m.id_unidad_curricular != 0 && String(m.id_unidad_curricular) !== 'ALL') {
+    const uc = (sgnDb.unidades || []).find(u => String(u.id) === String(m.id_unidad_curricular));
+    if (uc) {
+      const cleanSec = String(uc.seccion || '170').replace(/^'/, '');
+      cursoLabel = `${uc.unidad_curricular} (Sec. ${cleanSec})`;
+    }
+  }
+
+  let themeClass = 'sgn-alert-warning';
+  let badgeText = 'AVISO OFICIAL DEL DOCENTE';
+  let badgeBg = 'bg-warning text-dark';
+  let iconClass = 'fa-triangle-exclamation fa-beat';
+  let borderAccent = '#f59e0b';
+
+  if (tipo === 'danger') {
+    themeClass = 'sgn-alert-danger';
+    badgeText = 'COMUNICADO URGENTE / FECHA LÍMITE';
+    badgeBg = 'bg-danger text-white';
+    iconClass = 'fa-fire fa-beat';
+    borderAccent = '#ef4444';
+  } else if (tipo === 'info') {
+    themeClass = 'sgn-alert-info';
+    badgeText = 'NOTICIA / COMUNICADO OFICIAL';
+    badgeBg = 'bg-primary text-white';
+    iconClass = 'fa-bullhorn fa-beat';
+    borderAccent = '#2563eb';
+  } else if (tipo === 'success') {
+    themeClass = 'sgn-alert-success';
+    badgeText = 'AVISO INFORMATIVO';
+    badgeBg = 'bg-success text-white';
+    iconClass = 'fa-circle-check';
+    borderAccent = '#10b981';
+  }
+
+  const safeTitulo = $('<div>').text(m.titulo || '').html();
+  const safeContenido = $('<div>').text(m.mensaje || '').html();
+
+  // 1. Simulación Modal Alert
+  const modalPreviewHtml = `
+    <div class="card shadow-sm border overflow-hidden rounded-3">
+      <div class="modal-header ${badgeBg} py-3 px-4 d-flex justify-content-between align-items-center">
+        <h5 class="modal-title fw-extrabold mb-0 d-flex align-items-center gap-2">
+          <i class="fa-solid ${iconClass} fs-4 me-1"></i>
+          <span>${badgeText}</span>
+        </h5>
+        <span class="badge bg-dark text-white">${cursoLabel}</span>
+      </div>
+      <div class="modal-body p-4 bg-light">
+        <div class="card border shadow-sm">
+          <div class="card-body p-4 bg-white">
+            <h4 class="fw-extrabold text-navy mb-2">${safeTitulo}</h4>
+            <div class="text-secondary small mb-3 pb-2 border-bottom">
+              <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong>${m.nombre_profesor || 'Docente'}</strong></span> &bull; 
+              <span><i class="fa-regular fa-calendar-check text-muted me-1"></i> Publicado: <strong>${m.fecha_creacion || ''}</strong></span>
+            </div>
+            <div class="fs-6 text-dark" style="white-space: pre-line; line-height: 1.65;">${safeContenido}</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-white d-flex justify-content-between align-items-center p-3">
+        <span class="text-muted small">
+          <i class="fa-solid fa-bell text-warning me-1"></i> Este aviso continuará visible en la parte superior de tu pantalla.
+        </span>
+        <button type="button" class="btn btn-warning text-dark fw-bold px-4 py-2 shadow-sm" disabled>
+          <i class="fa-solid fa-circle-check me-2"></i> He leído el aviso (Entendido)
+        </button>
+      </div>
+    </div>
+  `;
+
+  // 2. Simulación Div Alert
+  const divPreviewHtml = `
+    <div class="sgn-alert-box ${themeClass} p-3 p-md-4 rounded-3 shadow" style="border-left: 8px solid ${borderAccent};">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+        <span class="badge ${badgeBg} px-3 py-2 fw-bold text-uppercase fs-6 shadow-sm sgn-pulse-badge">
+          <i class="fa-solid ${iconClass} me-2"></i> ${badgeText}
+        </span>
+        <span class="badge bg-secondary text-white"><i class="fa-solid fa-chalkboard-user me-1"></i> ${cursoLabel}</span>
+      </div>
+      <h4 class="fw-extrabold text-navy mt-2 mb-2">${safeTitulo}</h4>
+      <div class="d-flex flex-wrap align-items-center gap-3 text-secondary small mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+        <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${m.nombre_profesor || 'Docente'}</strong></span>
+        <span><i class="fa-solid fa-chalkboard-user text-success me-1"></i> Para: <strong class="text-dark">${cursoLabel}</strong></span>
+        <span><i class="fa-regular fa-clock text-muted me-1"></i> Fecha: <strong class="text-dark">${m.fecha_creacion || ''}</strong></span>
+      </div>
+      <div class="sgn-alert-message-body fs-6 text-dark" style="white-space: pre-line; line-height: 1.6;">${safeContenido}</div>
+      <div class="mt-3 pt-2 text-end text-muted small border-top border-secondary border-opacity-10 fst-italic">
+        <i class="fa-solid fa-circle-info me-1"></i> Este aviso permanece activo para su consulta académica continua en caso de que cierre la ventana emergente.
+      </div>
+    </div>
+  `;
+
+  $('#previewModalAlertBox').html(modalPreviewHtml);
+  $('#previewDivAlertBox').html(divPreviewHtml);
+
+  const previewModalEl = document.getElementById('modalPreviewMensajeDocente');
+  if (previewModalEl) {
+    const bsModal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
+    bsModal.show();
+  }
+}
+
 

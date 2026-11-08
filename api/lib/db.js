@@ -202,6 +202,26 @@ async function ensureSchemaColumns() {
       )
     `);
 
+    await execute(`
+      CREATE TABLE IF NOT EXISTS mensajes (
+        id INTEGER PRIMARY KEY,
+        id_profesor INTEGER,
+        nombre_profesor TEXT,
+        id_unidad_curricular INTEGER DEFAULT 0,
+        seccion TEXT,
+        titulo TEXT NOT NULL,
+        mensaje TEXT NOT NULL,
+        tipo TEXT DEFAULT 'warning',
+        fecha_creacion TEXT,
+        activo INTEGER DEFAULT 1
+      )
+    `);
+
+    try {
+      await execute("CREATE INDEX IF NOT EXISTS idx_mensajes_unidad ON mensajes(id_unidad_curricular)");
+      await execute("CREATE INDEX IF NOT EXISTS idx_mensajes_activo ON mensajes(activo)");
+    } catch (eIdx) {}
+
     // Limpiar entregas que quedaron con nota 0 por fallo o apagado de la IA
     try {
       await execute(`

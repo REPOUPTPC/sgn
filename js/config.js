@@ -292,8 +292,14 @@ function sgnLimpiarDatosEstudiante() {
 
   if ($('#sgnStudentResultArea').length) {
     $('#sgnStudentResultArea').slideUp(200);
+    $('#stAlertMessagesContainer').hide().empty();
     $('#stActividadesIndependienteContainer').hide();
     $('#stSubjectsContainer').empty();
+  }
+  const studentMsgModalEl = document.getElementById('sgnStudentMessageModal');
+  if (studentMsgModalEl) {
+    const bsMsgModal = bootstrap.Modal.getInstance(studentMsgModalEl);
+    if (bsMsgModal) bsMsgModal.hide();
   }
   if ($('#sgnExtensionResultArea').length) {
     $('#sgnExtensionResultArea').slideUp(200);

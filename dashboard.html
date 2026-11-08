@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   
   <!-- Estilos Personalizados (Blanco + Azul) -->
-  <link rel="stylesheet" href="css/style.css?v=1.3">
+  <link rel="stylesheet" href="css/style.css?v=1.7">
 </head>
 <body>
 
@@ -99,6 +99,12 @@
       <li class="nav-item" role="presentation" id="tab-extension-nav">
         <button class="nav-link sgn-nav-link" id="tab-extension-btn" data-bs-toggle="tab" data-bs-target="#tab-extension" type="button" role="tab">
           <i class="fa-solid fa-graduation-cap me-1"></i> Extensión
+        </button>
+      </li>
+      <li class="nav-item" role="presentation" id="tab-mensajes-nav">
+        <button class="nav-link sgn-nav-link position-relative d-inline-flex align-items-center" id="tab-mensajes-btn" data-bs-toggle="tab" data-bs-target="#tab-mensajes" type="button" role="tab">
+          <i class="fa-solid fa-bullhorn me-1"></i> Mensajes a la Clase
+          <span class="badge rounded-pill bg-warning text-dark ms-2 shadow-sm" id="badgeNavMensajes" style="display: none; font-size: 0.72rem;">0</span>
         </button>
       </li>
       <li class="nav-item" role="presentation" id="tab-api-nav">
@@ -522,6 +528,85 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8.5 PESTAÑA MENSAJES Y AVISOS A LA CLASE (DOCENTE Y ADMIN) -->
+      <div class="tab-pane fade" id="tab-mensajes" role="tabpanel">
+        <div class="card card-custom">
+          <div class="card-body p-4">
+            
+            <!-- Encabezado y Acciones -->
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+              <div>
+                <h4 class="fw-bold text-navy mb-1">
+                  <i class="fa-solid fa-bullhorn text-warning me-2"></i> Mensajes y Avisos a la Clase
+                </h4>
+                <p class="text-muted mb-0">Publique comunicados, recordatorios de evaluaciones y avisos dirigidos a toda una clase en particular o a todos los cursos en general. Los estudiantes los verán como un <strong>Modal de Alerta</strong> emergente y un <strong>Div Alert</strong> destacado al ingresar con su cédula.</p>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button type="button" class="btn btn-warning fw-bold text-dark shadow-sm px-3 py-2" onclick="openNuevoMensajeModal()" title="Redactar y publicar un nuevo mensaje para los estudiantes">
+                  <i class="fa-solid fa-plus-circle me-1"></i> Nuevo Mensaje / Aviso
+                </button>
+                <button type="button" class="btn btn-outline-primary fw-bold btn-sm px-3 py-2" onclick="loadDashboardData()" title="Actualizar lista de mensajes">
+                  <i class="fa-solid fa-rotate me-1"></i> Actualizar
+                </button>
+              </div>
+            </div>
+
+            <!-- Filtros Rápidos -->
+            <div class="row g-3 align-items-center mb-4 bg-light p-3 rounded-3 border">
+              <div class="col-md-5">
+                <label for="filtroMensajesCurso" class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-filter text-primary me-1"></i> Filtrar por Curso / Destinatario:
+                </label>
+                <select id="filtroMensajesCurso" class="form-select border-primary shadow-sm" onchange="renderMensajesTable()">
+                  <option value="">-- Todos los Mensajes --</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="filtroMensajesEstado" class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-toggle-on text-primary me-1"></i> Estado:
+                </label>
+                <select id="filtroMensajesEstado" class="form-select border-primary shadow-sm" onchange="renderMensajesTable()">
+                  <option value="todos">Todos los Estados</option>
+                  <option value="activos" selected>Solo Activos (Visibles)</option>
+                  <option value="inactivos">Solo Inactivos (Pausados)</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="searchMensajes" class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-magnifying-glass text-primary me-1"></i> Buscar Mensaje:
+                </label>
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchMensajes" class="form-control search-box-input" placeholder="Buscar por título, contenido o docente..." oninput="renderMensajesTable()">
+                </div>
+              </div>
+            </div>
+
+            <!-- Tabla de Mensajes -->
+            <div class="table-responsive">
+              <table class="sgn-table" id="tablaMensajes">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Destinatario / Curso</th>
+                    <th>Título del Mensaje</th>
+                    <th>Nivel / Color de Alerta</th>
+                    <th>Docente Emisor</th>
+                    <th>Fecha de Publicación</th>
+                    <th>Estado</th>
+                    <th class="text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyMensajes">
+                  <!-- Renderizado dinámico desde dashboard.js -->
+                </tbody>
+              </table>
+            </div>
+
           </div>
         </div>
       </div>
@@ -1799,6 +1884,140 @@ if (!empty($data['success'])) {
     </div>
   </div>
 
+  <!-- MODAL DE GESTIÓN DE MENSAJES A LA CLASE (CREAR / EDITAR) -->
+  <div class="modal fade" id="modalGestionMensaje" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content shadow-lg border-0">
+        <div class="modal-header bg-warning text-dark py-3 px-4">
+          <h5 class="modal-title fw-bold mb-0" id="modalGestionMensajeTitle">
+            <i class="fa-solid fa-bullhorn me-2"></i> Nuevo Mensaje / Aviso a la Clase
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <form id="formGestionMensaje" onsubmit="submitGuardarMensaje(event)">
+          <input type="hidden" id="mensajeId" value="">
+          <div class="modal-body p-4 bg-light">
+            <div class="alert alert-info py-2 px-3 mb-3 small rounded-3">
+              <i class="fa-solid fa-circle-info me-1"></i> Este mensaje se mostrará automáticamente como un <strong>Modal Alert emergente</strong> y como un <strong>Div Alert destacado</strong> al ingresar el estudiante con su cédula.
+            </div>
+
+            <div class="row g-3">
+              <!-- Destino / Alcance del Mensaje -->
+              <div class="col-md-7">
+                <label for="mensajeDestino" class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-chalkboard-user text-primary me-1"></i> Destinatario / Curso *
+                </label>
+                <select id="mensajeDestino" class="form-select border-primary shadow-sm" required onchange="updateMensajeLivePreview()">
+                  <option value="ALL">📢 Todos los Cursos Existentes (Aviso Global para Todos los Estudiantes)</option>
+                  <!-- Opciones dinámicas de cursos -->
+                </select>
+                <div class="form-text small">Puede seleccionar un curso/sección en particular o enviar a todos los cursos.</div>
+              </div>
+
+              <!-- Tipo / Nivel de Alerta -->
+              <div class="col-md-5">
+                <label for="mensajeTipo" class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-palette text-warning me-1"></i> Color / Nivel de Alerta *
+                </label>
+                <select id="mensajeTipo" class="form-select border-primary shadow-sm" required onchange="updateMensajeLivePreview()">
+                  <option value="warning" selected>⚠️ Alerta / Atención (Ámbar Llamativo)</option>
+                  <option value="danger">🚨 Urgente / Fecha Límite (Rojo Vibrante)</option>
+                  <option value="info">📢 Informativo / Comunicado (Azul Eléctrico)</option>
+                  <option value="success">✅ Notificación / Positivo (Verde Esmeralda)</option>
+                </select>
+              </div>
+
+              <!-- Título del Mensaje -->
+              <div class="col-12">
+                <label for="mensajeTitulo" class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-heading text-primary me-1"></i> Título o Asunto del Mensaje *
+                </label>
+                <input type="text" id="mensajeTitulo" class="form-control form-control-lg border-primary shadow-sm" placeholder="Ej: Recordatorio: Entrega de Proyecto y Evaluación Práctica..." required maxlength="120" oninput="updateMensajeLivePreview()">
+              </div>
+
+              <!-- Contenido del Mensaje -->
+              <div class="col-12">
+                <label for="mensajeContenido" class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-align-left text-primary me-1"></i> Contenido del Mensaje *
+                </label>
+                <textarea id="mensajeContenido" class="form-control border-primary shadow-sm" rows="5" placeholder="Escriba detalladamente las instrucciones, pautas, recordatorios o avisos para los estudiantes..." required oninput="updateMensajeLivePreview()"></textarea>
+                <div class="form-text small">Se respetarán los saltos de línea al presentarse al estudiante.</div>
+              </div>
+
+              <!-- Estado Publicación -->
+              <div class="col-12">
+                <div class="form-check form-switch p-2 bg-white rounded-3 border">
+                  <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="mensajeActivo" checked>
+                  <label class="form-check-label fw-bold text-navy" for="mensajeActivo">
+                    Publicar inmediatamente (Activo y visible para los estudiantes)
+                  </label>
+                </div>
+              </div>
+
+              <!-- Vista Previa en Vivo -->
+              <div class="col-12 mt-3">
+                <label class="form-label fw-bold text-navy mb-1 small">
+                  <i class="fa-solid fa-eye text-primary me-1"></i> Vista Previa en Tiempo Real de la Alerta:
+                </label>
+                <div id="mensajeLivePreview" class="p-3 rounded-3 bg-white border">
+                  <!-- Se actualiza en tiempo real -->
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <div class="modal-footer bg-white d-flex justify-content-between">
+            <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">
+              <i class="fa-solid fa-xmark me-1"></i> Cancelar
+            </button>
+            <button type="submit" class="btn btn-warning text-dark fw-bold px-4 shadow-sm" id="btnGuardarMensaje">
+              <i class="fa-solid fa-paper-plane me-2"></i> Publicar Mensaje a la Clase
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE PREVISUALIZACIÓN DEL ESTUDIANTE (DOCENTE PREVIEW) -->
+  <div class="modal fade" id="modalPreviewMensajeDocente" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content shadow-lg border-0">
+        <div class="modal-header bg-navy text-white modal-header-blue py-3 px-4">
+          <h5 class="modal-title fw-bold mb-0">
+            <i class="fa-solid fa-glasses me-2"></i> Previsualización: Así lo verá el Estudiante
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-4 bg-light">
+          <ul class="nav nav-pills mb-3" id="pillsPreviewTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active btn-sm fw-bold" id="pills-modal-preview-tab" data-bs-toggle="pill" data-bs-target="#pills-modal-preview" type="button" role="tab">
+                <i class="fa-solid fa-window-maximize me-1"></i> 1. Modal Alert Emergente
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link btn-sm fw-bold" id="pills-div-preview-tab" data-bs-toggle="pill" data-bs-target="#pills-div-preview" type="button" role="tab">
+                <i class="fa-solid fa-rectangle-ad me-1"></i> 2. Div Alert Persistente
+              </button>
+            </li>
+          </ul>
+          <div class="tab-content" id="pillsPreviewContent">
+            <div class="tab-pane fade show active" id="pills-modal-preview" role="tabpanel">
+              <div class="border rounded-3 p-3 bg-white shadow-sm" id="previewModalAlertBox"></div>
+            </div>
+            <div class="tab-pane fade" id="pills-div-preview" role="tabpanel">
+              <div id="previewDivAlertBox"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer bg-white">
+          <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Cerrar Previsualización</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <footer class="sgn-footer text-center">
     <div class="container">
@@ -1813,9 +2032,9 @@ if (!empty($data['success'])) {
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
   
   <!-- SGN Modulos -->
-  <script src="js/config.js?v=1.6"></script>
-  <script src="js/modals.js?v=1.6"></script>
-  <script src="js/auth.js?v=1.6"></script>
-  <script src="js/dashboard.js?v=1.6"></script>
+  <script src="js/config.js?v=1.7"></script>
+  <script src="js/modals.js?v=1.7"></script>
+  <script src="js/auth.js?v=1.7"></script>
+  <script src="js/dashboard.js?v=1.7"></script>
 </body>
 </html>

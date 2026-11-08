@@ -452,6 +452,9 @@ function renderStudentAcademicProfile(res) {
   $('#stTelefonoDisplay').text(student.telefono || "No registrado");
   $('#stProgramaDisplay').text(student.programa);
   
+  // Renderizar y mostrar avisos y alertas del docente (Modal Alert y Div Alert)
+  renderStudentAlertMessages(res.mensajes);
+  
   // Badge y Acciones de Rol
   const $rolBadge = $('#stRolBadge');
   const $voceroActions = $('#voceroActionsContainer');
@@ -2487,6 +2490,184 @@ function solicitarRepetirQuizPrompt(idActividad, idEstudiante) {
     }
   });
 }
+
+/**
+ * ==========================================================================
+ * SISTEMA DE MENSAJES Y AVISOS DEL DOCENTE A LA CLASE (MODAL ALERT & DIV ALERT)
+ * ==========================================================================
+ */
+let currentStudentMensajesList = [];
+
+function renderStudentAlertMessages(mensajes) {
+  const $alertContainer = $('#stAlertMessagesContainer');
+  $alertContainer.empty();
+  currentStudentMensajesList = Array.isArray(mensajes) ? mensajes : [];
+
+  if (currentStudentMensajesList.length === 0) {
+    $alertContainer.hide();
+    return;
+  }
+
+  // 1. RENDERIZAR DIV ALERT (Color llamativo, persistente en la parte superior)
+  let divAlertsHtml = '';
+  currentStudentMensajesList.forEach((m, idx) => {
+    const tipo = (m.tipo || 'warning').toLowerCase();
+    let themeClass = 'sgn-alert-warning';
+    let iconClass = 'fa-triangle-exclamation fa-beat';
+    let badgeText = 'AVISO OFICIAL DEL DOCENTE';
+    let badgeBg = 'bg-warning text-dark';
+    let borderAccent = '#f59e0b';
+
+    if (tipo === 'danger') {
+      themeClass = 'sgn-alert-danger';
+      iconClass = 'fa-fire fa-beat';
+      badgeText = 'COMUNICADO URGENTE / FECHA LÍMITE';
+      badgeBg = 'bg-danger text-white';
+      borderAccent = '#ef4444';
+    } else if (tipo === 'info') {
+      themeClass = 'sgn-alert-info';
+      iconClass = 'fa-bullhorn fa-beat';
+      badgeText = 'NOTICIA / COMUNICADO OFICIAL';
+      badgeBg = 'bg-primary text-white';
+      borderAccent = '#2563eb';
+    } else if (tipo === 'success') {
+      themeClass = 'sgn-alert-success';
+      iconClass = 'fa-circle-check';
+      badgeText = 'AVISO INFORMATIVO';
+      badgeBg = 'bg-success text-white';
+      borderAccent = '#10b981';
+    }
+
+    const cursoLabel = m.curso_nombre || (m.id_unidad_curricular == 0 ? 'Todos los Cursos Existentes' : 'Clase Asignada');
+    const safeMsg = $('<div>').text(m.mensaje || '').html();
+
+    divAlertsHtml += `
+      <div class="sgn-alert-box ${themeClass} p-3 p-md-4 mb-3 rounded-3 shadow position-relative" style="border-left: 8px solid ${borderAccent};">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+          <span class="badge ${badgeBg} px-3 py-2 fw-bold text-uppercase fs-6 shadow-sm sgn-pulse-badge">
+            <i class="fa-solid ${iconClass} me-2"></i> ${badgeText}
+          </span>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-dark text-white fw-bold shadow-sm" onclick="openStudentSingleModal(${idx})" title="Abrir este comunicado en ventana emergente (Modal Alert)">
+              <i class="fa-solid fa-up-right-and-down-left-from-center me-1"></i> Pantalla Completa
+            </button>
+          </div>
+        </div>
+
+        <h4 class="fw-extrabold text-navy mt-2 mb-2">
+          ${m.titulo}
+        </h4>
+
+        <div class="d-flex flex-wrap align-items-center gap-3 text-secondary small mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+          <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${m.nombre_profesor || 'Docente'}</strong></span>
+          <span><i class="fa-solid fa-chalkboard-user text-success me-1"></i> Dirigido a: <strong class="text-dark">${cursoLabel}</strong></span>
+          ${m.fecha_creacion ? `<span><i class="fa-regular fa-clock text-muted me-1"></i> Fecha: <strong class="text-dark">${m.fecha_creacion}</strong></span>` : ''}
+        </div>
+
+        <div class="sgn-alert-message-body fs-6 text-dark" style="white-space: pre-line; line-height: 1.6;">${safeMsg}</div>
+        
+        <div class="mt-3 pt-2 text-end text-muted small border-top border-secondary border-opacity-10 fst-italic">
+          <i class="fa-solid fa-circle-info me-1"></i> Este aviso permanece activo para su consulta académica continua en caso de que cierre la ventana emergente.
+        </div>
+      </div>
+    `;
+  });
+
+  $alertContainer.html(divAlertsHtml).slideDown(300);
+
+  // 2. DISPARAR MODAL ALERT EMERGENTE
+  showStudentMessagesModal(currentStudentMensajesList);
+}
+
+function showStudentMessagesModal(mensajes) {
+  if (!mensajes || mensajes.length === 0) return;
+
+  const firstMsg = mensajes[0];
+  const firstTipo = (firstMsg.tipo || 'warning').toLowerCase();
+  
+  let headerClass = 'bg-warning text-dark';
+  let headerIcon = 'fa-triangle-exclamation fa-beat';
+  let headerTitle = 'COMUNICADO OFICIAL DEL DOCENTE';
+
+  if (firstTipo === 'danger') {
+    headerClass = 'bg-danger text-white';
+    headerIcon = 'fa-fire fa-beat';
+    headerTitle = 'COMUNICADO URGENTE / ATENCIÓN INMEDIATA';
+  } else if (firstTipo === 'info') {
+    headerClass = 'bg-primary text-white';
+    headerIcon = 'fa-bullhorn fa-beat';
+    headerTitle = 'NOTICIA / COMUNICADO OFICIAL';
+  } else if (firstTipo === 'success') {
+    headerClass = 'bg-success text-white';
+    headerIcon = 'fa-circle-check';
+    headerTitle = 'AVISO INFORMATIVO DE LA CLASE';
+  }
+
+  $('#sgnStudentMessageModalHeader').removeClass('bg-warning bg-danger bg-primary bg-success text-dark text-white').addClass(headerClass);
+  $('#sgnStudentMessageModalTitle').html(`<i class="fa-solid ${headerIcon} fs-4 me-1"></i> <span>${headerTitle}</span>`);
+
+  let modalItemsHtml = '';
+  mensajes.forEach((m, idx) => {
+    const tipo = (m.tipo || 'warning').toLowerCase();
+    let borderAccent = 'border-warning';
+    let badgeClass = 'bg-warning text-dark';
+    let iconClass = 'fa-triangle-exclamation';
+    let alertBadgeText = 'AVISO DE LA CLASE';
+
+    if (tipo === 'danger') {
+      borderAccent = 'border-danger';
+      badgeClass = 'bg-danger text-white';
+      iconClass = 'fa-fire';
+      alertBadgeText = 'URGENTE';
+    } else if (tipo === 'info') {
+      borderAccent = 'border-primary';
+      badgeClass = 'bg-primary text-white';
+      iconClass = 'fa-bullhorn';
+      alertBadgeText = 'INFORMACIÓN';
+    } else if (tipo === 'success') {
+      borderAccent = 'border-success';
+      badgeClass = 'bg-success text-white';
+      iconClass = 'fa-circle-check';
+      alertBadgeText = 'AVISO';
+    }
+
+    const cursoLabel = m.curso_nombre || (m.id_unidad_curricular == 0 ? 'Todos los Cursos Existentes' : 'Clase Asignada');
+    const safeMsg = $('<div>').text(m.mensaje || '').html();
+
+    modalItemsHtml += `
+      <div class="card border-2 ${borderAccent} shadow-sm mb-3 rounded-3 overflow-hidden">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
+          <span class="badge ${badgeClass} px-3 py-1 fs-6 fw-bold">
+            <i class="fa-solid ${iconClass} me-1"></i> ${alertBadgeText}
+          </span>
+          <span class="badge bg-secondary text-white"><i class="fa-solid fa-chalkboard-user me-1"></i> ${cursoLabel}</span>
+        </div>
+        <div class="card-body p-3 p-md-4 bg-white">
+          <h4 class="fw-extrabold text-navy mb-2">${m.titulo}</h4>
+          <div class="text-secondary small mb-3 pb-2 border-bottom">
+            <span><i class="fa-solid fa-user-tie text-primary me-1"></i> Docente: <strong class="text-dark">${m.nombre_profesor || 'Docente'}</strong></span> &bull; 
+            <span><i class="fa-regular fa-calendar-check text-muted me-1"></i> Publicado: <strong class="text-dark">${m.fecha_creacion || ''}</strong></span>
+          </div>
+          <div class="fs-6 text-dark" style="white-space: pre-line; line-height: 1.65;">${safeMsg}</div>
+        </div>
+      </div>
+    `;
+  });
+
+  $('#studentMessageModalContent').html(modalItemsHtml);
+
+  const modalEl = document.getElementById('sgnStudentMessageModal');
+  if (modalEl) {
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    bsModal.show();
+  }
+}
+
+function openStudentSingleModal(idx) {
+  if (!currentStudentMensajesList || !currentStudentMensajesList[idx]) return;
+  showStudentMessagesModal([currentStudentMensajesList[idx]]);
+}
+
 
 
 

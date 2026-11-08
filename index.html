@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   
   <!-- Estilos Personalizados (Blanco + Azul) -->
-  <link rel="stylesheet" href="css/style.css?v=1.2">
+  <link rel="stylesheet" href="css/style.css?v=1.7">
 </head>
 <body>
 
@@ -93,6 +93,9 @@
     <!-- ==================== ÁREA DE RESULTADOS DEL ESTUDIANTE ==================== -->
     <div id="sgnStudentResultArea" style="display: none;">
       
+      <!-- CONTENEDOR DE AVISOS Y ALERTAS DEL DOCENTE (DIV ALERT LLAMATIVO) -->
+      <div id="stAlertMessagesContainer" class="mb-4" style="display: none;"></div>
+
       <!-- Ficha de Datos del Estudiante -->
       <div class="card card-custom mb-4">
         <div class="card-header-blue d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -456,6 +459,32 @@
     </div>
   </div>
 
+  <!-- ==================== MODAL ALERT DE MENSAJES DEL DOCENTE ==================== -->
+  <div class="modal fade" id="sgnStudentMessageModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content shadow-lg border-0 overflow-hidden" style="border-radius: 1rem;">
+        <div class="modal-header bg-warning text-dark py-3 px-4 d-flex justify-content-between align-items-center" id="sgnStudentMessageModalHeader">
+          <h5 class="modal-title fw-extrabold mb-0 d-flex align-items-center gap-2" id="sgnStudentMessageModalTitle">
+            <i class="fa-solid fa-triangle-exclamation fa-beat fs-4 me-1"></i>
+            <span>COMUNICADO OFICIAL DEL DOCENTE</span>
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-4 bg-light" id="studentMessageModalContent">
+          <!-- Contenido dinámico del mensaje -->
+        </div>
+        <div class="modal-footer bg-white d-flex justify-content-between align-items-center flex-wrap gap-2 p-3">
+          <span class="text-muted small">
+            <i class="fa-solid fa-bell text-warning me-1"></i> Este aviso continuará visible en la parte superior de tu pantalla.
+          </span>
+          <button type="button" class="btn btn-warning text-dark fw-bold px-4 py-2 shadow-sm" data-bs-dismiss="modal">
+            <i class="fa-solid fa-circle-check me-2"></i> He leído el aviso (Entendido)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <footer class="sgn-footer text-center">
     <div class="container">
@@ -470,10 +499,10 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
   
   <!-- SGN Modulos -->
-  <script src="js/config.js?v=1.5"></script>
-  <script src="js/modals.js?v=1.5"></script>
-  <script src="js/auth.js?v=1.5"></script>
-  <script src="js/student.js?v=1.5"></script>
+  <script src="js/config.js?v=1.7"></script>
+  <script src="js/modals.js?v=1.7"></script>
+  <script src="js/auth.js?v=1.7"></script>
+  <script src="js/student.js?v=1.7"></script>
   
   <script>
     // Evento Formulario Login Optimizado (Ultra Rápido con Turso)

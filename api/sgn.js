@@ -413,6 +413,35 @@ module.exports = async function handler(req, res) {
           rol: student.rol || "ESTUDIANTE"
         };
 
+        let activeMensajes = [];
+        try {
+          await ensureSchemaColumns();
+          activeMensajes = await query("SELECT * FROM mensajes WHERE activo = 1 ORDER BY id DESC");
+        } catch (eMsg) {
+          activeMensajes = [];
+        }
+
+        const studentUcIds = studentUnidades.map(u => String(u.id));
+        const filteredMensajes = (activeMensajes || []).filter(m => {
+          if (!m.id_unidad_curricular || m.id_unidad_curricular == 0 || String(m.id_unidad_curricular) === "0" || String(m.id_unidad_curricular) === "ALL") {
+            return true;
+          }
+          return studentUcIds.includes(String(m.id_unidad_curricular));
+        }).map(m => {
+          let cursoDesc = "Todos los Cursos Existentes";
+          if (m.id_unidad_curricular && m.id_unidad_curricular != 0) {
+            const matchedUc = unidades.find(u => String(u.id) === String(m.id_unidad_curricular));
+            if (matchedUc) {
+              const cleanSec = String(matchedUc.seccion || "170").replace(/^'/, "");
+              cursoDesc = `${matchedUc.unidad_curricular} (Sec. ${cleanSec})`;
+            }
+          }
+          return {
+            ...m,
+            curso_nombre: cursoDesc
+          };
+        });
+
         return res.status(200).json({
           success: true,
           registered: true,
@@ -420,6 +449,7 @@ module.exports = async function handler(req, res) {
           student: studentPayload,
           estudiante: studentPayload,
           notas: notasDetalle,
+          mensajes: filteredMensajes,
           extensionList: extensionList,
           extension: extensionList,
           cursos: extensionList,
@@ -674,6 +704,14 @@ module.exports = async function handler(req, res) {
           return res.status(200).json(memoryCache.allData);
         }
 
+        await ensureSchemaColumns();
+        let mensajesList = [];
+        try {
+          mensajesList = await query("SELECT * FROM mensajes ORDER BY id DESC");
+        } catch (eMsg) {
+          mensajesList = [];
+        }
+
         const batchResults = await batch([
           { sql: "SELECT * FROM programa_formacion ORDER BY id ASC", args: [] },
           { sql: "SELECT * FROM estudiantes ORDER BY id ASC", args: [] },
@@ -700,7 +738,8 @@ module.exports = async function handler(req, res) {
           actividadesEntregadas: batchResults[7]?.rows || [],
           extension: batchResults[8]?.rows || [],
           pagos: batchResults[9]?.rows || [],
-          banco: batchResults[10]?.rows || []
+          banco: batchResults[10]?.rows || [],
+          mensajes: mensajesList
         };
 
         memoryCache.allData = payload;
@@ -2854,6 +2893,66 @@ module.exports = async function handler(req, res) {
           estudiantes: dataExport,
           timestamp: new Date().toISOString()
         });
+      }
+
+      // ==================== MENSAJES & AVISOS A LA CLASE ====================
+      case "saveMensaje": {
+        await ensureSchemaColumns();
+        const idProfesor = params.id_profesor || 0;
+        const nombreProfesor = (params.nombre_profesor || "").trim() || "Docente";
+        const idUnidad = (params.id_unidad_curricular === "ALL" || !params.id_unidad_curricular) ? 0 : parseInt(params.id_unidad_curricular);
+        const seccion = (params.seccion || "").toString().trim();
+        const titulo = (params.titulo || "").toString().trim();
+        const mensaje = (params.mensaje || "").toString().trim();
+        const tipo = (params.tipo || "warning").toString().trim().toLowerCase();
+        const activo = (params.activo === 0 || params.activo === "0" || params.activo === false) ? 0 : 1;
+        const nowStr = formatServerDateTime(new Date());
+
+        if (!titulo || !mensaje) {
+          return res.status(200).json({ success: false, message: "El título y el mensaje son obligatorios." });
+        }
+
+        if (params.id) {
+          await execute(
+            "UPDATE mensajes SET id_profesor = ?, nombre_profesor = ?, id_unidad_curricular = ?, seccion = ?, titulo = ?, mensaje = ?, tipo = ?, activo = ? WHERE id = ?",
+            [idProfesor, nombreProfesor, idUnidad, seccion, titulo, mensaje, tipo, activo, params.id]
+          );
+          return res.status(200).json({ success: true, message: "Mensaje actualizado exitosamente." });
+        } else {
+          const newId = await getNextId("mensajes");
+          await execute(
+            "INSERT INTO mensajes (id, id_profesor, nombre_profesor, id_unidad_curricular, seccion, titulo, mensaje, tipo, fecha_creacion, activo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [newId, idProfesor, nombreProfesor, idUnidad, seccion, titulo, mensaje, tipo, nowStr, activo]
+          );
+          return res.status(200).json({ success: true, message: "Mensaje publicado exitosamente a los estudiantes.", id: newId });
+        }
+      }
+
+      case "deleteMensaje": {
+        await ensureSchemaColumns();
+        const msgId = params.id;
+        if (!msgId) return res.status(200).json({ success: false, message: "ID de mensaje requerido." });
+        await execute("DELETE FROM mensajes WHERE id = ?", [msgId]);
+        return res.status(200).json({ success: true, message: "Mensaje eliminado exitosamente." });
+      }
+
+      case "toggleMensaje": {
+        await ensureSchemaColumns();
+        const msgId = params.id;
+        const nuevoEstado = (params.activo === 1 || params.activo === "1" || params.activo === true) ? 1 : 0;
+        await execute("UPDATE mensajes SET activo = ? WHERE id = ?", [nuevoEstado, msgId]);
+        return res.status(200).json({ success: true, message: "Estado del mensaje actualizado exitosamente." });
+      }
+
+      case "getMensajes": {
+        await ensureSchemaColumns();
+        let rows = [];
+        try {
+          rows = await query("SELECT * FROM mensajes ORDER BY id DESC");
+        } catch (e) {
+          rows = [];
+        }
+        return res.status(200).json({ success: true, mensajes: rows });
       }
 
       default:
