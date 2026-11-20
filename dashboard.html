@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   
   <!-- Estilos Personalizados (Blanco + Azul) -->
-  <link rel="stylesheet" href="css/style.css?v=1.7">
+  <link rel="stylesheet" href="css/style.css?v=1.8">
 </head>
 <body>
 
@@ -1371,11 +1371,70 @@ if (!empty($data['success'])) {
               </div>
 
               <div class="col-md-12">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                  <label class="form-label fw-bold mb-0">Descripción / Instrucciones y Rúbrica *</label>
-                  <span class="small text-muted"><i class="fa-solid fa-circle-info me-1"></i> Puedes detallar los criterios y/o pegar el enlace de Drive al PDF de la asignación.</span>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-1">
+                  <label for="actividadDesc" class="form-label fw-bold mb-0">
+                    <i class="fa-solid fa-align-left text-primary me-1"></i> Descripción / Instrucciones y Rúbrica *
+                  </label>
+                  <span class="small text-muted"><i class="fa-solid fa-circle-info me-1"></i> Se preservan saltos de línea, negritas y enlaces automáticos.</span>
                 </div>
-                <textarea id="actividadDesc" class="form-control font-monospace small" rows="5" placeholder="Ej. Pauta de evaluación, desglose porcentual (Dominio 25%, Metodología 25%, etc.) o enlace al PDF de la asignación en Google Drive..." required></textarea>
+
+                <!-- BARRA DE HERRAMIENTAS DE FORMATO (TOOLBAR) -->
+                <div class="card border rounded-3 p-2 sgn-actividad-toolbar mb-2 shadow-xs">
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <!-- Herramientas de Estilo y Listas -->
+                    <div class="d-flex align-items-center flex-wrap gap-1">
+                      <div class="btn-group btn-group-sm" role="group" aria-label="Formato de Texto">
+                        <button type="button" class="btn btn-outline-secondary bg-white text-dark fw-bold px-2" onclick="applyActividadFormat('bold')" title="Negrita: Seleccione texto o inserte **negrita**">
+                          <i class="fa-solid fa-bold"></i> Negrita
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary bg-white text-dark fst-italic px-2" onclick="applyActividadFormat('italic')" title="Cursiva: Seleccione texto o inserte *cursiva*">
+                          <i class="fa-solid fa-italic"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary bg-white text-dark px-2" onclick="applyActividadFormat('underline')" title="Subrayado: Inserte <u>texto</u>">
+                          <i class="fa-solid fa-underline"></i>
+                        </button>
+                      </div>
+
+                      <div class="btn-group btn-group-sm ms-1" role="group" aria-label="Estructura">
+                        <button type="button" class="btn btn-outline-secondary bg-white text-dark px-2" onclick="applyActividadFormat('heading')" title="Encabezado / Título de Sección (**TÍTULO:**)">
+                          <i class="fa-solid fa-heading"></i> Título
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary bg-white text-dark px-2" onclick="applyActividadFormat('bullet')" title="Lista con Viñetas (- item)">
+                          <i class="fa-solid fa-list-ul"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary bg-white text-dark px-2" onclick="applyActividadFormat('number')" title="Lista Numerada (1. item)">
+                          <i class="fa-solid fa-list-ol"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary bg-white text-dark px-2" onclick="applyActividadFormat('link')" title="Insertar Enlace de Google Drive, Canva o Web">
+                          <i class="fa-solid fa-link text-primary"></i> Enlace
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Vista Previa Toggle -->
+                    <div class="d-flex align-items-center gap-1">
+                      <button type="button" class="btn btn-sm btn-outline-primary bg-white fw-semibold px-2" id="btnToggleActividadPreview" onclick="toggleActividadPreview()" title="Ver cómo verá el estudiante la asignación con los estilos aplicados">
+                        <i class="fa-solid fa-eye me-1" id="iconToggleActividadPreview"></i> <span id="labelToggleActividadPreview">Vista Previa</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Textarea con soporte de formateo -->
+                <textarea id="actividadDesc" class="form-control font-monospace small" rows="6" placeholder="Ej. Escriba las instrucciones, criterios de evaluación o pegue el enlace de Google Drive...&#10;&#10;Puede usar los botones superiores para colocar **negritas**, listas o títulos en secciones específicas." required oninput="updateActividadLivePreview()"></textarea>
+
+                <!-- Panel de Vista Previa en Vivo -->
+                <div id="actividadPreviewContainer" class="border border-primary-subtle rounded-3 p-3 bg-light shadow-xs mt-2" style="display: none;">
+                  <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-primary-subtle">
+                    <span class="badge bg-primary text-white fw-bold small">
+                      <i class="fa-solid fa-eye me-1"></i> Vista Previa en Vivo (Estilos que verá el estudiante)
+                    </span>
+                    <span class="text-muted small"><i class="fa-solid fa-wand-magic-sparkles text-primary me-1"></i> Se actualiza en tiempo real</span>
+                  </div>
+                  <div id="actividadLivePreview" class="desc-actividad-box text-break text-dark p-2 bg-white rounded-2 border" style="min-height: 80px; max-height: 250px; overflow-y: auto;">
+                    <em class="text-muted">Escriba instrucciones para previsualizar los estilos aplicados...</em>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2044,9 +2103,9 @@ if (!empty($data['success'])) {
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
   
   <!-- SGN Modulos -->
-  <script src="js/config.js?v=2.1"></script>
+  <script src="js/config.js?v=2.2"></script>
   <script src="js/modals.js?v=2.1"></script>
   <script src="js/auth.js?v=2.1"></script>
-  <script src="js/dashboard.js?v=2.1"></script>
+  <script src="js/dashboard.js?v=2.2"></script>
 </body>
 </html>

@@ -508,12 +508,53 @@ body {
   border-radius: 0.5rem;
 }
 
-/* Contenedor de descripción de actividad seguro contra desbordamiento */
+/* Contenedor de descripción de actividad seguro contra desbordamiento y formateo enriquecido */
 .desc-actividad-box {
   overflow-wrap: anywhere;
   word-break: break-word;
   max-width: 100%;
   box-sizing: border-box;
+  line-height: 1.55;
+  font-weight: 400;
+  color: #1e293b;
+}
+
+.desc-actividad-box strong,
+.desc-actividad-box b {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.desc-actividad-box em,
+.desc-actividad-box i.fst-italic {
+  font-style: italic;
+}
+
+.desc-actividad-box u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.desc-actividad-scroll {
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sgn-actividad-toolbar {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.sgn-actividad-toolbar .btn {
+  font-size: 0.8rem;
+  border-color: #cbd5e1;
+  transition: all 0.15s ease-in-out;
+}
+
+.sgn-actividad-toolbar .btn:hover {
+  background-color: #e2e8f0;
+  border-color: #94a3b8;
 }
 
 .shadow-xs {

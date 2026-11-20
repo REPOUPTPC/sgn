@@ -669,7 +669,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
                 <span class="badge bg-navy text-white me-2 mb-1"><i class="fa-solid fa-bookmark me-1"></i> ${act.unidad_curricular} (${act.seccion})</span>
                 <span class="badge bg-secondary me-2 mb-1">${evalUpper}</span>
                 ${tipoTagHtml}
-                <div class="fw-bold text-navy mt-2 fs-6 desc-actividad-box text-break">${descFormatted}</div>
+                <div class="text-dark mt-2 fs-6 desc-actividad-box text-break" style="line-height: 1.55;">${descFormatted}</div>
                 <div class="text-muted small mt-2"><i class="fa-solid fa-user-chalkboard me-1"></i> Prof. ${act.profesor}</div>
                 ${barraLapsoHtml}
                 ${alertaDiagnosticoQuizHtml}
@@ -935,7 +935,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
                 <div class="overflow-hidden flex-grow-1" style="min-width: 0; max-width: 100%;">
                   <span class="badge bg-navy text-white me-2 mb-1"><i class="fa-solid fa-clipboard-list me-1"></i> ${evalUpper}</span>
                   ${tipoTagHtml}
-                  <div class="fw-bold text-navy fs-6 mt-1 desc-actividad-box text-break">${descFormatted}</div>
+                  <div class="text-dark fs-6 mt-1 desc-actividad-box text-break" style="line-height: 1.55;">${descFormatted}</div>
                   ${barraLapsoHtml}
                   ${alertaDiagnosticoQuizSubHtml}
                   ${comentarioSubjectDisplay}
@@ -1509,7 +1509,7 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
   const evalUpper = (actData.numero_evaluacion || 'e1').toUpperCase();
   $('#entregaModalActividadTitulo').html(`<i class="fa-solid fa-list-check me-2"></i> Evaluación ${evalUpper}`);
   $('#entregaModalActividadDesc').html(`
-    <div class="mb-2">${sgnFormatTextWithLinks(actData.descripcion || '')}</div>
+    <div class="mb-3 desc-actividad-box text-break text-dark" style="line-height: 1.55;">${sgnFormatTextWithLinks(actData.descripcion || '')}</div>
     ${renderBarraLapsoStudentHtml(actData)}
   `);
 

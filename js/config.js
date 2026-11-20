@@ -63,20 +63,30 @@ function getGradeBadgeHTML(score) {
 }
 
 /**
- * Convierte automáticamente URLs dentro de cualquier texto a un bloque visual
- * estilizado y completamente responsivo para dispositivos móviles.
+ * Convierte texto enriquecido preservando formato:
+ * 1. Extrae y convierte URLs (Drive, R2, Canva, YouTube, WhatsApp, Web) en bloques visuales responsivos.
+ * 2. Sanitiza caracteres HTML para prevención estricta de XSS.
+ * 3. Admite y restaura etiquetas seguras (b, strong, i, em, u, br).
+ * 4. Interpreta sintaxis Markdown para negritas (**texto** o __texto__) y cursivas (*texto* o _texto_).
+ * 5. Preserva saltos de línea convirtiendo \r\n y \n en <br>.
  */
 function sgnFormatTextWithLinks(text) {
-  if (!text) return "";
-  const urlRegex = /(https?:\/\/[^\s<]+)/g;
-  
-  return text.replace(urlRegex, function (url) {
-    let cleanUrl = url.replace(/[.,;!?)]$/, '');
+  if (text === null || text === undefined) return "";
+  let raw = String(text);
+  if (!raw.trim()) return "";
+
+  // 1. Extraer URLs (http, https) para protegerlas y construir sus tarjetas responsivas
+  const urlMap = [];
+  const urlRegex = /(https?:\/\/[^\s<]+)/gi;
+
+  raw = raw.replace(urlRegex, function (fullMatch) {
+    let cleanUrl = fullMatch.replace(/[.,;!?)]+$/, '');
+    let trailing = fullMatch.substring(cleanUrl.length);
     let lowerUrl = cleanUrl.toLowerCase();
-    
+
     let serviceLabel = "Enlace Web";
     let iconClass = "fa-solid fa-arrow-up-right-from-square text-primary";
-    
+
     if (lowerUrl.includes("r2.dev")) {
       serviceLabel = "Repositorio Institucional (Cloudflare R2)";
       iconClass = "fa-solid fa-file-shield text-primary";
@@ -89,6 +99,9 @@ function sgnFormatTextWithLinks(text) {
     } else if (lowerUrl.includes("youtube.com") || lowerUrl.includes("youtu.be")) {
       serviceLabel = "Video / YouTube";
       iconClass = "fa-brands fa-youtube text-danger";
+    } else if (lowerUrl.includes("wa.me") || lowerUrl.includes("chat.whatsapp.com")) {
+      serviceLabel = "Grupo / Contacto WhatsApp";
+      iconClass = "fa-brands fa-whatsapp text-success";
     }
 
     let displayUrl = cleanUrl.replace(/^https?:\/\//i, '');
@@ -96,26 +109,53 @@ function sgnFormatTextWithLinks(text) {
       displayUrl = displayUrl.substring(0, 37) + '...';
     }
 
-    return `
-      <div class="sgn-link-block my-2">
-        <div class="sgn-link-card d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1" style="min-width: 0;">
-            <div class="sgn-link-icon-box flex-shrink-0">
-              <i class="${iconClass}"></i>
-            </div>
-            <div class="overflow-hidden" style="min-width: 0;">
-              <span class="d-block fw-bold text-navy small text-truncate">${serviceLabel}</span>
-              <span class="sgn-link-url" title="${cleanUrl}">${displayUrl}</span>
-            </div>
-          </div>
-          <a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary-sgn py-1 px-3 fw-bold text-nowrap flex-shrink-0 d-inline-flex align-items-center gap-1 shadow-sm">
-            <i class="fa-solid fa-arrow-up-right-from-square"></i> <span>Abrir</span>
-          </a>
-        </div>
-      </div>
-    `;
+    // Tarjeta compacta sin saltos de línea internos
+    const cardHtml = `<div class="sgn-link-block my-2"><div class="sgn-link-card d-flex align-items-center justify-content-between flex-wrap gap-2"><div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1" style="min-width: 0;"><div class="sgn-link-icon-box flex-shrink-0"><i class="${iconClass}"></i></div><div class="overflow-hidden" style="min-width: 0;"><span class="d-block fw-bold text-navy small text-truncate">${serviceLabel}</span><span class="sgn-link-url" title="${cleanUrl}">${displayUrl}</span></div></div><a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary-sgn py-1 px-3 fw-bold text-nowrap flex-shrink-0 d-inline-flex align-items-center gap-1 shadow-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> <span>Abrir</span></a></div></div>`;
+
+    const token = `@@@SGN_URL_TOKEN_${urlMap.length}@@@`;
+    urlMap.push({ token, html: cardHtml + trailing });
+    return token;
   });
+
+  // 2. Escapar caracteres HTML para prevención de XSS
+  let formatted = raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+  // 3. Restaurar etiquetas seguras permitidas
+  formatted = formatted
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+    .replace(/&lt;b&gt;(.*?)&lt;\/b&gt;/gi, '<strong>$1</strong>')
+    .replace(/&lt;strong&gt;(.*?)&lt;\/strong&gt;/gi, '<strong>$1</strong>')
+    .replace(/&lt;i&gt;(.*?)&lt;\/i&gt;/gi, '<em>$1</em>')
+    .replace(/&lt;em&gt;(.*?)&lt;\/em&gt;/gi, '<em>$1</em>')
+    .replace(/&lt;u&gt;(.*?)&lt;\/u&gt;/gi, '<u>$1</u>');
+
+  // 4. Interpretar sintaxis Markdown:
+  // Negrita: **texto** o __texto__
+  formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  formatted = formatted.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+  // Cursiva: *texto* o _texto_
+  formatted = formatted.replace(/(^|[^\w*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+  formatted = formatted.replace(/(^|[^\w_])_([^_\n]+?)_(?!_)/g, '$1<em>$2</em>');
+
+  // 5. Preservar saltos de línea (convertir \r\n y \n en <br>)
+  formatted = formatted.replace(/\r\n|\r|\n/g, '<br>');
+  // Normalizar más de 2 saltos de línea seguidos para evitar vacíos excesivos
+  formatted = formatted.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+
+  // 6. Restaurar bloques de URL
+  for (let i = 0; i < urlMap.length; i++) {
+    formatted = formatted.replace(urlMap[i].token, urlMap[i].html);
+  }
+
+  return formatted;
 }
+window.sgnFormatTextWithLinks = sgnFormatTextWithLinks;
 
 /**
  * Sanitizador Global de Cédula de Identidad (Remueve puntos, comas, espacios y caracteres no numéricos)

@@ -1143,7 +1143,7 @@ function renderModalCalificacionesEstudianteContenido() {
                   <span class="badge ${isQuiz ? 'bg-purple-subtle text-primary border border-primary-subtle' : 'bg-light text-dark border'} me-1">
                     <i class="fa-solid ${isQuiz ? 'fa-bolt' : 'fa-file-arrow-up'} me-1"></i> ${isQuiz ? 'Quiz Online' : 'Entrega Digital'}
                   </span>
-                  <strong class="text-navy">${sgnFormatTextWithLinks(act.descripcion)}</strong>
+                  <div class="text-navy desc-actividad-box text-break mt-1" style="line-height: 1.5;">${sgnFormatTextWithLinks(act.descripcion)}</div>
                   <div class="text-muted small mt-1">
                     <i class="fa-regular fa-calendar-check me-1 text-primary"></i> Asignado: ${act.fecha_asignacion || 'N/A'} | Vencimiento: ${act.fecha_limite || 'N/A'}
                   </div>
@@ -2713,7 +2713,10 @@ function renderActividadesTable() {
       `;
     }
 
-    const descContentHtml = tipoBadgeHtml + sgnFormatTextWithLinks(a.descripcion);
+    const descContentHtml = `
+      <div class="mb-1">${tipoBadgeHtml}</div>
+      <div class="desc-actividad-content" style="line-height: 1.5; font-size: 0.88rem;">${sgnFormatTextWithLinks(a.descripcion)}</div>
+    `;
 
     // Badge para la columna Unidad Curricular
     let badgeUcHtml = '';
@@ -2763,7 +2766,7 @@ function renderActividadesTable() {
         <td><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
         <td><span class="badge bg-info text-dark fw-bold">${numEvalUpper}</span></td>
         <td style="min-width: 215px;">${lapsoBarHtml}</td>
-        <td style="max-width: 340px; min-width: 180px;" class="text-break desc-actividad-box">${descContentHtml}</td>
+        <td style="max-width: 360px; min-width: 200px;" class="text-break desc-actividad-box desc-actividad-scroll align-top">${descContentHtml}</td>
         <td>${estadoEntregasHtml}</td>
         <td>
           <div class="btn-group btn-group-sm">
@@ -3333,6 +3336,11 @@ function openModalActividad() {
   }
 
   updateActividadEvalOptions();
+
+  $('#actividadPreviewContainer').hide();
+  $('#labelToggleActividadPreview').text('Vista Previa');
+  $('#iconToggleActividadPreview').removeClass('fa-eye-slash').addClass('fa-eye');
+  updateActividadLivePreview();
   
   const bsModal = new bootstrap.Modal(document.getElementById('modalActividad'));
   bsModal.show();
@@ -3388,58 +3396,199 @@ function editActividad(id) {
     $('#quizConfigSection').hide();
   }
 
+  $('#actividadPreviewContainer').hide();
+  $('#labelToggleActividadPreview').text('Vista Previa');
+  $('#iconToggleActividadPreview').removeClass('fa-eye-slash').addClass('fa-eye');
+  updateActividadLivePreview();
+
   $('#modalActividadTitle').text('Editar Actividad Asignada');
   const bsModal = new bootstrap.Modal(document.getElementById('modalActividad'));
   bsModal.show();
 }
 
+/**
+ * Aplica herramientas de formato al campo de descripción/instrucciones de actividad.
+ */
+function applyActividadFormat(type) {
+  const textarea = document.getElementById('actividadDesc');
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const fullText = textarea.value;
+  const selectedText = fullText.substring(start, end);
+
+  let replacement = '';
+  let cursorOffset = 0;
+
+  switch (type) {
+    case 'bold':
+      if (selectedText) {
+        replacement = `**${selectedText}**`;
+        cursorOffset = replacement.length;
+      } else {
+        replacement = `**Texto en negrita**`;
+        cursorOffset = replacement.length - 2;
+      }
+      break;
+
+    case 'italic':
+      if (selectedText) {
+        replacement = `*${selectedText}*`;
+        cursorOffset = replacement.length;
+      } else {
+        replacement = `*Texto en cursiva*`;
+        cursorOffset = replacement.length - 1;
+      }
+      break;
+
+    case 'underline':
+      if (selectedText) {
+        replacement = `<u>${selectedText}</u>`;
+        cursorOffset = replacement.length;
+      } else {
+        replacement = `<u>Texto subrayado</u>`;
+        cursorOffset = replacement.length - 4;
+      }
+      break;
+
+    case 'heading':
+      if (selectedText) {
+        replacement = `\n**${selectedText.toUpperCase()}:**\n`;
+        cursorOffset = replacement.length;
+      } else {
+        replacement = `\n**TÍTULO / SECCIÓN:**\n`;
+        cursorOffset = replacement.length;
+      }
+      break;
+
+    case 'bullet':
+      if (selectedText) {
+        const lines = selectedText.split('\n');
+        replacement = lines.map(l => l.trim().startsWith('- ') ? l : `- ${l}`).join('\n');
+        cursorOffset = replacement.length;
+      } else {
+        replacement = `\n- Criterio o punto 1\n- Criterio o punto 2\n`;
+        cursorOffset = replacement.length;
+      }
+      break;
+
+    case 'number':
+      if (selectedText) {
+        const lines = selectedText.split('\n');
+        replacement = lines.map((l, i) => `${i + 1}. ${l.replace(/^\d+[\.\)]\s*/, '')}`).join('\n');
+        cursorOffset = replacement.length;
+      } else {
+        replacement = `\n1. Primer criterio o paso\n2. Segundo criterio o paso\n`;
+        cursorOffset = replacement.length;
+      }
+      break;
+
+    case 'link': {
+      let defaultUrl = 'https://drive.google.com/file/d/.../view';
+      if (selectedText && selectedText.startsWith('http')) {
+        defaultUrl = selectedText;
+      }
+      const url = prompt('Ingrese el enlace web o de Google Drive para la asignación:', defaultUrl);
+      if (!url) return;
+      replacement = selectedText && !selectedText.startsWith('http')
+        ? `${selectedText}\n${url.trim()}`
+        : url.trim();
+      cursorOffset = replacement.length;
+      break;
+    }
+
+    default:
+      return;
+  }
+
+  textarea.focus();
+  if (typeof textarea.setRangeText === 'function') {
+    textarea.setRangeText(replacement, start, end, 'end');
+  } else {
+    textarea.value = fullText.substring(0, start) + replacement + fullText.substring(end);
+    textarea.selectionStart = start + cursorOffset;
+    textarea.selectionEnd = start + cursorOffset;
+  }
+
+  updateActividadLivePreview();
+}
+
+function toggleActividadPreview() {
+  const $preview = $('#actividadPreviewContainer');
+  const isHidden = $preview.is(':hidden');
+  if (isHidden) {
+    updateActividadLivePreview();
+    $preview.slideDown(200);
+    $('#labelToggleActividadPreview').text('Ocultar Vista Previa');
+    $('#iconToggleActividadPreview').removeClass('fa-eye').addClass('fa-eye-slash');
+  } else {
+    $preview.slideUp(200);
+    $('#labelToggleActividadPreview').text('Vista Previa');
+    $('#iconToggleActividadPreview').removeClass('fa-eye-slash').addClass('fa-eye');
+  }
+}
+
+function updateActividadLivePreview() {
+  const text = ($('#actividadDesc').val() || '').trim();
+  const $target = $('#actividadLivePreview');
+  if (!text) {
+    $target.html('<em class="text-muted">Escriba instrucciones para previsualizar los estilos aplicados...</em>');
+    return;
+  }
+  const formatted = typeof sgnFormatTextWithLinks === 'function'
+    ? sgnFormatTextWithLinks(text)
+    : $('<div>').text(text).html();
+  $target.html(formatted);
+}
+
 const SGN_PLANTILLAS_RUBRICA = {
   general: {
     nombre: "General / Estándar",
-    texto: `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+    texto: `**PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):**
 
-Puntos Solicitados en la asignación 25%
-Estructura definida del trabajo 25%
-Referencias Bibliográficas 25%
-Redacción de Introducción y Conclusión 25%
+- **Puntos Solicitados en la asignación:** 25% (5 pts)
+- **Estructura definida del trabajo:** 25% (5 pts)
+- **Referencias Bibliográficas:** 25% (5 pts)
+- **Redacción de Introducción y Conclusión:** 25% (5 pts)
 
-Enlace de la Asignación / Guía Docente (Google Drive opcional):
+**Enlace de la Asignación / Guía Docente (Google Drive opcional):**
 https://drive.google.com/file/d/TU_ID_AQUI/view`
   },
   tecnica: {
     nombre: "Evaluación Técnica",
-    texto: `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+    texto: `**PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):**
 
-Resolución Técnica y Exactitud 35%
-Aplicación de Procedimientos y Normas 25%
-Interpretación de Resultados y Datos 20%
-Calidad de Conclusiones y Presentación 20%
+- **Resolución Técnica y Exactitud:** 35% (7 pts)
+- **Aplicación de Procedimientos y Normas:** 25% (5 pts)
+- **Interpretación de Resultados y Datos:** 20% (4 pts)
+- **Calidad de Conclusiones y Presentación:** 20% (4 pts)
 
-Enlace de la Asignación / Guía Docente (Google Drive opcional):
+**Enlace de la Asignación / Guía Docente (Google Drive opcional):**
 https://drive.google.com/file/d/TU_ID_AQUI/view`
   },
   analitica: {
     nombre: "Evaluación Analítica",
-    texto: `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+    texto: `**PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):**
 
-Análisis Crítico y Postura Fundamentada 30%
-Identificación de Causas y Relaciones 25%
-Propuesta de Solución o Criterio Propio 25%
-Coherencia Argumentativa y Bibliografía 20%
+- **Análisis Crítico y Postura Fundamentada:** 30% (6 pts)
+- **Identificación de Causas y Relaciones:** 25% (5 pts)
+- **Propuesta de Solución o Criterio Propio:** 25% (5 pts)
+- **Coherencia Argumentativa y Bibliografía:** 20% (4 pts)
 
-Enlace de la Asignación / Guía Docente (Google Drive opcional):
+**Enlace de la Asignación / Guía Docente (Google Drive opcional):**
 https://drive.google.com/file/d/TU_ID_AQUI/view`
   },
   teorica: {
     nombre: "Evaluación Teórica",
-    texto: `PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):
+    texto: `**PARÁMETROS Y RÚBRICA EVALUATIVA (Escala 1 a 20 pts):**
 
-Dominio de Conceptos Fundamentales 30%
-Precisión y Claridad en Definiciones 25%
-Capacidad de Síntesis y Organización 25%
-Sustento Bibliográfico y Citas Formales 20%
+- **Dominio de Conceptos Fundamentales:** 30% (6 pts)
+- **Precisión y Claridad en Definiciones:** 25% (5 pts)
+- **Capacidad de Síntesis y Organización:** 25% (5 pts)
+- **Sustento Bibliográfico y Citas Formales:** 20% (4 pts)
 
-Enlace de la Asignación / Guía Docente (Google Drive opcional):
+**Enlace de la Asignación / Guía Docente (Google Drive opcional):**
 https://drive.google.com/file/d/TU_ID_AQUI/view`
   }
 };
@@ -3457,10 +3606,12 @@ function insertarPlantillaRubrica(tipo) {
       confirmText: "Sí, insertar rúbrica",
       onConfirm: function () {
         $('#actividadDesc').val(rubricaPlantilla);
+        updateActividadLivePreview();
       }
     });
   } else {
     $('#actividadDesc').val(rubricaPlantilla);
+    updateActividadLivePreview();
   }
 }
 
@@ -3626,7 +3777,12 @@ function openModalEntregas(idActividad) {
   const numEval = (act.numero_evaluacion || "e1").toUpperCase();
   const isQuizAct = String(act.tipo_actividad || "ENTREGA").toUpperCase().trim() === "QUIZ";
 
-  $('#entregasActividadDesc').html(`<strong>Actividad:</strong> ${sgnFormatTextWithLinks(act.descripcion)}`);
+  $('#entregasActividadDesc').html(`
+    <div class="desc-actividad-box text-break" style="line-height: 1.55;">
+      <strong class="d-block text-navy mb-1"><i class="fa-solid fa-list-check me-1"></i> Asignación:</strong>
+      <div>${sgnFormatTextWithLinks(act.descripcion)}</div>
+    </div>
+  `);
   $('#entregasActividadMeta').text(`${ucNombre} | ${numEval} | Fecha de Asignación: ${act.fecha_asignacion}`);
 
   // Limpiar campos y filtros previos
