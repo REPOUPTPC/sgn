@@ -219,8 +219,9 @@ function setupUserInterface() {
 /**
  * Carga de Datos Generales del Dashboard
  */
-function loadDashboardData(keepSelectedCant = false) {
-  sgnApiCall("getAllData", {}, { showLoading: true }).then(function (res) {
+function loadDashboardData(keepSelectedCant = false, forceRefresh = false) {
+  const payload = forceRefresh ? { forceRefresh: true } : {};
+  sgnApiCall("getAllData", payload, { showLoading: true }).then(function (res) {
     if (res && res.success) {
       sgnDb.programas = res.programas || [];
       sgnDb.estudiantes = res.estudiantes || [];
@@ -2306,15 +2307,15 @@ function openGlobalModalFechas() {
     fechas.forEach(f => {
       const key = (f.evaluacion || '').toString().toUpperCase(); // e1..e8
       if (key) {
-        $(`#fecha${key}`).val(f.fecha);
-        $(`#desc${key}`).val(f.descripcion);
+        $(`#fecha${key}`).val(normalizeDateYMDClient(f.fecha));
+        $(`#desc${key}`).val(f.descripcion || '');
       }
     });
   });
   
   $('#fechaUnidadId').trigger('change');
 
-  const bsModal = new bootstrap.Modal(document.getElementById('modalFechasNota'));
+  const bsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalFechasNota'));
   bsModal.show();
 }
 
@@ -2331,31 +2332,48 @@ function saveFechasSubmit() {
 
   const existingRn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == uId);
   const cantEval = existingRn && existingRn.cantidad_evaluaciones ? parseInt(existingRn.cantidad_evaluaciones) : (parseInt($('#selectCantEvalGestion').val()) || 4);
-  const evals = [];
+  const fechasPayload = [];
   for (let i = 1; i <= cantEval; i++) {
-    evals.push('e' + i);
+    const evalKey = 'e' + i;
+    const keyUpper = evalKey.toUpperCase();
+    fechasPayload.push({
+      evaluacion: evalKey,
+      fecha: $(`#fecha${keyUpper}`).val() || '',
+      descripcion: $(`#desc${keyUpper}`).val() || ''
+    });
   }
 
-  let promises = evals.map(e => {
-    const keyUpper = e.toUpperCase();
-    const fecha = $(`#fecha${keyUpper}`).val();
-    const desc = $(`#desc${keyUpper}`).val();
-    
-    return sgnApiCall("saveFechaNota", {
-      id_programa_formacion: unidad.id_programa_formacion,
-      seccion: unidad.seccion,
-      evaluacion: e,
-      fecha: fecha || '',
-      descripcion: desc || ''
-    }, { showLoading: false });
-  });
+  const $btn = $('#modalFechasForm button[type="submit"]');
+  const origBtnHtml = $btn.html();
+  $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-1"></i> Guardando...');
 
-  Promise.all(promises).then(() => {
-    bootstrap.Modal.getInstance(document.getElementById('modalFechasNota')).hide();
-    sgnShowModal({ title: "Fechas Guardadas", message: "Fechas y descripciones de evaluaciones registradas exitosamente.", type: "success" });
-    loadDashboardData();
-  }).catch(err => {
-    sgnShowModal({ title: "Error", message: "Ocurrió un error al guardar las fechas.", type: "danger" });
+  sgnApiCall("saveFechasNotasBatch", {
+    id_programa_formacion: unidad.id_programa_formacion,
+    seccion: unidad.seccion,
+    fechas: fechasPayload
+  }, { showLoading: true }).done(function (res) {
+    if (res && res.success) {
+      if (Array.isArray(res.fechasNotas)) {
+        sgnDb.fechasNotas = res.fechasNotas;
+      }
+      const modalEl = document.getElementById('modalFechasNota');
+      const modalInst = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+      if (modalInst) modalInst.hide();
+      sgnShowModal({
+        title: "Fechas Guardadas",
+        message: res.message || "Fechas y descripciones de evaluaciones registradas exitosamente.",
+        type: "success"
+      });
+      loadDashboardData(true, true);
+    } else {
+      sgnShowModal({
+        title: "Error",
+        message: (res && res.message) ? res.message : "Ocurrió un error al guardar las fechas.",
+        type: "danger"
+      });
+    }
+  }).always(function () {
+    $btn.prop('disabled', false).html(origBtnHtml);
   });
 }
 

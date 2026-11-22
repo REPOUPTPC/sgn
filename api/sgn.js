@@ -716,7 +716,8 @@ module.exports = async function handler(req, res) {
       // ==================== DASHBOARD & CRUD COMPLETO ====================
       case "getAllData": {
         const now = Date.now();
-        if (memoryCache.allData && (now - memoryCache.allDataTs < ALL_DATA_TTL_MS)) {
+        const forceRefresh = params.forceRefresh === true || params.forceRefresh === "true" || params.forceRefresh === 1 || params.forceRefresh === "1";
+        if (!forceRefresh && memoryCache.allData && (now - memoryCache.allDataTs < ALL_DATA_TTL_MS)) {
           return res.status(200).json(memoryCache.allData);
         }
 
@@ -1098,9 +1099,12 @@ module.exports = async function handler(req, res) {
 
       case "saveFechaNota": {
         const idProg = params.id_programa_formacion;
+        if (idProg === undefined || idProg === null || idProg === "") {
+          return res.status(200).json({ success: false, message: "Debe especificar el programa de formación." });
+        }
         const sec = formatSeccion(params.seccion);
         const cleanSec = sec.replace(/^'/, "");
-        const evalKey = (params.evaluacion || "e1").toString().toLowerCase();
+        const evalKey = (params.evaluacion || "e1").toString().toLowerCase().trim();
         const fechaVal = normalizeDateYMD(params.fecha);
         const descVal = params.descripcion || "";
 
@@ -1110,15 +1114,77 @@ module.exports = async function handler(req, res) {
         );
 
         if (existing.length > 0) {
-          await execute("UPDATE fecha_relacion_nota SET fecha = ?, descripcion = ? WHERE id = ?", [fechaVal, descVal, existing[0].id]);
-        } else {
-          const newId = await getNextId("fecha_relacion_nota");
           await execute(
-            "INSERT INTO fecha_relacion_nota (id, id_programa_formacion, seccion, evaluacion, fecha, descripcion) VALUES (?, ?, ?, ?, ?, ?)",
-            [newId, idProg, sec, evalKey, fechaVal, descVal]
+            "UPDATE fecha_relacion_nota SET fecha = ?, descripcion = ? WHERE id_programa_formacion = ? AND seccion IN (?, ?) AND LOWER(evaluacion) = ?",
+            [fechaVal, descVal, idProg, cleanSec, sec, evalKey]
+          );
+        } else {
+          await execute(
+            "INSERT INTO fecha_relacion_nota (id_programa_formacion, seccion, evaluacion, fecha, descripcion) VALUES (?, ?, ?, ?, ?)",
+            [idProg, sec, evalKey, fechaVal, descVal]
           );
         }
         return res.status(200).json({ success: true, message: "Fecha y descripción de evaluación guardada." });
+      }
+
+      case "saveFechasNotasBatch": {
+        const idProg = params.id_programa_formacion;
+        if (idProg === undefined || idProg === null || idProg === "") {
+          return res.status(200).json({ success: false, message: "Debe especificar el programa de formación." });
+        }
+        const sec = formatSeccion(params.seccion);
+        const cleanSec = sec.replace(/^'/, "");
+
+        let fechasList = params.fechas || [];
+        if (typeof fechasList === "string") {
+          try { fechasList = JSON.parse(fechasList); } catch (e) { fechasList = []; }
+        }
+        if (!Array.isArray(fechasList) || fechasList.length === 0) {
+          return res.status(200).json({ success: false, message: "No se proporcionaron fechas de evaluación para guardar." });
+        }
+
+        const existingRows = await query(
+          "SELECT id, LOWER(evaluacion) AS eval_key FROM fecha_relacion_nota WHERE id_programa_formacion = ? AND seccion IN (?, ?)",
+          [idProg, cleanSec, sec]
+        );
+        const existingEvalSet = new Set(existingRows.map(r => String(r.eval_key || "").trim().toLowerCase()));
+
+        const stmts = [];
+        const seenEvals = new Set();
+
+        for (const item of fechasList) {
+          const evalKey = (item && item.evaluacion ? item.evaluacion : "").toString().toLowerCase().trim();
+          if (!evalKey || seenEvals.has(evalKey)) continue;
+          seenEvals.add(evalKey);
+
+          const fechaVal = normalizeDateYMD(item.fecha);
+          const descVal = item.descripcion || "";
+
+          if (existingEvalSet.has(evalKey)) {
+            stmts.push({
+              sql: "UPDATE fecha_relacion_nota SET fecha = ?, descripcion = ? WHERE id_programa_formacion = ? AND seccion IN (?, ?) AND LOWER(evaluacion) = ?",
+              args: [fechaVal, descVal, idProg, cleanSec, sec, evalKey]
+            });
+          } else {
+            stmts.push({
+              sql: "INSERT INTO fecha_relacion_nota (id_programa_formacion, seccion, evaluacion, fecha, descripcion) VALUES (?, ?, ?, ?, ?)",
+              args: [idProg, sec, evalKey, fechaVal, descVal]
+            });
+            existingEvalSet.add(evalKey);
+          }
+        }
+
+        if (stmts.length > 0) {
+          await batch(stmts, "write");
+        }
+
+        const updatedFechas = await query("SELECT * FROM fecha_relacion_nota ORDER BY id ASC");
+
+        return res.status(200).json({
+          success: true,
+          message: "Fechas y descripciones de evaluaciones registradas exitosamente.",
+          fechasNotas: updatedFechas
+        });
       }
 
       // Actividades Asignadas
