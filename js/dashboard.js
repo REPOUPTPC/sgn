@@ -1188,18 +1188,12 @@ function renderModalCalificacionesEstudianteContenido() {
     const avgCalculado = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
     const totalNum = parseFloat(avgCalculado) || 0;
 
-    // Fechas de evaluación configuradas para este programa y sección
-    const fechas = (sgnDb.fechasNotas || []).filter(fn => {
-      let fnSec = String(fn.seccion || '').replace(/^'/, '').trim();
-      return String(fn.id_programa_formacion) === String(u.id_programa_formacion) && fnSec === uSec;
-    });
-
     // Construir casillas de corrección de notas E1..E${cantEval}
     let evalsInputsHtml = '';
     const colClass = (cantEval === 5 || cantEval === 6) ? '2' : '3';
     for (let i = 1; i <= cantEval; i++) {
       const val = unifiedEval['e' + i] !== undefined ? unifiedEval['e' + i] : 0;
-      const fnObj = fechas.find(f => (f.evaluacion || '').toLowerCase() === ('e' + i));
+      const fnObj = resolveFechaNotaForUnidadDash(u, 'e' + i);
       const fnFecha = fnObj ? fnObj.fecha : 'Sin fecha';
       const fnDesc = fnObj ? fnObj.descripcion : '';
 
@@ -1942,21 +1936,33 @@ function renderNotasTable(keepSelectedCant = false) {
   $('#btnGenerarNomina').show();
   $('#containerNoSeleccion').hide();
 
-  // Buscar si existen notas previas para tomar la cantidad de evaluaciones guardada (solo si no se cambió manualmente)
+  // Buscar si existen notas previas o actividades asignadas para tomar la cantidad de evaluaciones
   if (!keepSelectedCant) {
     const existingRn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == unidadId);
-    if (existingRn && existingRn.cantidad_evaluaciones) {
-      const savedCant = parseInt(existingRn.cantidad_evaluaciones) || 4;
-      $('#selectCantEvalGestion').val(savedCant);
-    }
+    const savedCant = (existingRn && existingRn.cantidad_evaluaciones) ? (parseInt(existingRn.cantidad_evaluaciones, 10) || 4) : 4;
+    const maxActSlot = (sgnDb.actividadesAsignadas || []).reduce((maxE, a) => {
+      if (String(a.id_unidad_curricular) !== String(unidadId)) return maxE;
+      const m = String(a.numero_evaluacion || '').toLowerCase().match(/^e([1-8])$/);
+      return m ? Math.max(maxE, parseInt(m[1], 10)) : maxE;
+    }, 4);
+    $('#selectCantEvalGestion').val(Math.min(8, Math.max(savedCant, maxActSlot)));
   }
 
   const cantEval = parseInt($('#selectCantEvalGestion').val()) || 4;
 
-  // Construir dinámicamente la cabecera de la tabla según cantEval
+  // Resolver fechas y descripciones por evaluación para mostrarlas en cabecera y cards móviles
+  const evalMetaMap = {};
   let theadHtml = '<tr><th>Cédula</th><th>Estudiante</th>';
   for (let i = 1; i <= cantEval; i++) {
-    theadHtml += `<th width="80px">E${i}</th>`;
+    const fnObj = resolveFechaNotaForUnidadDash(unidad, 'e' + i);
+    const fnFecha = fnObj && fnObj.fecha ? String(fnObj.fecha).trim() : '';
+    const fnDesc = fnObj && fnObj.descripcion ? String(fnObj.descripcion).trim() : '';
+    evalMetaMap[i] = { fecha: fnFecha, desc: fnDesc };
+    const tooltipText = [fnDesc, fnFecha].filter(Boolean).join(' · ') || `Evaluación ${i}`;
+    theadHtml += `<th width="95px" title="${escapeHtmlDashboard(tooltipText)}">
+      <div>E${i}</div>
+      ${fnDesc ? `<div class="fw-normal text-muted text-truncate mx-auto" style="max-width: 92px; font-size: 0.65rem;">${escapeHtmlDashboard(fnDesc)}</div>` : ''}
+    </th>`;
   }
   theadHtml += '<th>Total</th></tr>';
   $('#tablaNotas thead').html(theadHtml);
@@ -1988,7 +1994,9 @@ function renderNotasTable(keepSelectedCant = false) {
     for (let i = 1; i <= cantEval; i++) {
       let val = parseFloat(rn['e' + i]) || 0;
       sum += val;
-      rowInputs += `<td class="nota-col-eval" data-label="Evaluación ${i} (E${i})"><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e${i}" data-eval="${i}" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${val}"></td>`;
+      const meta = evalMetaMap[i] || {};
+      const mobileLabel = `E${i}${meta.desc ? ' · ' + escapeHtmlDashboard(meta.desc) : ''}${meta.fecha ? ' (' + meta.fecha + ')' : ''}`;
+      rowInputs += `<td class="nota-col-eval" data-label="${mobileLabel}"><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e${i}" data-eval="${i}" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${val}"></td>`;
     }
     let calcTotal = (sum / cantEval).toFixed(2);
 
@@ -2477,6 +2485,33 @@ async function generarPDFNominaAsistencia() {
   doc.save(`Nomina_Asistencia_Prof_${docNameNomina}_${matNameNomina}_Sec${cleanSec}.pdf`);
 }
 
+function resolveFechaNotaForUnidadDash(unidad, evalKey) {
+  if (!unidad || !evalKey) return null;
+  const evLower = String(evalKey).toLowerCase().trim();
+  const uIdStr = String(unidad.id);
+  const progStr = String(unidad.id_programa_formacion);
+  const targetSec = String(unidad.seccion || '').replace(/^'/, '').trim();
+  const list = sgnDb.fechasNotas || [];
+
+  const exact = list.find(f =>
+    f.id_unidad_curricular !== undefined &&
+    f.id_unidad_curricular !== null &&
+    Number(f.id_unidad_curricular) > 0 &&
+    String(f.id_unidad_curricular) === uIdStr &&
+    String(f.evaluacion || '').toLowerCase().trim() === evLower
+  );
+  if (exact) return exact;
+
+  return list.find(f => {
+    const fUnit = f.id_unidad_curricular !== undefined && f.id_unidad_curricular !== null ? Number(f.id_unidad_curricular) : 0;
+    if (fUnit > 0) return false;
+    const fSec = String(f.seccion || '').replace(/^'/, '').trim();
+    return String(f.id_programa_formacion) === progStr &&
+      fSec === targetSec &&
+      String(f.evaluacion || '').toLowerCase().trim() === evLower;
+  }) || null;
+}
+
 // Configurar Fechas y Descripciones por Evaluación
 function openGlobalModalFechas() {
   $('#fechaE1, #descE1, #fechaE2, #descE2, #fechaE3, #descE3, #fechaE4, #descE4, #fechaE5, #descE5, #fechaE6, #descE6, #fechaE7, #descE7, #fechaE8, #descE8').val('');
@@ -2491,9 +2526,16 @@ function openGlobalModalFechas() {
     const unidad = sgnDb.unidades.find(u => u.id == uId);
     if (!unidad) return;
 
-    // Mostrar/ocultar contenedores según cantEval de la unidad
+    // Mostrar/ocultar contenedores según cantEval, actividades asignadas o fechas registradas
     const existingRn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == uId);
-    const cantEval = existingRn && existingRn.cantidad_evaluaciones ? parseInt(existingRn.cantidad_evaluaciones) : (parseInt($('#selectCantEvalGestion').val()) || 4);
+    let cantEval = existingRn && existingRn.cantidad_evaluaciones ? parseInt(existingRn.cantidad_evaluaciones) : (parseInt($('#selectCantEvalGestion').val()) || 4);
+    for (let i = 5; i <= 8; i++) {
+      const hasActSlot = (sgnDb.actividadesAsignadas || []).some(a =>
+        String(a.id_unidad_curricular) === String(uId) && String(a.numero_evaluacion || '').toLowerCase().trim() === ('e' + i)
+      );
+      const hasFechaSlot = !!resolveFechaNotaForUnidadDash(unidad, 'e' + i);
+      if (hasActSlot || hasFechaSlot) cantEval = Math.max(cantEval, i);
+    }
     for (let i = 5; i <= 8; i++) {
       if (i <= cantEval) {
         $(`#containerE${i}`).show();
@@ -2502,22 +2544,13 @@ function openGlobalModalFechas() {
       }
     }
 
-    let targetSec = (unidad.seccion || '').toString().trim();
-    if (targetSec.startsWith("'")) targetSec = targetSec.substring(1);
-
-    const fechas = sgnDb.fechasNotas.filter(f => {
-      let fSec = (f.seccion || '').toString().trim();
-      if (fSec.startsWith("'")) fSec = fSec.substring(1);
-      return f.id_programa_formacion == unidad.id_programa_formacion && fSec === targetSec;
-    });
-    
-    fechas.forEach(f => {
-      const key = (f.evaluacion || '').toString().toUpperCase(); // e1..e8
-      if (key) {
-        $(`#fecha${key}`).val(normalizeDateYMDClient(f.fecha));
-        $(`#desc${key}`).val(f.descripcion || '');
+    for (let i = 1; i <= 8; i++) {
+      const f = resolveFechaNotaForUnidadDash(unidad, 'e' + i);
+      if (f) {
+        $(`#fechaE${i}`).val(normalizeDateYMDClient(f.fecha));
+        $(`#descE${i}`).val(f.descripcion || '');
       }
-    });
+    }
   });
   
   $('#fechaUnidadId').trigger('change');
@@ -2538,7 +2571,10 @@ function saveFechasSubmit() {
   if (!unidad) return;
 
   const existingRn = sgnDb.relacionNotas.find(r => r.id_unidad_curricular == uId);
-  const cantEval = existingRn && existingRn.cantidad_evaluaciones ? parseInt(existingRn.cantidad_evaluaciones) : (parseInt($('#selectCantEvalGestion').val()) || 4);
+  let cantEval = existingRn && existingRn.cantidad_evaluaciones ? parseInt(existingRn.cantidad_evaluaciones) : (parseInt($('#selectCantEvalGestion').val()) || 4);
+  for (let i = 5; i <= 8; i++) {
+    if ($(`#containerE${i}`).is(':visible')) cantEval = Math.max(cantEval, i);
+  }
   const fechasPayload = [];
   for (let i = 1; i <= cantEval; i++) {
     const evalKey = 'e' + i;
@@ -2556,6 +2592,7 @@ function saveFechasSubmit() {
 
   sgnApiCall("saveFechasNotasBatch", {
     id_programa_formacion: unidad.id_programa_formacion,
+    id_unidad_curricular: unidad.id,
     seccion: unidad.seccion,
     fechas: fechasPayload
   }, { showLoading: true }).done(function (res) {
@@ -2947,8 +2984,20 @@ function renderActividadesTable() {
       `;
     }
 
+    const ucMetaAct = (sgnDb.unidades || []).find(u => String(u.id) === String(a.id_unidad_curricular));
+    const evalLowerAct = (a.numero_evaluacion || 'e1').toString().toLowerCase().trim();
+    const fnActSync = ucMetaAct ? resolveFechaNotaForUnidadDash(ucMetaAct, evalLowerAct) : null;
+    const califSyncBadgeHtml = (fnActSync && (fnActSync.descripcion || fnActSync.fecha)) ? `
+      <div class="mb-1">
+        <span class="badge bg-success-subtle text-success border border-success-subtle text-wrap text-start fw-semibold">
+          <i class="fa-regular fa-calendar-check me-1"></i> Calificaciones (${evalLowerAct.toUpperCase()}): ${escapeHtmlDashboard(fnActSync.descripcion || 'Evaluación')}${fnActSync.fecha ? ' · ' + fnActSync.fecha : ''}
+        </span>
+      </div>
+    ` : '';
+
     const descContentHtml = `
       <div class="mb-1">${tipoBadgeHtml}</div>
+      ${califSyncBadgeHtml}
       <div class="desc-actividad-content" style="line-height: 1.5; font-size: 0.88rem;">${sgnFormatTextWithLinks(a.descripcion)}</div>
     `;
 
@@ -3180,6 +3229,7 @@ function onActividadLapsoChange(source) {
       }
     }
   }
+  refreshActividadFechaSyncPanel();
 }
 
 // ==========================================================================
@@ -3545,6 +3595,100 @@ function updateActividadEvalOptions(preferredEval = null) {
     }
     $btnGuardar.prop('disabled', false);
   }
+  onActividadEvalSelectionChange();
+}
+
+function extractShortDescFromTextDash(rawDesc, maxLen = 100) {
+  const txt = String(rawDesc || '').trim();
+  if (!txt) return '';
+  const lines = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let candidate = lines[0] || txt;
+  candidate = candidate
+    .replace(/<\/?(u|b|strong|i|em)>/gi, '')
+    .replace(/^\s{0,3}(?:#{1,6}\s*|[-*•]+\s*|\d+[.)]\s*)/, '')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!candidate) candidate = txt.replace(/\s+/g, ' ').trim();
+  if (candidate.length <= maxLen) return candidate;
+  const cut = candidate.slice(0, Math.max(10, maxLen - 3));
+  const lastSpace = cut.lastIndexOf(' ');
+  const cleanCut = (lastSpace > maxLen * 0.5) ? cut.slice(0, lastSpace) : cut;
+  return cleanCut.replace(/[,:;.-]+$/, '').trim() + '...';
+}
+
+function onInputDescCortaActividad() {
+  const val = $('#actividadDescCorta').val() || '';
+  $('#actividadDescCorta').data('manual', val.trim().length > 0);
+  refreshActividadFechaSyncPanel();
+}
+
+function sugerirDescCortaDesdeInstrucciones() {
+  const fullDesc = ($('#actividadDesc').val() || '').trim();
+  if (!fullDesc) {
+    sgnShowToast('Escribe primero la descripción o instrucciones abajo para poder resumirlas.', 'warning');
+    return;
+  }
+  const shortVal = extractShortDescFromTextDash(fullDesc, 100);
+  $('#actividadDescCorta').val(shortVal).data('manual', true);
+  refreshActividadFechaSyncPanel();
+}
+
+function onActividadEvalSelectionChange() {
+  const uId = $('#actividadUnidadId').val();
+  const evalKey = ($('#actividadEval').val() || 'e1').toLowerCase().trim();
+  const unidad = uId ? (sgnDb.unidades || []).find(u => String(u.id) === String(uId)) : null;
+  const existingFecha = (unidad && evalKey) ? resolveFechaNotaForUnidadDash(unidad, evalKey) : null;
+  const $descCorta = $('#actividadDescCorta');
+  if ($descCorta.length && !$descCorta.data('manual')) {
+    $descCorta.val(existingFecha && existingFecha.descripcion ? existingFecha.descripcion : '');
+  }
+  refreshActividadFechaSyncPanel();
+}
+
+function refreshActividadFechaSyncPanel() {
+  const isSync = $('#actividadSyncFechasNota').is(':checked');
+  const uId = $('#actividadUnidadId').val();
+  const evalKey = ($('#actividadEval').val() || 'e1').toLowerCase().trim();
+  const evalNum = parseInt(evalKey.replace('e', ''), 10) || 1;
+  const evalUpper = evalKey.toUpperCase();
+  const fechaLim = normalizeDateYMDClient($('#actividadFechaLimite').val()) || '--';
+
+  $('#badgeSyncEvalTarget').text(`Destino: Evaluación ${evalNum} (${evalUpper})`);
+  $('#actividadFechaCierreSyncPreview').text(fechaLim);
+
+  if (isSync) {
+    $('#actividadSyncFechasBody').removeClass('opacity-50');
+    $('#actividadDescCorta').prop('disabled', false);
+  } else {
+    $('#actividadSyncFechasBody').addClass('opacity-50');
+    $('#actividadDescCorta').prop('disabled', true);
+  }
+
+  const $note = $('#actividadSyncFechasPreviewNote');
+  if (!$note.length) return;
+
+  if (!isSync) {
+    $note.html('<i class="fa-solid fa-circle-pause text-secondary me-1"></i> Sincronización automática desactivada. Si deseas mostrar título y fecha en el resumen de <strong>#calificaciones</strong>, deberás editarlo manualmente en el botón <strong>Fechas</strong>.');
+    return;
+  }
+
+  const unidad = uId ? (sgnDb.unidades || []).find(u => String(u.id) === String(uId)) : null;
+  const existingFecha = (unidad && evalKey) ? resolveFechaNotaForUnidadDash(unidad, evalKey) : null;
+  const typedCorta = ($('#actividadDescCorta').val() || '').trim();
+  const autoResumen = typedCorta || extractShortDescFromTextDash($('#actividadDesc').val() || '', 100);
+
+  let noteHtml = '';
+  if (existingFecha && (existingFecha.fecha || existingFecha.descripcion)) {
+    noteHtml = `<i class="fa-solid fa-arrows-rotate text-primary me-1"></i> <strong>Registro actual en Calificaciones (${evalUpper}):</strong> ${escapeHtmlDashboard(existingFecha.descripcion || 'Sin descripción')} (${existingFecha.fecha || 'Pendiente'}). Al guardar se actualizará a <strong>"${escapeHtmlDashboard(autoResumen || 'Por definir')}"</strong> con fecha <strong>${fechaLim}</strong>.`;
+  } else {
+    noteHtml = `<i class="fa-solid fa-circle-plus text-success me-1"></i> <strong>Se creará automáticamente en Calificaciones (${evalUpper}):</strong> <strong>"${escapeHtmlDashboard(autoResumen || 'Resumen de instrucciones')}"</strong> · Fecha: <strong>${fechaLim}</strong>.`;
+  }
+
+  if (evalNum > 4) {
+    noteHtml += ` <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1">Ampliará planilla hasta E${evalNum}</span>`;
+  }
+  $note.html(noteHtml);
 }
 
 function openModalActividad() {
@@ -3557,6 +3701,8 @@ function openModalActividad() {
   $('#actividadTipo').val('ENTREGA');
   $('#actividadMaxEntregas').val(2);
   $('#actividadMaxEntregasGroup').show();
+  $('#actividadSyncFechasNota').prop('checked', true);
+  $('#actividadDescCorta').val('').data('manual', false);
   updateIaEvaluacionUI('ENTREGA');
   $('#quizCantidadMostrar').val(15);
   $('#quizPuntajeMaximo').val(20);
@@ -3576,6 +3722,7 @@ function openModalActividad() {
   }
 
   updateActividadEvalOptions();
+  refreshActividadFechaSyncPanel();
 
   $('#actividadPreviewContainer').hide();
   $('#labelToggleActividadPreview').text('Vista Previa');
@@ -3597,6 +3744,13 @@ function editActividad(id) {
   $('#actividadId').val(a.id);
   $('#actividadUnidadId').val(a.id_unidad_curricular);
   const evalActual = (a.numero_evaluacion || "e1").toLowerCase();
+  const unidadObj = (sgnDb.unidades || []).find(u => String(u.id) === String(a.id_unidad_curricular));
+  const fechaMetaExistente = unidadObj ? resolveFechaNotaForUnidadDash(unidadObj, evalActual) : null;
+
+  $('#actividadSyncFechasNota').prop('checked', true);
+  const descCortaInicial = fechaMetaExistente && fechaMetaExistente.descripcion ? fechaMetaExistente.descripcion : '';
+  $('#actividadDescCorta').val(descCortaInicial).data('manual', !!descCortaInicial);
+
   updateActividadEvalOptions(evalActual);
   $('#actividadFecha').val(lapsoInfo.fecha_asignacion);
   $('#actividadFechaLimite').val(lapsoInfo.fecha_limite);
@@ -3606,6 +3760,7 @@ function editActividad(id) {
   $('#actividadDiasLapso').val(diffDays);
   $('#actividadDesc').val(a.descripcion);
   $('#actividadIaEvaluar').prop('checked', a.ia_evaluacion === 'SI' || a.ia_evaluacion === true || a.ia_evaluacion == '1');
+  refreshActividadFechaSyncPanel();
 
   const tipoAct = String(a.tipo_actividad || "ENTREGA").toUpperCase();
   $('#actividadTipo').val(tipoAct === 'QUIZ' ? 'QUIZ' : 'ENTREGA');
@@ -3780,12 +3935,14 @@ function updateActividadLivePreview() {
   const $target = $('#actividadLivePreview');
   if (!text) {
     $target.html('<em class="text-muted">Escriba instrucciones para previsualizar los estilos aplicados...</em>');
+    refreshActividadFechaSyncPanel();
     return;
   }
   const formatted = typeof sgnFormatTextWithLinks === 'function'
     ? sgnFormatTextWithLinks(text)
     : $('<div>').text(text).html();
   $target.html(formatted);
+  refreshActividadFechaSyncPanel();
 }
 
 const SGN_PLANTILLAS_RUBRICA = {
@@ -3949,6 +4106,11 @@ function saveActividadSubmit() {
   }
 
   const maxEntregasVal = Math.max(1, Math.min(20, parseInt($('#actividadMaxEntregas').val(), 10) || 2));
+  const sincronizarFechas = $('#actividadSyncFechasNota').is(':checked');
+  const descCortaInput = ($('#actividadDescCorta').val() || '').trim();
+  const descCortaFinal = sincronizarFechas
+    ? (descCortaInput || extractShortDescFromTextDash(desc, 100))
+    : descCortaInput;
 
   const formData = {
     id: $('#actividadId').val(),
@@ -3957,6 +4119,8 @@ function saveActividadSubmit() {
     fecha_asignacion: fecha,
     fecha_limite: fechaLimite,
     descripcion: desc,
+    descripcion_corta: descCortaFinal,
+    sincronizar_fechas: sincronizarFechas,
     tipo_actividad: tipoActividad,
     max_entregas: maxEntregasVal,
     ia_evaluacion: $('#actividadIaEvaluar').is(':checked') ? "SI" : "NO",
@@ -3967,9 +4131,12 @@ function saveActividadSubmit() {
 
   sgnApiCall("saveActividadAsignada", formData).then(function (res) {
     if (res && res.success) {
+      if (Array.isArray(res.fechasNotas)) {
+        sgnDb.fechasNotas = res.fechasNotas;
+      }
       bootstrap.Modal.getInstance(document.getElementById('modalActividad')).hide();
       sgnShowModal({ title: "Éxito", message: res.message, type: "success" });
-      loadDashboardData();
+      loadDashboardData(false, true);
     }
   });
 }

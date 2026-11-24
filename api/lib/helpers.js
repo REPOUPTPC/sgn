@@ -195,6 +195,64 @@ function isTestUnidadObj(u) {
   return name.indexOf("DE PRUEBA") !== -1 || name === TEST_UNIDAD_NOMBRE || sec === "000";
 }
 
+function extractShortEvalDescription(rawDesc, maxLen = 100) {
+  const txt = String(rawDesc || "").trim();
+  if (!txt) return "";
+  const lines = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let candidate = lines[0] || txt;
+  candidate = candidate
+    .replace(/<\/?(u|b|strong|i|em)>/gi, "")
+    .replace(/^\s{0,3}(?:#{1,6}\s*|[-*•]+\s*|\d+[.)]\s*)/, "")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!candidate) candidate = txt.replace(/\s+/g, " ").trim();
+  if (candidate.length <= maxLen) return candidate;
+  const cut = candidate.slice(0, Math.max(10, maxLen - 3));
+  const lastSpace = cut.lastIndexOf(" ");
+  const cleanCut = (lastSpace > maxLen * 0.5) ? cut.slice(0, lastSpace) : cut;
+  return cleanCut.replace(/[,:;.-]+$/, "").trim() + "...";
+}
+
+function resolveFechasUnidad(fechasAll, uc) {
+  if (!uc || !Array.isArray(fechasAll) || fechasAll.length === 0) return [];
+  const ucIdStr = String(uc.id);
+  const ucProgStr = String(uc.id_programa_formacion);
+  const ucSec = String(uc.seccion || "").trim().replace(/^'/, "");
+
+  const exactByEval = new Map();
+  const legacyByEval = new Map();
+
+  fechasAll.forEach(fn => {
+    const evKey = String(fn.evaluacion || "").toLowerCase().trim();
+    if (!evKey) return;
+    const fnUcId = fn.id_unidad_curricular !== undefined && fn.id_unidad_curricular !== null
+      ? Number(fn.id_unidad_curricular)
+      : 0;
+    if (fnUcId > 0) {
+      if (String(fnUcId) === ucIdStr) {
+        exactByEval.set(evKey, fn);
+      }
+      return;
+    }
+    const fnSec = String(fn.seccion || "").trim().replace(/^'/, "");
+    if (String(fn.id_programa_formacion) === ucProgStr && fnSec === ucSec) {
+      legacyByEval.set(evKey, fn);
+    }
+  });
+
+  const merged = [];
+  for (let i = 1; i <= 8; i++) {
+    const evKey = `e${i}`;
+    if (exactByEval.has(evKey)) {
+      merged.push(exactByEval.get(evKey));
+    } else if (legacyByEval.has(evKey)) {
+      merged.push(legacyByEval.get(evKey));
+    }
+  }
+  return merged;
+}
+
 module.exports = {
   SUPER_ADMIN_EMAIL,
   SUPER_ADMIN_CEDULA,
@@ -214,5 +272,7 @@ module.exports = {
   shuffleArrayFisherYates,
   isReservedTestCedula,
   isTestProgramaObj,
-  isTestUnidadObj
+  isTestUnidadObj,
+  extractShortEvalDescription,
+  resolveFechasUnidad
 };

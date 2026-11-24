@@ -15,7 +15,9 @@ const {
   shuffleArrayFisherYates,
   isReservedTestCedula,
   isTestProgramaObj,
-  isTestUnidadObj
+  isTestUnidadObj,
+  extractShortEvalDescription,
+  resolveFechasUnidad
 } = require("./lib/helpers");
 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "sk-2365bc3b25004d7a8caf6bdebbfbe9a4";
@@ -223,14 +225,15 @@ module.exports = async function handler(req, res) {
           const rnMatches = relacionNotas.filter(r => r.id_unidad_curricular == uc.id);
           const rn = rnMatches[0] || {};
 
-          let ucSec = (uc.seccion || "").toString().trim().replace(/^'/, "");
-          const fechas = fechasNotas.filter(fn => {
-            let fnSec = (fn.seccion || "").toString().trim().replace(/^'/, "");
-            return fn.id_programa_formacion == uc.id_programa_formacion && fnSec === ucSec;
-          });
+          const fechas = resolveFechasUnidad(fechasNotas, uc);
 
-          const cantEval = rnMatches.reduce((maxC, r) => Math.max(maxC, parseInt(r.cantidad_evaluaciones) || 4), 4);
           const actividadesDeUc = actividadesAll.filter(a => a.id_unidad_curricular == uc.id);
+          const maxActEval = actividadesDeUc.reduce((maxE, a) => {
+            const m = String(a.numero_evaluacion || "").toLowerCase().match(/^e([1-8])$/);
+            return m ? Math.max(maxE, parseInt(m[1], 10)) : maxE;
+          }, 4);
+          const cantEvalRn = rnMatches.reduce((maxC, r) => Math.max(maxC, parseInt(r.cantidad_evaluaciones) || 4), 4);
+          const cantEval = Math.min(8, Math.max(cantEvalRn, maxActEval));
 
           // Notas base desde relacion_programa_notas
           const rnScores = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0, e7: 0, e8: 0 };
@@ -1163,42 +1166,38 @@ module.exports = async function handler(req, res) {
       }
 
       case "saveFechaNota": {
+        await ensureSchemaColumns();
         const idProg = params.id_programa_formacion;
         if (idProg === undefined || idProg === null || idProg === "") {
           return res.status(200).json({ success: false, message: "Debe especificar el programa de formación." });
         }
-        const sec = formatSeccion(params.seccion);
-        const cleanSec = sec.replace(/^'/, "");
-        const evalKey = (params.evaluacion || "e1").toString().toLowerCase().trim();
-        const fechaVal = normalizeDateYMD(params.fecha);
-        const descVal = params.descripcion || "";
-
-        const existing = await query(
-          "SELECT id FROM fecha_relacion_nota WHERE id_programa_formacion = ? AND seccion IN (?, ?) AND LOWER(evaluacion) = ?",
-          [idProg, cleanSec, sec, evalKey]
-        );
-
-        if (existing.length > 0) {
-          await execute(
-            "UPDATE fecha_relacion_nota SET fecha = ?, descripcion = ? WHERE id_programa_formacion = ? AND seccion IN (?, ?) AND LOWER(evaluacion) = ?",
-            [fechaVal, descVal, idProg, cleanSec, sec, evalKey]
-          );
-        } else {
-          await execute(
-            "INSERT INTO fecha_relacion_nota (id_programa_formacion, seccion, evaluacion, fecha, descripcion) VALUES (?, ?, ?, ?, ?)",
-            [idProg, sec, evalKey, fechaVal, descVal]
-          );
-        }
+        await upsertFechaRelacionNotaSql({
+          idPrograma: idProg,
+          seccion: params.seccion,
+          idUnidad: params.id_unidad_curricular || params.idUnidadCurricular || 0,
+          evaluacion: params.evaluacion || "e1",
+          fecha: params.fecha,
+          descripcion: params.descripcion || ""
+        });
         return res.status(200).json({ success: true, message: "Fecha y descripción de evaluación guardada." });
       }
 
       case "saveFechasNotasBatch": {
-        const idProg = params.id_programa_formacion;
+        await ensureSchemaColumns();
+        const idUnidadBatch = parseInt(params.id_unidad_curricular || params.idUnidadCurricular || 0, 10) || 0;
+        let idProg = params.id_programa_formacion;
+        let seccionRaw = params.seccion;
+
+        if ((idProg === undefined || idProg === null || idProg === "") && idUnidadBatch > 0) {
+          const ucRows = await query("SELECT * FROM unidad_curricular WHERE id = ?", [idUnidadBatch]);
+          if (ucRows[0]) {
+            idProg = ucRows[0].id_programa_formacion;
+            seccionRaw = seccionRaw || ucRows[0].seccion;
+          }
+        }
         if (idProg === undefined || idProg === null || idProg === "") {
           return res.status(200).json({ success: false, message: "Debe especificar el programa de formación." });
         }
-        const sec = formatSeccion(params.seccion);
-        const cleanSec = sec.replace(/^'/, "");
 
         let fechasList = params.fechas || [];
         if (typeof fechasList === "string") {
@@ -1208,39 +1207,20 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ success: false, message: "No se proporcionaron fechas de evaluación para guardar." });
         }
 
-        const existingRows = await query(
-          "SELECT id, LOWER(evaluacion) AS eval_key FROM fecha_relacion_nota WHERE id_programa_formacion = ? AND seccion IN (?, ?)",
-          [idProg, cleanSec, sec]
-        );
-        const existingEvalSet = new Set(existingRows.map(r => String(r.eval_key || "").trim().toLowerCase()));
-
-        const stmts = [];
         const seenEvals = new Set();
-
         for (const item of fechasList) {
           const evalKey = (item && item.evaluacion ? item.evaluacion : "").toString().toLowerCase().trim();
           if (!evalKey || seenEvals.has(evalKey)) continue;
           seenEvals.add(evalKey);
 
-          const fechaVal = normalizeDateYMD(item.fecha);
-          const descVal = item.descripcion || "";
-
-          if (existingEvalSet.has(evalKey)) {
-            stmts.push({
-              sql: "UPDATE fecha_relacion_nota SET fecha = ?, descripcion = ? WHERE id_programa_formacion = ? AND seccion IN (?, ?) AND LOWER(evaluacion) = ?",
-              args: [fechaVal, descVal, idProg, cleanSec, sec, evalKey]
-            });
-          } else {
-            stmts.push({
-              sql: "INSERT INTO fecha_relacion_nota (id_programa_formacion, seccion, evaluacion, fecha, descripcion) VALUES (?, ?, ?, ?, ?)",
-              args: [idProg, sec, evalKey, fechaVal, descVal]
-            });
-            existingEvalSet.add(evalKey);
-          }
-        }
-
-        if (stmts.length > 0) {
-          await batch(stmts, "write");
+          await upsertFechaRelacionNotaSql({
+            idPrograma: idProg,
+            seccion: seccionRaw,
+            idUnidad: idUnidadBatch,
+            evaluacion: evalKey,
+            fecha: item.fecha,
+            descripcion: item.descripcion || ""
+          });
         }
 
         const updatedFechas = await query("SELECT * FROM fecha_relacion_nota ORDER BY id ASC");
@@ -1266,7 +1246,7 @@ module.exports = async function handler(req, res) {
       case "saveActividadAsignada": {
         await ensureSchemaColumns();
         const idUnidad = params.id_unidad_curricular;
-        const numEval = (params.numero_evaluacion || "e1").toString().toLowerCase();
+        const numEval = (params.numero_evaluacion || "e1").toString().toLowerCase().trim();
         const fechaAsig = normalizeDateYMD(params.fecha_asignacion) || getCaracasTodayYMD();
         const fechaLimite = normalizeDateYMD(params.fecha_limite) || addDaysToYMD(fechaAsig, 7);
         const desc = params.descripcion || "";
@@ -1278,9 +1258,25 @@ module.exports = async function handler(req, res) {
         const maxEntregas = (params.max_entregas !== undefined && params.max_entregas !== null && params.max_entregas !== "")
           ? Math.max(1, Math.min(20, parseInt(params.max_entregas, 10) || 2))
           : 2;
+        const sincronizarFechas = !(
+          params.sincronizar_fechas === false ||
+          params.sincronizar_fechas === "false" ||
+          params.sincronizar_fechas === 0 ||
+          params.sincronizar_fechas === "0" ||
+          params.sincronizar_fechas === "NO"
+        );
+        const descCortaRaw = (params.descripcion_corta !== undefined && params.descripcion_corta !== null)
+          ? String(params.descripcion_corta).trim()
+          : "";
 
         if (!idUnidad) {
           return res.status(200).json({ success: false, message: "Debe seleccionar la Unidad Curricular." });
+        }
+
+        const ucRows = await query("SELECT * FROM unidad_curricular WHERE id = ?", [idUnidad]);
+        const ucRow = ucRows[0];
+        if (!ucRow) {
+          return res.status(200).json({ success: false, message: "La Unidad Curricular seleccionada no existe." });
         }
 
         if (tipoActividad === "QUIZ") {
@@ -1312,6 +1308,7 @@ module.exports = async function handler(req, res) {
           quizConfigJson = JSON.stringify(cfgObj);
         }
 
+        let actividadIdFinal = params.id ? Number(params.id) : null;
         if (!params.id) {
           const dup = await query(
             "SELECT id FROM actividades_asignadas WHERE id_unidad_curricular = ? AND LOWER(numero_evaluacion) = ?",
@@ -1329,7 +1326,7 @@ module.exports = async function handler(req, res) {
             "INSERT INTO actividades_asignadas (id, id_unidad_curricular, fecha_asignacion, numero_evaluacion, descripcion, tipo_actividad, quiz_config_json, quiz_preguntas_json, tiempo_minutos, fecha_limite, ia_evaluacion, max_entregas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [newId, idUnidad, fechaAsig, numEval, desc, tipoActividad, quizConfigJson, quizPreguntasJson, tiempoMinutos, fechaLimite, iaEvaluacion, maxEntregas]
           );
-          return res.status(200).json({ success: true, message: "Actividad asignada con éxito.", id: newId });
+          actividadIdFinal = newId;
         } else {
           const dup = await query(
             "SELECT id FROM actividades_asignadas WHERE id_unidad_curricular = ? AND LOWER(numero_evaluacion) = ? AND id != ?",
@@ -1358,9 +1355,51 @@ module.exports = async function handler(req, res) {
               );
             } catch (eCleanAct) {}
           }
-
-          return res.status(200).json({ success: true, message: "Actividad asignada actualizada correctamente." });
         }
+
+        // 1) Asegurar evaluación / slots disponibles en #calificaciones (relacion_programa_notas)
+        const evalIndexMatch = numEval.match(/^e([1-8])$/);
+        const evalIndexNum = evalIndexMatch ? parseInt(evalIndexMatch[1], 10) : 4;
+        await ensureRelacionNotasForUnidadSql(ucRow, evalIndexNum);
+
+        // 2) Sincronizar automáticamente Fecha Límite y Descripción Corta en fecha_relacion_nota (#calificaciones -> Fechas)
+        let fechaSincronizada = null;
+        let updatedFechas = null;
+        if (sincronizarFechas) {
+          let descCortaFinal = descCortaRaw;
+          if (!descCortaFinal) {
+            if (params.id && params.descripcion_corta === undefined) {
+              const allFechasCur = await query("SELECT * FROM fecha_relacion_nota WHERE id_programa_formacion = ?", [ucRow.id_programa_formacion]);
+              const resolvedCur = resolveFechasUnidad(allFechasCur, ucRow).find(f => String(f.evaluacion || "").toLowerCase().trim() === numEval);
+              descCortaFinal = (resolvedCur && resolvedCur.descripcion) ? String(resolvedCur.descripcion).trim() : extractShortEvalDescription(desc, 100);
+            } else {
+              descCortaFinal = extractShortEvalDescription(desc, 100);
+            }
+          }
+          descCortaFinal = String(descCortaFinal || "").slice(0, 140);
+          fechaSincronizada = await upsertFechaRelacionNotaSql({
+            idPrograma: ucRow.id_programa_formacion,
+            seccion: ucRow.seccion,
+            idUnidad: ucRow.id,
+            evaluacion: numEval,
+            fecha: fechaLimite,
+            descripcion: descCortaFinal
+          });
+          updatedFechas = await query("SELECT * FROM fecha_relacion_nota ORDER BY id ASC");
+        }
+
+        const baseMsg = params.id ? "Actividad asignada actualizada correctamente." : "Actividad asignada con éxito.";
+        const syncMsg = fechaSincronizada
+          ? ` Se actualizó automáticamente en #calificaciones (${numEval.toUpperCase()}: "${fechaSincronizada.descripcion || "Sin descripción"}", fecha ${fechaSincronizada.fecha}).`
+          : "";
+
+        return res.status(200).json({
+          success: true,
+          message: baseMsg + syncMsg,
+          id: actividadIdFinal,
+          fecha_sincronizada: fechaSincronizada,
+          fechasNotas: updatedFechas
+        });
       }
 
       case "deleteActividadAsignada": {
@@ -3352,6 +3391,117 @@ module.exports = async function handler(req, res) {
 /**
  * Helper: Sincroniza nota de una entrega o quiz con la tabla relacion_programa_notas
  */
+async function upsertFechaRelacionNotaSql({ idPrograma, seccion, idUnidad = 0, evaluacion = "e1", fecha = "", descripcion = "" }) {
+  const sec = formatSeccion(seccion);
+  const cleanSec = sec.replace(/^'/, "");
+  const evalKey = (evaluacion || "e1").toString().toLowerCase().trim();
+  const fechaVal = normalizeDateYMD(fecha);
+  const descVal = (descripcion || "").toString().trim();
+  const unitId = parseInt(idUnidad, 10) || 0;
+
+  if (unitId > 0) {
+    const exactRows = await query(
+      "SELECT id FROM fecha_relacion_nota WHERE id_unidad_curricular = ? AND LOWER(evaluacion) = ?",
+      [unitId, evalKey]
+    );
+    if (exactRows.length > 0) {
+      await execute(
+        "UPDATE fecha_relacion_nota SET fecha = ?, descripcion = ?, id_programa_formacion = ?, seccion = ? WHERE id = ?",
+        [fechaVal, descVal, idPrograma, sec, exactRows[0].id]
+      );
+      return { id: exactRows[0].id, id_unidad_curricular: unitId, evaluacion: evalKey, fecha: fechaVal, descripcion: descVal };
+    }
+
+    const legacyRows = await query(
+      "SELECT id FROM fecha_relacion_nota WHERE id_programa_formacion = ? AND seccion IN (?, ?) AND (id_unidad_curricular IS NULL OR id_unidad_curricular = 0) AND LOWER(evaluacion) = ?",
+      [idPrograma, cleanSec, sec, evalKey]
+    );
+    if (legacyRows.length > 0) {
+      const siblingUcs = await query(
+        "SELECT id FROM unidad_curricular WHERE id_programa_formacion = ? AND seccion IN (?, ?)",
+        [idPrograma, cleanSec, sec]
+      );
+      if (siblingUcs.length <= 1) {
+        await execute(
+          "UPDATE fecha_relacion_nota SET fecha = ?, descripcion = ?, id_unidad_curricular = ?, seccion = ? WHERE id = ?",
+          [fechaVal, descVal, unitId, sec, legacyRows[0].id]
+        );
+        return { id: legacyRows[0].id, id_unidad_curricular: unitId, evaluacion: evalKey, fecha: fechaVal, descripcion: descVal };
+      }
+    }
+
+    await execute(
+      "INSERT INTO fecha_relacion_nota (id_programa_formacion, seccion, evaluacion, fecha, descripcion, id_unidad_curricular) VALUES (?, ?, ?, ?, ?, ?)",
+      [idPrograma, sec, evalKey, fechaVal, descVal, unitId]
+    );
+    return { id_unidad_curricular: unitId, evaluacion: evalKey, fecha: fechaVal, descripcion: descVal };
+  }
+
+  const existing = await query(
+    "SELECT id FROM fecha_relacion_nota WHERE id_programa_formacion = ? AND seccion IN (?, ?) AND (id_unidad_curricular IS NULL OR id_unidad_curricular = 0) AND LOWER(evaluacion) = ?",
+    [idPrograma, cleanSec, sec, evalKey]
+  );
+
+  if (existing.length > 0) {
+    await execute(
+      "UPDATE fecha_relacion_nota SET fecha = ?, descripcion = ? WHERE id = ?",
+      [fechaVal, descVal, existing[0].id]
+    );
+  } else {
+    await execute(
+      "INSERT INTO fecha_relacion_nota (id_programa_formacion, seccion, evaluacion, fecha, descripcion, id_unidad_curricular) VALUES (?, ?, ?, ?, ?, 0)",
+      [idPrograma, sec, evalKey, fechaVal, descVal]
+    );
+  }
+  return { id_unidad_curricular: 0, evaluacion: evalKey, fecha: fechaVal, descripcion: descVal };
+}
+
+async function ensureRelacionNotasForUnidadSql(ucRow, evalIndexNum = 4) {
+  if (!ucRow || !ucRow.id) return;
+  const targetCant = Math.min(8, Math.max(4, parseInt(evalIndexNum, 10) || 4));
+  const sec = formatSeccion(ucRow.seccion);
+  const cleanSec = sec.replace(/^'/, "");
+
+  const [existingRels, enrolledStudents] = await Promise.all([
+    query("SELECT * FROM relacion_programa_notas WHERE id_unidad_curricular = ?", [ucRow.id]),
+    query("SELECT id FROM estudiantes WHERE id_programa_formacion = ? AND seccion IN (?, ?)", [ucRow.id_programa_formacion, cleanSec, sec])
+  ]);
+
+  const stmts = [];
+  const relEstIds = new Set();
+
+  for (const rn of (existingRels || [])) {
+    relEstIds.add(String(rn.id_estudiante));
+    const currentCant = parseInt(rn.cantidad_evaluaciones, 10) || 4;
+    if (currentCant < targetCant) {
+      const scores = ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"].map(k => parseFloat(rn[k]) || 0);
+      const total = (scores.slice(0, targetCant).reduce((a, b) => a + b, 0) / targetCant).toFixed(2);
+      stmts.push({
+        sql: "UPDATE relacion_programa_notas SET cantidad_evaluaciones = ?, total = ? WHERE id = ?",
+        args: [targetCant, total, rn.id]
+      });
+    }
+  }
+
+  let nextId = null;
+  for (const est of (enrolledStudents || [])) {
+    if (relEstIds.has(String(est.id))) continue;
+    if (nextId === null) {
+      nextId = await getNextId("relacion_programa_notas");
+    } else {
+      nextId++;
+    }
+    stmts.push({
+      sql: "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, e6, e7, e8, total) VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0)",
+      args: [nextId, est.id, ucRow.id, targetCant]
+    });
+  }
+
+  if (stmts.length > 0) {
+    await batch(stmts, "write");
+  }
+}
+
 async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
   const actRows = await query("SELECT * FROM actividades_asignadas WHERE id = ?", [idActividad]);
   const act = actRows[0];
@@ -3362,6 +3512,7 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
 
   const validEvals = ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"];
   if (!validEvals.includes(numEval)) return;
+  const evalIndex = parseInt(numEval.replace("e", ""), 10) || 1;
 
   const relRows = await query(
     "SELECT * FROM relacion_programa_notas WHERE id_estudiante = ? AND id_unidad_curricular = ?",
@@ -3372,7 +3523,7 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
 
   if (relRows.length > 0) {
     const rn = relRows[0];
-    const cantEval = parseInt(rn.cantidad_evaluaciones) || 4;
+    const cantEval = Math.min(8, Math.max(parseInt(rn.cantidad_evaluaciones) || 4, evalIndex));
     let e1 = numEval === "e1" ? cleanNota : (parseFloat(rn.e1) || 0);
     let e2 = numEval === "e2" ? cleanNota : (parseFloat(rn.e2) || 0);
     let e3 = numEval === "e3" ? cleanNota : (parseFloat(rn.e3) || 0);
@@ -3386,11 +3537,12 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
     let total = (active.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
 
     await execute(
-      `UPDATE relacion_programa_notas SET ${numEval} = ?, total = ? WHERE id = ?`,
-      [cleanNota, total, rn.id]
+      `UPDATE relacion_programa_notas SET cantidad_evaluaciones = ?, ${numEval} = ?, total = ? WHERE id = ?`,
+      [cantEval, cleanNota, total, rn.id]
     );
   } else {
     const newId = await getNextId("relacion_programa_notas");
+    const cantEval = Math.min(8, Math.max(4, evalIndex));
     let e1 = numEval === "e1" ? cleanNota : 0;
     let e2 = numEval === "e2" ? cleanNota : 0;
     let e3 = numEval === "e3" ? cleanNota : 0;
@@ -3399,11 +3551,11 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
     let e6 = numEval === "e6" ? cleanNota : 0;
     let e7 = numEval === "e7" ? cleanNota : 0;
     let e8 = numEval === "e8" ? cleanNota : 0;
-    let total = (cleanNota / 4).toFixed(2);
+    let total = (cleanNota / cantEval).toFixed(2);
 
     await execute(
-      "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, e6, e7, e8, total) VALUES (?, ?, ?, 4, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [newId, idEstudiante, idUnidad, e1, e2, e3, e4, e5, e6, e7, e8, total]
+      "INSERT INTO relacion_programa_notas (id, id_estudiante, id_unidad_curricular, cantidad_evaluaciones, e1, e2, e3, e4, e5, e6, e7, e8, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [newId, idEstudiante, idUnidad, cantEval, e1, e2, e3, e4, e5, e6, e7, e8, total]
     );
   }
 }

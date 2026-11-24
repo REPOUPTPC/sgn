@@ -216,6 +216,16 @@ async function ensureSchemaColumns() {
         }
       }
 
+      // Garantizar columna id_unidad_curricular en fecha_relacion_nota (0 = legado compartido por sección)
+      const fechaCols = (await query("PRAGMA table_info(fecha_relacion_nota)") || []).map(c => c.name);
+      if (!fechaCols.includes("id_unidad_curricular")) {
+        try {
+          await execute("ALTER TABLE fecha_relacion_nota ADD COLUMN id_unidad_curricular INTEGER DEFAULT 0");
+        } catch (eAlt) {
+          if (!String(eAlt.message || eAlt).toLowerCase().includes("duplicate column")) throw eAlt;
+        }
+      }
+
       await execute(`
         CREATE TABLE IF NOT EXISTS api_keys (
           id INTEGER PRIMARY KEY,

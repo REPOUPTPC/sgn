@@ -74,7 +74,8 @@ async function migrate() {
       seccion TEXT,
       evaluacion TEXT,
       fecha TEXT,
-      descripcion TEXT
+      descripcion TEXT,
+      id_unidad_curricular INTEGER DEFAULT 0
     );`,
     `CREATE INDEX IF NOT EXISTS idx_fecha_prog_sec ON fecha_relacion_nota(id_programa_formacion, seccion);`,
     `CREATE TABLE IF NOT EXISTS actividades_asignadas (

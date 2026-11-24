@@ -36,13 +36,11 @@
 
 - **`api/lib/db.js`:** `resolveFastIPv4` (L18), `invalidateCache` (L96), `query`/`execute`/`batch` (L113–138), `getNextId` (L139), `getCatalogData` (L148), `ensureSchemaColumns` (L182–280).
 - **`api/lib/s3.js`:** `getMimeType` (L18), `sanitizeFileName` (L35), `uploadBase64` (L43), `extractR2KeyFromUrl` (L90), `deleteObject` (L116).
-- **`api/lib/helpers.js`:** `cleanCedula` (L10), `formatSeccion` (L24), `normalizeDateYMD` (L32), `getCaracasTodayYMD` (L63), `evaluateLapsoActividad` (L96), `formatServerDateTime` (L158), `shuffleArrayFisherYates` (L167), `isReservedTestCedula` (L178).
+- **`api/lib/helpers.js`:** `cleanCedula` (L10), `formatSeccion` (L24), `normalizeDateYMD` (L32), `getCaracasTodayYMD` (L63), `evaluateLapsoActividad` (L96), `formatServerDateTime` (L158), `shuffleArrayFisherYates` (L167), `isReservedTestCedula` (L178), `extractShortEvalDescription` (L198), `resolveFechasUnidad` (L217).
 - **`api/sgn.js` (funciones auxiliares al final):**
-  - `syncNotaToRelacionSql` (L3355)
-  - `getMaxEntregasActividad` (L3411), `isIaFailedNotaEntrega` (L3416), `parseHistorialEntregas` (L3424), `buildEntregaSummary` (L3499), `applyGradeToHistorial` (L3524)
-  - `syncRelacionToEntregasSql` (L3562)
-  - `evaluarEntregaIaLogic` (L3602)
-  - `analyzeQuizDiagnostico` y helpers de tiempo (L3679–3750+)
+  - `upsertFechaRelacionNotaSql` (L3394), `ensureRelacionNotasForUnidadSql` (L3459), `syncNotaToRelacionSql` (L3505)
+  - `getMaxEntregasActividad`, `isIaFailedNotaEntrega`, `parseHistorialEntregas` (L3576), `buildEntregaSummary` (L3651), `applyGradeToHistorial` (L3676)
+  - `syncRelacionToEntregasSql`, `evaluarEntregaIaLogic` (L3754), `analyzeQuizDiagnostico` (L3864)
 - Para el índice línea a línea de cada `case "..."`, consultar `docs/API_Y_BD.md`.
 
 ---
@@ -73,8 +71,8 @@
 - **Estudiantes + CSV + Ficha individual:** `renderEstudiantesTable` (L450), `openModalEstudiante`/`editEstudiante`/`saveEstudianteSubmit` (L639–746), `openModalCSV`/`processCSVUpload` (L779–917), `openModalCalificacionesEstudiante` + helpers historial entregas (`getMaxEntregasDash`, `parseHistorialEntregasDash`, `buildEntregaSummaryDash`, `renderHistorialEntregasDashHtml`, `renderModalCalificacionesEstudianteContenido`, `guardarEvaluacionesEstudianteModal`, `guardarEntregaEstudianteModal`) (L955–1616).
 - **Docentes, Unidades, Programas:** `renderProfesoresTable`..`deleteProgramaPrompt` (L1617–1921).
 - **Planilla Notas y PDFs:** `renderNotasTable` (L1922), `saveBulkNotasSubmit` (L2025), `generarPDF` (L2114), `generarPDFNominaAsistencia` (L2331).
-- **Fechas, Clave y Navegación Hash:** `openGlobalModalFechas`/`saveFechasSubmit` (L2481–2589), `openModalCambiarClave`/`submitChangePassword` (L2590–2654), `setupHashNavigation`/`restoreTabFromHash` (L2655–2704).
-- **Actividades, Lapsos y Quiz Markdown:** `renderActividadesTable` (L2738), helpers lapso/fecha (L3022–3160), `parseMarkdownQuizBank` / `serializeQuizBankToMarkdown` / `updateQuizMarkdownPreview` (L3226–3465), `openModalActividad` / `editActividad` / `saveActividadSubmit` / `deleteActividadPrompt` (L3550–4000).
+- **Fechas, Clave y Navegación Hash:** `resolveFechaNotaForUnidadDash` (L2488), `openGlobalModalFechas`/`saveFechasSubmit` (L2516–2620), `openModalCambiarClave`/`submitChangePassword` (L2630+), `setupHashNavigation`/`restoreTabFromHash` (L2700+).
+- **Actividades, Lapsos y Quiz Markdown:** `renderActividadesTable` (L2780+), helpers lapso/fecha (L3070–3235), `parseMarkdownQuizBank` / `serializeQuizBankToMarkdown` / `updateQuizMarkdownPreview` (L3270–3510), `refreshActividadFechaSyncPanel` (L3649), `openModalActividad` / `editActividad` / `saveActividadSubmit` / `deleteActividadPrompt` (L3690–4090).
 - **Modal Entregas, IA y Diagnóstico Quiz Docente:** `isEntregaCalificadaValida` (L4001), `openModalEntregas` (L4030), `renderTablaEntregasActividad` (L4072), `filterEntregasTable` (L4404), `openQuizResultadoEstudiante` / `renderModalDiagnosticoQuizDocente` / reaplicación Quiz (L4515–5104), `aplicarNotaMasivaEntregas` / `guardarTodasNotasEntregasSubmit` / `saveNotaEntregaSubmit` / IA (`autoevaluarEntregaIndividualDocente`, `evaluarPendientesConIAModal`) (L5105–5482).
 - **Extensión:** L5483–6035 (`renderExtensionTable`, pagos, estado `Impartido` / curso, exportación CSV).
 - **API Keys:** L6036–6425 (`loadApiKeysTable`, crear/alternar/probar API).
@@ -108,6 +106,6 @@ Cuando modifiques CSS o JS, actualiza el parámetro de versión correspondiente 
 | `js/config.js` | `?v=2.3` | `?v=2.3` | `?v=2.3` |
 | `js/modals.js` | `?v=2.2` | `?v=2.2` | `?v=2.2` |
 | `js/auth.js` | `?v=2.1` | `?v=2.1` | `?v=2.1` |
-| `js/dashboard.js` | — | `?v=2.5` | — |
+| `js/dashboard.js` | — | `?v=2.6` | — |
 | `js/student.js` | `?v=2.4` | — | `?v=2.4` |
 | `js/extension.js` | — | — | `?v=2.2` |

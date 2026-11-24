@@ -1147,7 +1147,7 @@ if (!empty($data['success'])) {
 
   <!-- Modal Fechas de Evaluación -->
   <div class="modal fade" id="modalFechasNota" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-fullscreen-md-down modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header modal-header-blue">
           <h5 class="modal-title fw-bold"><i class="fa-regular fa-calendar-days me-2"></i> Fechas y Descripciones de Evaluación</h5>
@@ -1303,13 +1303,13 @@ if (!empty($data['success'])) {
 
   <!-- Modal Asignar / Editar Actividad -->
   <div class="modal fade" id="modalActividad" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-fullscreen-md-down modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header modal-header-blue">
           <h5 class="modal-title fw-bold" id="modalActividadTitle"><i class="fa-solid fa-list-check me-2"></i> Asignar Actividad o Evaluación</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <form id="modalActividadForm" onsubmit="event.preventDefault(); saveActividadSubmit();">
+        <form id="modalActividadForm" class="d-flex flex-column flex-grow-1 overflow-hidden" style="min-height: 0;" onsubmit="event.preventDefault(); saveActividadSubmit();">
           <input type="hidden" id="actividadId">
           <div class="modal-body p-4">
             <div class="row g-3">
@@ -1319,7 +1319,7 @@ if (!empty($data['success'])) {
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Número de Evaluación *</label>
-                <select id="actividadEval" class="form-select" required>
+                <select id="actividadEval" class="form-select" required onchange="onActividadEvalSelectionChange()">
                   <option value="e1">Evaluación 1 (E1)</option>
                   <option value="e2">Evaluación 2 (E2)</option>
                   <option value="e3">Evaluación 3 (E3)</option>
@@ -1352,6 +1352,49 @@ if (!empty($data['success'])) {
                 <label class="form-label fw-bold text-danger"><i class="fa-regular fa-calendar-xmark me-1"></i> Fecha Límite (Cierre) *</label>
                 <input type="date" id="actividadFechaLimite" class="form-control border-danger fw-semibold" onchange="onActividadLapsoChange('limite')" required>
                 <div class="form-text small">Al vencer se bloquean entregas.</div>
+              </div>
+              <!-- SINCRONIZACIÓN AUTOMÁTICA CON CALIFICACIONES (FECHAS Y DESCRIPCIONES DE EVALUACIÓN) -->
+              <div class="col-md-12" id="actividadSyncFechasCard">
+                <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-10 p-3 rounded-3 shadow-xs">
+                  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                      <input class="form-check-input" type="checkbox" role="switch" id="actividadSyncFechasNota" checked onchange="refreshActividadFechaSyncPanel()" style="width: 2.5em; height: 1.3em; cursor: pointer;">
+                      <label class="form-check-label fw-bold text-navy mb-0 cursor-pointer small" for="actividadSyncFechasNota">
+                        <i class="fa-regular fa-calendar-check text-primary me-1"></i> Actualizar automáticamente en Calificaciones (Fechas y Descripciones)
+                      </label>
+                    </div>
+                    <span class="badge bg-primary text-white" id="badgeSyncEvalTarget">Destino: Evaluación 1 (E1)</span>
+                  </div>
+                  <div id="actividadSyncFechasBody" class="row g-2 align-items-start">
+                    <div class="col-12 col-md-8">
+                      <label for="actividadDescCorta" class="form-label fw-bold text-navy mb-1 small">
+                        Descripción Corta de Evaluación (visible en Calificaciones y Estudiante)
+                      </label>
+                      <div class="input-group input-group-sm">
+                        <input type="text" id="actividadDescCorta" class="form-control border-primary" maxlength="120" placeholder="Ej. Taller Práctico I, Examen Parcial, Proyecto Final..." oninput="onInputDescCortaActividad()">
+                        <button type="button" class="btn btn-outline-primary fw-semibold" onclick="sugerirDescCortaDesdeInstrucciones()" title="Extraer título corto desde la descripción principal">
+                          <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Resumir
+                        </button>
+                      </div>
+                      <div class="form-text small">
+                        Se registrará en <strong>Fechas y Descripciones de Evaluación</strong> de <code>#calificaciones</code>. Si se deja vacío al guardar, se resumirá automáticamente de las instrucciones.
+                      </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label class="form-label fw-bold text-navy mb-1 small">
+                        Fecha en #calificaciones
+                      </label>
+                      <div class="form-control form-control-sm bg-white border-danger-subtle fw-bold text-danger d-flex align-items-center justify-content-between gap-1">
+                        <span><i class="fa-regular fa-calendar-xmark me-1"></i> <span id="actividadFechaCierreSyncPreview">--</span></span>
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.65rem;">Fecha Límite</span>
+                      </div>
+                      <div class="form-text small">Sincronizada con la fecha de cierre.</div>
+                    </div>
+                    <div class="col-12">
+                      <div id="actividadSyncFechasPreviewNote" class="small px-2 py-1 rounded bg-white border text-muted mt-1"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <!-- CONFIGURACIÓN DE MÁXIMO DE ENTREGAS EVALUABLES -->
               <div class="col-md-12" id="actividadMaxEntregasGroup">
@@ -2143,6 +2186,6 @@ if (!empty($data['success'])) {
   <script src="js/config.js?v=2.3"></script>
   <script src="js/modals.js?v=2.2"></script>
   <script src="js/auth.js?v=2.1"></script>
-  <script src="js/dashboard.js?v=2.5"></script>
+  <script src="js/dashboard.js?v=2.6"></script>
 </body>
 </html>

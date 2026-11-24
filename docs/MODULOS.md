@@ -6,7 +6,7 @@
 
 ## 1. Entregas Digitales Múltiples (`max_entregas`), Sustitución sin Descuento y Optimización R2
 
-- **Configuración docente:** al crear o editar una actividad tipo `ENTREGA`, el docente define `#actividadMaxEntregas` (`max_entregas`, entero `1..20`, **valor por defecto `2`**). Se oculta para actividades `QUIZ`.
+- **Configuración docente y sincronización automática con `#calificaciones`:** al crear o editar una actividad (`#modalActividad` -> `saveActividadAsignada`), el docente configura `#actividadMaxEntregas` (`max_entregas`, entero `1..20`, **valor por defecto `2`**, oculto para `QUIZ`). Si `#actividadSyncFechasNota` está activo (por defecto sí), el guardado **sincroniza automáticamente** `fecha_relacion_nota` (sección *Fechas y Descripciones de Evaluación* en `#calificaciones`) usando la **Fecha Límite** y `#actividadDescCorta` (o un resumen limpio de la primera línea si se deja vacío), garantiza filas/slots en `relacion_programa_notas` (ampliando `cantidad_evaluaciones` si es `E5..E8`), y muestra el título/fecha en el portal estudiantil y en la cabecera/tarjetas móviles de `#tablaNotas`.
 - **Sustitución de entrega NO calificada:**
   - Mientras la entrega vigente no haya sido calificada (`calificado === false`), el estudiante puede enviar otro archivo o enlace las veces que quiera.
   - No incrementa `numero_entrega` ni consume del límite `max_entregas`.
