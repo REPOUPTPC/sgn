@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   
   <!-- Estilos Personalizados (Blanco + Azul) -->
-  <link rel="stylesheet" href="css/style.css?v=1.8">
+  <link rel="stylesheet" href="css/style.css?v=2.0">
 </head>
 <body>
 
@@ -45,10 +45,14 @@
         </a>
       </div>
       
-      <div class="d-flex align-items-center gap-1 gap-sm-2">
+      <div class="d-flex align-items-center flex-wrap gap-1 gap-sm-2">
         <div class="text-end d-none d-md-block me-2">
           <strong class="d-block text-navy" id="navUserName">Usuario</strong>
           <span class="badge bg-primary" id="navUserRole">Rol</span>
+        </div>
+        <div class="d-flex d-md-none align-items-center gap-1 me-1">
+          <span class="badge bg-light text-navy border fw-bold" id="navUserNameMobile">Usuario</span>
+          <span class="badge bg-primary" id="navUserRoleMobile">Rol</span>
         </div>
         <button type="button" class="btn btn-outline-primary btn-sm py-1 px-2 px-sm-3" id="btnHeaderCambiarClave" onclick="openModalCambiarClave()" title="Cambiar Contraseña">
           <i class="fa-solid fa-key me-1"></i> <span class="d-none d-sm-inline">Cambiar Clave</span>
@@ -139,11 +143,11 @@
                   <input type="text" id="searchEstudiantes" class="form-control search-box-input" placeholder="Buscar por Nombre o Cédula en tiempo real...">
                 </div>
               </div>
-              <div class="col-12 col-md-3 col-lg-4 text-md-end d-flex gap-2 justify-content-md-end">
-                <button class="btn btn-outline-success" onclick="openModalCSV()">
+              <div class="col-12 col-md-3 col-lg-4 text-md-end d-flex flex-wrap gap-2 justify-content-md-end">
+                <button class="btn btn-outline-success flex-fill flex-md-grow-0" onclick="openModalCSV()">
                   <i class="fa-solid fa-file-csv me-2"></i> Carga Masiva
                 </button>
-                <button class="btn btn-primary-sgn" onclick="openModalEstudiante()">
+                <button class="btn btn-primary-sgn flex-fill flex-md-grow-0" onclick="openModalEstudiante()">
                   <i class="fa-solid fa-plus me-2"></i> Nuevo Estudiante
                 </button>
               </div>
@@ -153,7 +157,7 @@
             <div id="infoFiltroEstudiantes" class="mb-4"></div>
             
             <div class="table-responsive">
-              <table class="sgn-table" id="tablaEstudiantes">
+              <table class="sgn-table sgn-mobile-cards" id="tablaEstudiantes">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -179,18 +183,22 @@
       <div class="tab-pane fade" id="tab-profesores" role="tabpanel">
         <div class="card card-custom">
           <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-              <div class="search-box-group flex-grow-1">
-                <i class="fa-solid fa-search"></i>
-                <input type="text" id="searchProfesores" class="form-control search-box-input" placeholder="Buscar Docente en tiempo real...">
+            <div class="row g-2 align-items-center mb-4">
+              <div class="col-12 col-md">
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchProfesores" class="form-control search-box-input" placeholder="Buscar Docente en tiempo real...">
+                </div>
               </div>
-              <button class="btn btn-primary-sgn" onclick="openModalProfesor()">
-                <i class="fa-solid fa-user-plus me-2"></i> Nuevo Docente
-              </button>
+              <div class="col-12 col-md-auto">
+                <button class="btn btn-primary-sgn w-100 w-md-auto" onclick="openModalProfesor()">
+                  <i class="fa-solid fa-user-plus me-2"></i> Nuevo Docente
+                </button>
+              </div>
             </div>
             
             <div class="table-responsive">
-              <table class="sgn-table" id="tablaProfesores">
+              <table class="sgn-table sgn-mobile-cards" id="tablaProfesores">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -215,18 +223,22 @@
       <div class="tab-pane fade" id="tab-unidades" role="tabpanel">
         <div class="card card-custom">
           <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-              <div class="search-box-group flex-grow-1">
-                <i class="fa-solid fa-search"></i>
-                <input type="text" id="searchUnidades" class="form-control search-box-input" placeholder="Buscar Unidad Curricular o Sección...">
+            <div class="row g-2 align-items-center mb-4">
+              <div class="col-12 col-md">
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchUnidades" class="form-control search-box-input" placeholder="Buscar Unidad Curricular o Sección...">
+                </div>
               </div>
-              <button class="btn btn-primary-sgn" onclick="openModalUnidad()">
-                <i class="fa-solid fa-plus me-2"></i> Agregar Unidad Curricular
-              </button>
+              <div class="col-12 col-md-auto">
+                <button class="btn btn-primary-sgn w-100 w-md-auto" onclick="openModalUnidad()">
+                  <i class="fa-solid fa-plus me-2"></i> Agregar Unidad Curricular
+                </button>
+              </div>
             </div>
             
             <div class="table-responsive">
-              <table class="sgn-table" id="tablaUnidades">
+              <table class="sgn-table sgn-mobile-cards" id="tablaUnidades">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -249,18 +261,22 @@
       <div class="tab-pane fade" id="tab-programas" role="tabpanel">
         <div class="card card-custom">
           <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-              <div class="search-box-group flex-grow-1">
-                <i class="fa-solid fa-search"></i>
-                <input type="text" id="searchProgramas" class="form-control search-box-input" placeholder="Buscar Programa en tiempo real...">
+            <div class="row g-2 align-items-center mb-4">
+              <div class="col-12 col-md">
+                <div class="search-box-group">
+                  <i class="fa-solid fa-search"></i>
+                  <input type="text" id="searchProgramas" class="form-control search-box-input" placeholder="Buscar Programa en tiempo real...">
+                </div>
               </div>
-              <button class="btn btn-primary-sgn" onclick="openModalPrograma()">
-                <i class="fa-solid fa-plus me-2"></i> Nuevo Programa
-              </button>
+              <div class="col-12 col-md-auto">
+                <button class="btn btn-primary-sgn w-100 w-md-auto" onclick="openModalPrograma()">
+                  <i class="fa-solid fa-plus me-2"></i> Nuevo Programa
+                </button>
+              </div>
             </div>
             
             <div class="table-responsive">
-              <table class="sgn-table" id="tablaProgramas">
+              <table class="sgn-table sgn-mobile-cards" id="tablaProgramas">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -299,32 +315,36 @@
                   <input type="text" id="searchNotas" class="form-control search-box-input" placeholder="Buscar por Nombre o Cédula en tiempo real...">
                 </div>
               </div>
-              <div class="col-12 col-md-4 col-lg-4 d-flex gap-2 align-items-end justify-content-md-end flex-wrap">
-                <div>
-                  <label class="fw-bold text-navy mb-1 small d-block"><i class="fa-solid fa-calculator me-1"></i> Plan Evaluaciones</label>
-                  <select id="selectCantEvalGestion" class="form-select form-select-sm border-primary" style="width: 155px;">
-                    <option value="4" selected>4 Evaluaciones</option>
-                    <option value="5">5 Evaluaciones</option>
-                    <option value="6">6 Evaluaciones</option>
-                    <option value="7">7 Evaluaciones</option>
-                    <option value="8">8 Evaluaciones</option>
-                  </select>
+              <div class="col-12 col-md-4 col-lg-4">
+                <div class="row g-2 align-items-end">
+                  <div class="col-12 col-sm-6 col-md-auto">
+                    <label class="fw-bold text-navy mb-1 small d-block"><i class="fa-solid fa-calculator me-1"></i> Plan Evaluaciones</label>
+                    <select id="selectCantEvalGestion" class="form-select form-select-sm border-primary w-100">
+                      <option value="4" selected>4 Evaluaciones</option>
+                      <option value="5">5 Evaluaciones</option>
+                      <option value="6">6 Evaluaciones</option>
+                      <option value="7">7 Evaluaciones</option>
+                      <option value="8">8 Evaluaciones</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-sm-6 col-md d-flex flex-wrap gap-1 justify-content-md-end">
+                    <button class="btn btn-outline-info btn-sm flex-fill flex-md-grow-0" onclick="openGlobalModalFechas()" title="Configurar Fechas">
+                      <i class="fa-regular fa-calendar-days me-1"></i> Fechas
+                    </button>
+                    <button class="btn btn-danger btn-sm flex-fill flex-md-grow-0" id="btnGenerarPDF" onclick="generarPDF()" style="display: none;" title="Generar Planilla PDF">
+                      <i class="fa-solid fa-file-pdf me-1"></i> PDF
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm flex-fill flex-md-grow-0" id="btnGenerarNomina" onclick="generarPDFNominaAsistencia()" style="display: none;" title="Nómina Asistencia">
+                      <i class="fa-solid fa-clipboard-user me-1"></i> Asistencia
+                    </button>
+                  </div>
                 </div>
-                <button class="btn btn-outline-info btn-sm" onclick="openGlobalModalFechas()" title="Configurar Fechas">
-                  <i class="fa-regular fa-calendar-days me-1"></i> Fechas
-                </button>
-                <button class="btn btn-danger btn-sm" id="btnGenerarPDF" onclick="generarPDF()" style="display: none;" title="Generar Planilla PDF">
-                  <i class="fa-solid fa-file-pdf me-1"></i> PDF
-                </button>
-                <button class="btn btn-outline-danger btn-sm" id="btnGenerarNomina" onclick="generarPDFNominaAsistencia()" style="display: none;" title="Nómina Asistencia">
-                  <i class="fa-solid fa-clipboard-user me-1"></i> Asistencia
-                </button>
               </div>
             </div>
             
             <div class="table-responsive" id="containerTablaNotas" style="display: none;">
               <form id="bulkNotasForm" onsubmit="event.preventDefault(); saveBulkNotasSubmit();">
-                <table class="sgn-table" id="tablaNotas">
+                <table class="sgn-table sgn-mobile-cards" id="tablaNotas">
                   <thead>
                     <tr>
                       <th>Cédula</th>
@@ -342,7 +362,7 @@
                   </tbody>
                 </table>
                 <div class="mt-4 text-end">
-                  <button type="submit" class="btn btn-success btn-lg">
+                  <button type="submit" class="btn btn-success btn-lg w-100 w-md-auto">
                     <i class="fa-solid fa-save me-2"></i> Guardar Todas las Notas
                   </button>
                 </div>
@@ -436,7 +456,7 @@
             </div>
             
             <div class="table-responsive">
-              <table class="sgn-table" id="tablaActividades">
+              <table class="sgn-table sgn-mobile-cards" id="tablaActividades">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -466,17 +486,17 @@
               <h4 class="fw-bold text-navy mb-0">
                 <i class="fa-solid fa-graduation-cap text-primary me-2"></i> Gestión de Pagos de Extensión Universitaria
               </h4>
-              <div class="d-flex align-items-center gap-2 flex-wrap">
-                <button type="button" class="btn btn-primary-sgn fw-bold" onclick="openPagoExtensionModal()" title="Registrar una nueva declaración de pago manualmente">
+              <div class="d-flex align-items-center gap-2 flex-wrap w-100 w-md-auto">
+                <button type="button" class="btn btn-primary-sgn fw-bold flex-fill flex-md-grow-0" onclick="openPagoExtensionModal()" title="Registrar una nueva declaración de pago manualmente">
                   <i class="fa-solid fa-plus me-1"></i> Nueva Declaración
                 </button>
-                <button type="button" class="btn btn-outline-primary fw-bold" onclick="bulkMarcarPagoEstado('TRUE')" title="Marcar todos los estudiantes de la vista como Visto / Impartido">
+                <button type="button" class="btn btn-outline-primary fw-bold flex-fill flex-md-grow-0" onclick="bulkMarcarPagoEstado('TRUE')" title="Marcar todos los estudiantes de la vista como Visto / Impartido">
                   <i class="fa-solid fa-check-double me-1"></i> Marcar Bloque Visto
                 </button>
-                <button type="button" class="btn btn-success text-white fw-bold px-3" onclick="exportExtensionCSV('todos')" title="Exportar todos los registros existentes del filtro actual en formato CSV">
+                <button type="button" class="btn btn-success text-white fw-bold px-3 flex-fill flex-md-grow-0" onclick="exportExtensionCSV('todos')" title="Exportar todos los registros existentes del filtro actual en formato CSV">
                   <i class="fa-solid fa-file-csv me-1"></i> Exportar CSV
                 </button>
-                <button type="button" class="btn btn-outline-success fw-bold px-3" onclick="exportExtensionCSV('pendientes')" title="Exportar solo los estudiantes que aún no han visto el curso (FALSE)">
+                <button type="button" class="btn btn-outline-success fw-bold px-3 flex-fill flex-md-grow-0" onclick="exportExtensionCSV('pendientes')" title="Exportar solo los estudiantes que aún no han visto el curso (FALSE)">
                   <i class="fa-solid fa-filter-circle-dollar me-1"></i> CSV (Solo Pendientes)
                 </button>
               </div>
@@ -507,7 +527,7 @@
             <div id="extCursoStatusBox" class="mb-4" style="display: none;"></div>
 
             <div class="table-responsive">
-              <table class="sgn-table" id="tablaExtensionPagos">
+              <table class="sgn-table sgn-mobile-cards" id="tablaExtensionPagos">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -588,7 +608,7 @@
 
             <!-- Tabla de Mensajes -->
             <div class="table-responsive">
-              <table class="sgn-table" id="tablaMensajes">
+              <table class="sgn-table sgn-mobile-cards" id="tablaMensajes">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -637,10 +657,10 @@
             <!-- Banner Informativo / Documentación Rápida -->
             <div class="alert alert-light border rounded-3 p-3 mb-4 shadow-sm">
               <div class="d-flex align-items-start gap-3">
-                <div class="bg-primary text-white rounded-circle p-3 d-flex align-items-center justify-content-center shadow-xs flex-shrink-0" style="width: 48px; height: 48px;">
+                <div class="bg-primary text-white rounded-circle p-3 d-none d-sm-flex align-items-center justify-content-center shadow-xs flex-shrink-0" style="width: 48px; height: 48px;">
                   <i class="fa-solid fa-code fs-5"></i>
                 </div>
-                <div class="flex-grow-1">
+                <div class="flex-grow-1" style="min-width: 0;">
                   <h6 class="fw-bold text-navy mb-1">Endpoint Oficial de Integración JSON</h6>
                   <p class="small text-muted mb-2">Para consultar o sincronizar el listado de estudiantes desde cualquier otra web o servidor externo, realice una petición <code>GET</code> o <code>POST</code> con las credenciales creadas:</p>
                   
@@ -686,7 +706,7 @@
 
             <!-- Tabla de Credenciales API -->
             <div class="table-responsive mb-4">
-              <table class="sgn-table" id="tablaApiKeys">
+              <table class="sgn-table sgn-mobile-cards" id="tablaApiKeys">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -1114,7 +1134,6 @@ if (!empty($data['success'])) {
               <input type="text" id="programaNombre" class="form-control text-uppercase" required placeholder="PNF EN INFORMÁTICA" style="text-transform: uppercase;">
             </div>
           </div>
-          </div>
           <div class="modal-footer bg-light">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
             <button type="submit" class="btn btn-primary-sgn">Guardar Programa</button>
@@ -1334,6 +1353,24 @@ if (!empty($data['success'])) {
                 <input type="date" id="actividadFechaLimite" class="form-control border-danger fw-semibold" onchange="onActividadLapsoChange('limite')" required>
                 <div class="form-text small">Al vencer se bloquean entregas.</div>
               </div>
+              <!-- CONFIGURACIÓN DE MÁXIMO DE ENTREGAS EVALUABLES -->
+              <div class="col-md-12" id="actividadMaxEntregasGroup">
+                <div class="card border border-info-subtle bg-info-subtle bg-opacity-10 p-3 rounded-3 shadow-xs">
+                  <div class="row g-2 align-items-center">
+                    <div class="col-12 col-sm-4">
+                      <label for="actividadMaxEntregas" class="form-label fw-bold text-navy mb-1 small">
+                        <i class="fa-solid fa-repeat text-primary me-1"></i> Máx. de Entregas Evaluables *
+                      </label>
+                      <input type="number" id="actividadMaxEntregas" class="form-control border-primary fw-bold text-center" min="1" max="20" value="2" required>
+                    </div>
+                    <div class="col-12 col-sm-8">
+                      <div class="small text-muted">
+                        <strong>Por defecto: 2 entregas evaluables.</strong> Si un estudiante envía un archivo y aún <em>no ha sido calificado</em>, podrá sustituirlo sin consumir intentos (optimizando almacenamiento al reemplazar el archivo previo). Cuando ya fue evaluado y envía una nueva entrega, será calificado nuevamente y la nueva nota (mayor o menor) sustituirá a la anterior, conservando el historial.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <!-- SWITCH DE AUTOEVALUACIÓN Y ASIGNACIÓN DE PUNTOS -->
               <div class="col-md-12" id="iaEvaluacionSection">
                 <div class="card border border-primary-subtle bg-light p-3 rounded-3 shadow-xs">
@@ -1505,7 +1542,7 @@ if (!empty($data['success'])) {
 
   <!-- Modal Revisar y Calificar Entregas de Estudiantes -->
   <div class="modal fade" id="modalEntregasActividad" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered">
       <div class="modal-content shadow-lg border-0">
         <div class="modal-header modal-header-blue py-3">
           <h5 class="modal-title fw-bold" id="modalEntregasTitle">
@@ -1516,7 +1553,7 @@ if (!empty($data['success'])) {
         <div class="modal-body p-4">
           <!-- Información de la Actividad y Estadísticas -->
           <div class="alert alert-info d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
-            <div class="d-flex align-items-start text-break desc-actividad-box flex-grow-1" style="min-width: 250px;">
+            <div class="d-flex align-items-start text-break desc-actividad-box flex-grow-1" style="min-width: 0; flex: 1 1 250px;">
               <i class="fa-solid fa-circle-info fa-lg me-2 mt-1 text-primary flex-shrink-0"></i>
               <div class="w-100" style="min-width: 0;">
                 <div id="entregasActividadDesc" class="text-break desc-actividad-box">Actividad: </div>
@@ -1621,7 +1658,7 @@ if (!empty($data['success'])) {
               </button>
             </div>
             
-            <div class="search-box-group flex-grow-1" style="max-width: 330px;">
+            <div class="search-box-group flex-grow-1" style="min-width: 220px;">
               <i class="fa-solid fa-search"></i>
               <input type="text" id="searchEntregasEstudiante" class="form-control form-control-sm search-box-input" placeholder="Buscar estudiante (nombre o cédula)...">
             </div>
@@ -1633,7 +1670,7 @@ if (!empty($data['success'])) {
 
           <!-- Tabla de Entregas -->
           <div class="table-responsive">
-            <table class="sgn-table align-middle" id="tablaEntregasActividad">
+            <table class="sgn-table sgn-mobile-cards align-middle" id="tablaEntregasActividad">
               <thead>
                 <tr>
                   <th width="110px">Cédula</th>
@@ -1667,7 +1704,7 @@ if (!empty($data['success'])) {
 
   <!-- Modal Ver Calificaciones, Entregas y Corregir Evaluaciones del Estudiante -->
   <div class="modal fade" id="modalCalificacionesEstudiante" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content shadow-lg border-0">
         <div class="modal-header modal-header-blue py-3">
           <h5 class="modal-title fw-bold" id="modalCalificacionesEstudianteTitle">
@@ -2103,9 +2140,9 @@ if (!empty($data['success'])) {
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
   
   <!-- SGN Modulos -->
-  <script src="js/config.js?v=2.2"></script>
-  <script src="js/modals.js?v=2.1"></script>
+  <script src="js/config.js?v=2.3"></script>
+  <script src="js/modals.js?v=2.2"></script>
   <script src="js/auth.js?v=2.1"></script>
-  <script src="js/dashboard.js?v=2.3"></script>
+  <script src="js/dashboard.js?v=2.5"></script>
 </body>
 </html>

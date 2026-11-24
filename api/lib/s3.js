@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 
 const R2_ENDPOINT = process.env.R2_ENDPOINT || "https://da7c23add0ce839e4989c068fbfa4394.r2.cloudflarestorage.com";
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "bdbdb1d94ce81e5569eb23e104f001df";
@@ -83,9 +83,55 @@ async function uploadBase64(folder, rawFileName, base64Data) {
   };
 }
 
+/**
+ * Extrae el key de Cloudflare R2 a partir de una URL pública de R2 o un key directo.
+ * Devuelve null si pertenece a un dominio externo (ej. Google Drive o Canva).
+ */
+function extractR2KeyFromUrl(urlOrKey) {
+  if (!urlOrKey) return null;
+  const str = String(urlOrKey).trim();
+  if (!str) return null;
+
+  if (!/^https?:\/\//i.test(str)) {
+    return str.replace(/^\/+/, "");
+  }
+
+  const prefix = R2_PUBLIC_URL + "/";
+  if (str.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return str.slice(prefix.length).split("?")[0].split("#")[0].replace(/^\/+/, "");
+  }
+
+  // Fallback por si el dominio configurado cambia ligeramente pero usa r2.dev/entregas/...
+  const r2Match = str.match(/^https?:\/\/[^/]+\.r2\.dev\/(.+)$/i);
+  if (r2Match && r2Match[1]) {
+    return r2Match[1].split("?")[0].split("#")[0].replace(/^\/+/, "");
+  }
+
+  return null;
+}
+
+/**
+ * Elimina un archivo en Cloudflare R2 dado su key o su URL pública.
+ */
+async function deleteObject(keyOrUrl) {
+  const key = extractR2KeyFromUrl(keyOrUrl);
+  if (!key) {
+    return { deleted: false, reason: "no_r2_key" };
+  }
+
+  await s3.send(new DeleteObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: key
+  }));
+
+  return { deleted: true, key };
+}
+
 module.exports = {
   s3,
   uploadBase64,
+  deleteObject,
+  extractR2KeyFromUrl,
   R2_BUCKET,
   R2_PUBLIC_URL
 };

@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const { query, execute, batch, getNextId, getCatalogData, ensureSchemaColumns, invalidateCache, memoryCache, ALL_DATA_TTL_MS } = require("./lib/db");
-const { uploadBase64, R2_PUBLIC_URL } = require("./lib/s3");
+const { uploadBase64, deleteObject, extractR2KeyFromUrl, R2_PUBLIC_URL } = require("./lib/s3");
 const {
   SUPER_ADMIN_EMAIL,
   SUPER_ADMIN_CEDULA,
@@ -159,6 +159,7 @@ module.exports = async function handler(req, res) {
         const subArgs = [cleanCed, digitsOnly, digitsOnly];
 
         // Ejecutar catálogos (desde caché en 0ms) y datos específicos del estudiante en 1 único batch HTTP
+        await ensureSchemaColumns();
         const [catalog, stBatch] = await Promise.all([
           getCatalogData(),
           batch([
@@ -231,46 +232,29 @@ module.exports = async function handler(req, res) {
           const cantEval = rnMatches.reduce((maxC, r) => Math.max(maxC, parseInt(r.cantidad_evaluaciones) || 4), 4);
           const actividadesDeUc = actividadesAll.filter(a => a.id_unidad_curricular == uc.id);
 
-          // Unificar E1..E8 tomando siempre el MAYOR valor entre relacion_programa_notas y actividades_entregadas
-          const evalScores = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0, e7: 0, e8: 0 };
+          // Notas base desde relacion_programa_notas
+          const rnScores = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0, e7: 0, e8: 0 };
           ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"].forEach(evKey => {
-            let maxVal = 0;
+            let maxRn = 0;
             rnMatches.forEach(r => {
               const v = parseFloat(r[evKey]);
-              if (!isNaN(v) && v > maxVal) maxVal = v;
+              if (!isNaN(v) && v > maxRn) maxRn = v;
             });
-            actividadesDeUc.forEach(act => {
-              const actEv = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
-              if (actEv === evKey) {
-                const matchingEnts = entregasAll.filter(e => String(e.id_actividades_asignadas).trim() === String(act.id).trim());
-                matchingEnts.forEach(ent => {
-                  const vEnt = parseFloat(ent.nota);
-                  if (!isNaN(vEnt) && vEnt > maxVal) maxVal = vEnt;
-                });
-              }
-            });
-            evalScores[evKey] = Math.min(20, Math.max(0, maxVal));
+            rnScores[evKey] = Math.min(20, Math.max(0, maxRn));
           });
 
-          let e1 = evalScores.e1;
-          let e2 = evalScores.e2;
-          let e3 = evalScores.e3;
-          let e4 = evalScores.e4;
-          let e5 = cantEval >= 5 ? evalScores.e5 : 0;
-          let e6 = cantEval >= 6 ? evalScores.e6 : 0;
-          let e7 = cantEval >= 7 ? evalScores.e7 : 0;
-          let e8 = cantEval >= 8 ? evalScores.e8 : 0;
-
-          let activeScores = [e1, e2, e3, e4, e5, e6, e7, e8].slice(0, cantEval);
-          let calcTotal = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
+          const entRecordByActId = new Map();
 
           const actividadesConEntrega = actividadesDeUc.map(act => {
-            // Si existen múltiples entregas para la misma actividad, priorizar la de mayor nota o más reciente
+            // Si existen múltiples filas por legado, priorizar la más reciente
             const matchingEnts = entregasAll.filter(e => String(e.id_actividades_asignadas).trim() === String(act.id).trim());
-            const ent = matchingEnts.sort((a, b) => (parseFloat(b.nota) || 0) - (parseFloat(a.nota) || 0) || (Number(b.id) - Number(a.id)))[0];
+            const ent = matchingEnts.sort((a, b) => (Number(b.id) - Number(a.id)))[0] || null;
+            if (ent) {
+              entRecordByActId.set(String(act.id), ent);
+            }
 
             const numEvalKey = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
-            const unifiedEvalScore = evalScores[numEvalKey] !== undefined ? evalScores[numEvalKey] : 0;
+            const rnFallbackScore = rnScores[numEvalKey] !== undefined ? rnScores[numEvalKey] : 0;
 
             const tipoAct = (act.tipo_actividad || "ENTREGA").toString().toUpperCase().trim() || "ENTREGA";
             let quizConfigSafe = null;
@@ -288,7 +272,11 @@ module.exports = async function handler(req, res) {
             }
 
             const isEnCurso = tipoAct === "QUIZ" && ent && String(ent.entrega || "").trim() === "EN_CURSO";
-            const hasEntrega = !isEnCurso && ent && !!(ent.entrega || ent.quiz_detalle_json);
+            const summaryEntrega = (tipoAct !== "QUIZ") ? buildEntregaSummary(ent, act) : null;
+            const latestEntrega = summaryEntrega ? summaryEntrega.latest : null;
+            const hasEntrega = (tipoAct === "QUIZ")
+              ? (!isEnCurso && ent && !!(ent.entrega || ent.quiz_detalle_json))
+              : !!(latestEntrega && latestEntrega.entrega);
 
             let quizDiagnostico = null;
             let quizReintentoAutorizado = false;
@@ -312,28 +300,48 @@ module.exports = async function handler(req, res) {
               }
             }
 
-            // Validar nota real: para QUIZ finalizado, el 0 también es una calificación numérica válida
-            const entNotaNum = (ent && ent.nota !== undefined && ent.nota !== null && ent.nota !== "") ? parseFloat(ent.nota) : NaN;
-            const isIaComment = ent && ent.comentario && (ent.comentario.includes("Evaluado por IA") || ent.comentario.includes("DeepSeek"));
-            const isFailedIaNota = isIaComment && (isNaN(entNotaNum) || entNotaNum === 0);
-            const isQuizConCeroValido = tipoAct === "QUIZ" && hasEntrega && !isNaN(entNotaNum) && entNotaNum === 0 && !isFailedIaNota;
-
             let finalActNota = null;
             let calificado = false;
+            let isFailedIaNota = false;
 
-            if ((!isNaN(entNotaNum) && entNotaNum > 0 && !isFailedIaNota) || isQuizConCeroValido) {
-              finalActNota = entNotaNum;
-              calificado = true;
-            } else if (unifiedEvalScore > 0) {
-              finalActNota = unifiedEvalScore;
-              calificado = true;
-            } else if (hasEntrega) {
-              finalActNota = null;
-              calificado = false;
+            if (tipoAct === "QUIZ") {
+              const entNotaNum = (ent && ent.nota !== undefined && ent.nota !== null && ent.nota !== "") ? parseFloat(ent.nota) : NaN;
+              const isIaComment = ent && ent.comentario && (ent.comentario.includes("Evaluado por IA") || ent.comentario.includes("DeepSeek"));
+              isFailedIaNota = isIaComment && (isNaN(entNotaNum) || entNotaNum === 0);
+              const isQuizConCeroValido = hasEntrega && !isNaN(entNotaNum) && entNotaNum === 0 && !isFailedIaNota;
+
+              if ((!isNaN(entNotaNum) && entNotaNum > 0 && !isFailedIaNota) || isQuizConCeroValido) {
+                finalActNota = entNotaNum;
+                calificado = true;
+              } else if (!ent && rnFallbackScore > 0) {
+                finalActNota = rnFallbackScore;
+                calificado = true;
+              }
+            } else {
+              if (latestEntrega) {
+                if (latestEntrega.calificado) {
+                  finalActNota = latestEntrega.nota;
+                  calificado = true;
+                } else {
+                  finalActNota = null;
+                  calificado = false;
+                }
+              } else if (rnFallbackScore > 0) {
+                finalActNota = rnFallbackScore;
+                calificado = true;
+              }
+              isFailedIaNota = isIaFailedNotaEntrega(ent);
             }
 
             const hasQuizAttempt = tipoAct === "QUIZ" && ent && !isEnCurso && (ent.quiz_detalle_json || ent.entrega || calificado);
             const lapsoInfo = evaluateLapsoActividad(act);
+            const lapsoVencidoFinal = quizReintentoAutorizado ? false : lapsoInfo.vencida;
+
+            const maxEntregas = summaryEntrega ? summaryEntrega.max_entregas : 1;
+            const entregasEvaluadas = summaryEntrega ? summaryEntrega.entregas_evaluadas : (calificado ? 1 : 0);
+            const entregasRestantes = summaryEntrega ? summaryEntrega.entregas_restantes : 0;
+            const tieneEntregaSinCalificar = summaryEntrega ? summaryEntrega.tiene_entrega_sin_calificar : false;
+            const puedeEntregar = (tipoAct !== "QUIZ") && !lapsoVencidoFinal && (tieneEntregaSinCalificar || entregasEvaluadas < maxEntregas);
 
             return {
               id: act.id,
@@ -344,10 +352,20 @@ module.exports = async function handler(req, res) {
               dias_restantes: lapsoInfo.dias_restantes,
               porcentaje_restante: lapsoInfo.porcentaje_restante,
               vence_hoy: lapsoInfo.vence_hoy,
-              lapso_vencido: quizReintentoAutorizado ? false : lapsoInfo.vencida,
+              lapso_vencido: lapsoVencidoFinal,
               numero_evaluacion: numEvalKey,
               descripcion: act.descripcion,
               tipo_actividad: tipoAct,
+              max_entregas: maxEntregas,
+              entregas_evaluadas: entregasEvaluadas,
+              entregas_totales: summaryEntrega ? summaryEntrega.entregas_totales : (hasEntrega ? 1 : 0),
+              entregas_restantes: entregasRestantes,
+              tiene_entrega_sin_calificar: tieneEntregaSinCalificar,
+              es_sustitucion_sin_descuento: tieneEntregaSinCalificar,
+              puede_entregar: puedeEntregar,
+              historial_entregas: summaryEntrega ? summaryEntrega.historial_entregas : [],
+              ultima_nota_calificada: (summaryEntrega && summaryEntrega.previous_graded) ? summaryEntrega.previous_graded.nota : null,
+              ultima_entrega_calificada: summaryEntrega ? summaryEntrega.previous_graded : null,
               tiempo_minutos: quizConfigSafe ? quizConfigSafe.tiempo_minutos : (parseInt(act.tiempo_minutos) || 0),
               quiz_config: quizConfigSafe,
               quiz_en_curso: !!isEnCurso,
@@ -357,14 +375,42 @@ module.exports = async function handler(req, res) {
               quiz_diagnostico: quizDiagnostico,
               hora_inicio: ent ? (ent.hora_inicio || "") : "",
               hora_fin: ent ? (ent.hora_fin || "") : "",
-              entrega: (ent && !isEnCurso) ? ent.entrega : "",
-              fecha_entrega: (ent && !isEnCurso) ? ent.fecha_entrega : "",
+              entrega: (ent && !isEnCurso) ? (latestEntrega ? latestEntrega.entrega : ent.entrega) : "",
+              fecha_entrega: (ent && !isEnCurso) ? (latestEntrega ? latestEntrega.fecha_entrega : ent.fecha_entrega) : "",
               nota: finalActNota,
               calificado: calificado,
               estado_calificacion: calificado ? "CALIFICADO" : (hasEntrega ? "A_LA_ESPERA" : "PENDIENTE_ENTREGA"),
-              comentario: isFailedIaNota ? "" : (ent ? (ent.comentario || "") : "")
+              comentario: isFailedIaNota ? "" : (latestEntrega ? (latestEntrega.comentario || "") : (ent ? (ent.comentario || "") : ""))
             };
           });
+
+          // Calcular E1..E8 autoritativos: si existe registro de entrega en la actividad, prevalece la nota actual (permite bajar o subir)
+          const evalScores = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0, e7: 0, e8: 0 };
+          ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"].forEach(evKey => {
+            const actsForEv = actividadesConEntrega.filter(a => a.numero_evaluacion === evKey);
+            const actWithEnt = actsForEv.find(a => entRecordByActId.has(String(a.id)));
+            if (actWithEnt) {
+              if (actWithEnt.calificado && actWithEnt.nota !== null && actWithEnt.nota !== undefined) {
+                evalScores[evKey] = Math.min(20, Math.max(0, parseFloat(actWithEnt.nota) || 0));
+              } else {
+                evalScores[evKey] = 0;
+              }
+            } else {
+              evalScores[evKey] = rnScores[evKey] || 0;
+            }
+          });
+
+          let e1 = evalScores.e1;
+          let e2 = evalScores.e2;
+          let e3 = evalScores.e3;
+          let e4 = evalScores.e4;
+          let e5 = cantEval >= 5 ? evalScores.e5 : 0;
+          let e6 = cantEval >= 6 ? evalScores.e6 : 0;
+          let e7 = cantEval >= 7 ? evalScores.e7 : 0;
+          let e8 = cantEval >= 8 ? evalScores.e8 : 0;
+
+          let activeScores = [e1, e2, e3, e4, e5, e6, e7, e8].slice(0, cantEval);
+          let calcTotal = (activeScores.reduce((a, b) => a + b, 0) / cantEval).toFixed(2);
 
           return {
             id_relacion: rn.id || "",
@@ -1001,8 +1047,8 @@ module.exports = async function handler(req, res) {
 
         const [existingRows, allActs, allEnts] = await Promise.all([
           query("SELECT id, id_estudiante, id_unidad_curricular FROM relacion_programa_notas"),
-          query("SELECT id, id_unidad_curricular, numero_evaluacion FROM actividades_asignadas"),
-          query("SELECT id, id_actividades_asignadas, id_estudiante, nota FROM actividades_entregadas")
+          query("SELECT id, id_unidad_curricular, numero_evaluacion, tipo_actividad FROM actividades_asignadas"),
+          query("SELECT id, id_actividades_asignadas, id_estudiante, entrega, fecha_entrega, nota, comentario, historial_entregas_json FROM actividades_entregadas")
         ]);
         const keyMap = new Map();
         const idSet = new Set();
@@ -1069,17 +1115,36 @@ module.exports = async function handler(req, res) {
           if (idEstudiante && idUnidadCurricular) {
             const evalMap = { e1, e2, e3, e4, e5, e6, e7, e8 };
             const uActs = allActs.filter(a => String(a.id_unidad_curricular) === String(idUnidadCurricular));
+            const fechaCalifNow = formatServerDateTime(new Date());
             uActs.forEach(act => {
               const evKey = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
               const newScore = evalMap[evKey];
-              if (newScore !== undefined && newScore > 0) {
+              if (newScore !== undefined) {
                 const matchingEnts = allEnts.filter(en => String(en.id_actividades_asignadas) === String(act.id) && String(en.id_estudiante) === String(idEstudiante));
                 matchingEnts.forEach(en => {
-                  if (parseFloat(en.nota) !== newScore) {
-                    stmts.push({
-                      sql: "UPDATE actividades_entregadas SET nota = ? WHERE id = ?",
-                      args: [newScore, en.id]
-                    });
+                  const isQuizRow = String(act.tipo_actividad || "").toUpperCase().trim() === "QUIZ" || String(en.entrega || "").startsWith("QUIZ_ONLINE:");
+                  const summary = buildEntregaSummary(en, act);
+                  const latest = summary.latest;
+                  const alreadyCalificado = isQuizRow
+                    ? (en.nota !== null && en.nota !== undefined && en.nota !== "")
+                    : (latest ? !!latest.calificado : (en.nota !== null && en.nota !== undefined && en.nota !== "" && parseFloat(en.nota) > 0));
+                  // No sobrescribir una entrega en espera de evaluación cuando la casilla de la planilla está en 0
+                  if (!alreadyCalificado && newScore <= 0) return;
+
+                  const prevNotaNum = (en.nota !== null && en.nota !== undefined && en.nota !== "") ? parseFloat(en.nota) : NaN;
+                  if (prevNotaNum !== newScore || !alreadyCalificado) {
+                    if (isQuizRow) {
+                      stmts.push({
+                        sql: "UPDATE actividades_entregadas SET nota = ? WHERE id = ?",
+                        args: [newScore, en.id]
+                      });
+                    } else {
+                      const updatedHist = applyGradeToHistorial(summary.historial_entregas, en, newScore, latest ? (latest.comentario || en.comentario || "") : (en.comentario || ""), false, fechaCalifNow);
+                      stmts.push({
+                        sql: "UPDATE actividades_entregadas SET nota = ?, historial_entregas_json = ? WHERE id = ?",
+                        args: [newScore, JSON.stringify(updatedHist), en.id]
+                      });
+                    }
                   }
                 });
               }
@@ -1199,6 +1264,7 @@ module.exports = async function handler(req, res) {
       }
 
       case "saveActividadAsignada": {
+        await ensureSchemaColumns();
         const idUnidad = params.id_unidad_curricular;
         const numEval = (params.numero_evaluacion || "e1").toString().toLowerCase();
         const fechaAsig = normalizeDateYMD(params.fecha_asignacion) || getCaracasTodayYMD();
@@ -1209,6 +1275,9 @@ module.exports = async function handler(req, res) {
         let quizConfigJson = params.quiz_config_json || "";
         const quizPreguntasJson = params.quiz_preguntas_json || "";
         let tiempoMinutos = parseInt(params.tiempo_minutos) || 0;
+        const maxEntregas = (params.max_entregas !== undefined && params.max_entregas !== null && params.max_entregas !== "")
+          ? Math.max(1, Math.min(20, parseInt(params.max_entregas, 10) || 2))
+          : 2;
 
         if (!idUnidad) {
           return res.status(200).json({ success: false, message: "Debe seleccionar la Unidad Curricular." });
@@ -1257,8 +1326,8 @@ module.exports = async function handler(req, res) {
 
           const newId = await getNextId("actividades_asignadas");
           await execute(
-            "INSERT INTO actividades_asignadas (id, id_unidad_curricular, fecha_asignacion, numero_evaluacion, descripcion, tipo_actividad, quiz_config_json, quiz_preguntas_json, tiempo_minutos, fecha_limite, ia_evaluacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [newId, idUnidad, fechaAsig, numEval, desc, tipoActividad, quizConfigJson, quizPreguntasJson, tiempoMinutos, fechaLimite, iaEvaluacion]
+            "INSERT INTO actividades_asignadas (id, id_unidad_curricular, fecha_asignacion, numero_evaluacion, descripcion, tipo_actividad, quiz_config_json, quiz_preguntas_json, tiempo_minutos, fecha_limite, ia_evaluacion, max_entregas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [newId, idUnidad, fechaAsig, numEval, desc, tipoActividad, quizConfigJson, quizPreguntasJson, tiempoMinutos, fechaLimite, iaEvaluacion, maxEntregas]
           );
           return res.status(200).json({ success: true, message: "Actividad asignada con éxito.", id: newId });
         } else {
@@ -1274,8 +1343,8 @@ module.exports = async function handler(req, res) {
           }
 
           await execute(
-            "UPDATE actividades_asignadas SET id_unidad_curricular = ?, fecha_asignacion = ?, numero_evaluacion = ?, descripcion = ?, tipo_actividad = ?, quiz_config_json = ?, quiz_preguntas_json = ?, tiempo_minutos = ?, fecha_limite = ?, ia_evaluacion = ? WHERE id = ?",
-            [idUnidad, fechaAsig, numEval, desc, tipoActividad, quizConfigJson, quizPreguntasJson, tiempoMinutos, fechaLimite, iaEvaluacion, params.id]
+            "UPDATE actividades_asignadas SET id_unidad_curricular = ?, fecha_asignacion = ?, numero_evaluacion = ?, descripcion = ?, tipo_actividad = ?, quiz_config_json = ?, quiz_preguntas_json = ?, tiempo_minutos = ?, fecha_limite = ?, ia_evaluacion = ?, max_entregas = ? WHERE id = ?",
+            [idUnidad, fechaAsig, numEval, desc, tipoActividad, quizConfigJson, quizPreguntasJson, tiempoMinutos, fechaLimite, iaEvaluacion, maxEntregas, params.id]
           );
 
           if (iaEvaluacion === "NO") {
@@ -1305,6 +1374,7 @@ module.exports = async function handler(req, res) {
 
       // Entregas de Estudiantes
       case "getEntregasByActividad": {
+        await ensureSchemaColumns();
         const idAct = params.id_actividades_asignadas || params.id;
         const batchResults = await batch([
           { sql: "SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ?", args: [idAct] },
@@ -1319,6 +1389,7 @@ module.exports = async function handler(req, res) {
         const relNotas = batchResults[3]?.rows || [];
         const evKey = actObj ? (actObj.numero_evaluacion || "e1").toString().toLowerCase().trim() : "e1";
         const tipoAct = actObj ? String(actObj.tipo_actividad || "ENTREGA").toUpperCase().trim() : "ENTREGA";
+        const maxEntregasAct = getMaxEntregasActividad(actObj);
 
         let historialReinicios = {};
         if (actObj && actObj.quiz_config_json) {
@@ -1347,7 +1418,7 @@ module.exports = async function handler(req, res) {
           const maxRelVal = relEst.reduce((m, r) => Math.max(m, parseFloat(r[evKey]) || 0), 0);
           const hasEntNota = ent.nota !== undefined && ent.nota !== null && ent.nota !== "" && !isNaN(parseFloat(ent.nota));
           const entVal = hasEntNota ? (parseFloat(ent.nota) || 0) : 0;
-          const isFailedIaComment = ent.comentario && (ent.comentario.includes("Evaluado por IA") || ent.comentario.includes("DeepSeek")) && entVal === 0;
+          const isFailedIaComment = isIaFailedNotaEntrega(ent);
           const isEnCurso = String(ent.entrega || "").trim() === "EN_CURSO";
           const isQuizEnt = tipoAct === "QUIZ" || String(ent.entrega || "").startsWith("QUIZ_ONLINE:") || isEnCurso || !!ent.quiz_detalle_json;
 
@@ -1369,11 +1440,38 @@ module.exports = async function handler(req, res) {
           }
 
           let finalNota = "";
-          if (hasEntNota && (entVal > 0 || (isQuizEnt && !isEnCurso && entVal === 0)) && !isFailedIaComment) {
-            finalNota = Math.max(entVal, maxRelVal);
-          } else if (maxRelVal > 0) {
-            finalNota = maxRelVal;
+          let calificadoFlag = false;
+          let summaryEnt = null;
+
+          if (isQuizEnt) {
+            if (hasEntNota && (entVal > 0 || (!isEnCurso && entVal === 0)) && !isFailedIaComment) {
+              finalNota = entVal;
+              calificadoFlag = true;
+            } else if (!isEnCurso && maxRelVal > 0) {
+              finalNota = maxRelVal;
+              calificadoFlag = true;
+            }
+          } else {
+            summaryEnt = buildEntregaSummary(ent, actObj);
+            const latestEnt = summaryEnt.latest;
+            if (latestEnt) {
+              if (latestEnt.calificado) {
+                finalNota = latestEnt.nota;
+                calificadoFlag = true;
+              } else {
+                finalNota = "";
+                calificadoFlag = false;
+              }
+            } else if (hasEntNota && entVal > 0 && !isFailedIaComment) {
+              finalNota = entVal;
+              calificadoFlag = true;
+            } else if (maxRelVal > 0) {
+              finalNota = maxRelVal;
+              calificadoFlag = true;
+            }
           }
+
+          const latestEnt = summaryEnt ? summaryEnt.latest : null;
 
           return {
             id: ent.id,
@@ -1381,10 +1479,16 @@ module.exports = async function handler(req, res) {
             id_estudiante: ent.id_estudiante,
             cedula: est ? est.cedula : "N/A",
             nombre_estudiante: est ? est.nombre_completo : "Estudiante",
-            entrega: ent.entrega,
-            fecha_entrega: ent.fecha_entrega,
+            entrega: latestEnt ? latestEnt.entrega : ent.entrega,
+            fecha_entrega: latestEnt ? latestEnt.fecha_entrega : ent.fecha_entrega,
             nota: finalNota,
-            comentario: isFailedIaComment ? "" : (ent.comentario || ""),
+            calificado: calificadoFlag,
+            comentario: isFailedIaComment ? "" : (latestEnt ? (latestEnt.comentario || "") : (ent.comentario || "")),
+            max_entregas: maxEntregasAct,
+            historial_entregas: summaryEnt ? summaryEnt.historial_entregas : [],
+            entregas_evaluadas: summaryEnt ? summaryEnt.entregas_evaluadas : (calificadoFlag ? 1 : 0),
+            numero_entrega_actual: latestEnt ? latestEnt.numero_entrega : 1,
+            previous_graded: summaryEnt ? summaryEnt.previous_graded : null,
             quiz_detalle_json: ent.quiz_detalle_json || "",
             quiz_diagnostico: quizDiagnostico,
             hora_inicio: ent.hora_inicio || "",
@@ -1397,8 +1501,8 @@ module.exports = async function handler(req, res) {
           const bAlert = b.quiz_diagnostico && (b.quiz_diagnostico.alerta_conectividad || (b.quiz_diagnostico.solicitud_repeticion && b.quiz_diagnostico.solicitud_repeticion.solicitada)) ? 1 : 0;
           if (aAlert !== bAlert) return bAlert - aAlert;
 
-          const aHasNota = (a.nota !== "" && a.nota !== null && a.nota !== undefined && !isNaN(a.nota));
-          const bHasNota = (b.nota !== "" && b.nota !== null && b.nota !== undefined && !isNaN(b.nota));
+          const aHasNota = !!a.calificado || (a.nota !== "" && a.nota !== null && a.nota !== undefined && !isNaN(a.nota));
+          const bHasNota = !!b.calificado || (b.nota !== "" && b.nota !== null && b.nota !== undefined && !isNaN(b.nota));
           if (aHasNota !== bHasNota) {
             return aHasNota ? 1 : -1;
           }
@@ -1409,19 +1513,22 @@ module.exports = async function handler(req, res) {
           success: true,
           entregas: detalle,
           resumen_quiz: resumenQuiz,
-          actividad_tipo: tipoAct
+          actividad_tipo: tipoAct,
+          max_entregas: maxEntregasAct
         });
       }
 
       case "saveNotaEntrega": {
+        await ensureSchemaColumns();
         const idEntrega = params.id_entrega || params.id;
         const nota = params.nota;
         const comentario = params.comentario;
-        const idActividadOpt = params.id_actividades_asignadas;
+        const idActividadOpt = params.id_actividades_asignadas || params.id_actividad;
         const idEstudianteOpt = params.id_estudiante;
 
         const notaNum = Math.min(20, Math.max(0, parseFloat(nota) || 0));
         const comentarioStr = comentario !== undefined && comentario !== null ? String(comentario).trim() : "";
+        const fechaCalifNow = formatServerDateTime(new Date());
 
         let entregaRow = null;
         if (idEntrega && idEntrega !== "0" && idEntrega !== 0) {
@@ -1429,25 +1536,56 @@ module.exports = async function handler(req, res) {
           entregaRow = rows[0];
         }
         if (!entregaRow && idActividadOpt && idEstudianteOpt) {
-          const rows = await query("SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?", [idActividadOpt, idEstudianteOpt]);
+          const rows = await query("SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ? ORDER BY id DESC", [idActividadOpt, idEstudianteOpt]);
           entregaRow = rows[0];
         }
 
         let targetActId = idActividadOpt;
         let targetEstId = idEstudianteOpt;
         let finalEntregaId = idEntrega;
+        let updatedHistorial = [];
 
         if (entregaRow) {
           finalEntregaId = entregaRow.id;
-          await execute("UPDATE actividades_entregadas SET nota = ?, comentario = ? WHERE id = ?", [notaNum, comentarioStr, entregaRow.id]);
           targetActId = entregaRow.id_actividades_asignadas;
           targetEstId = entregaRow.id_estudiante;
+          const actRows = targetActId ? await query("SELECT * FROM actividades_asignadas WHERE id = ?", [targetActId]) : [];
+          const actObj = actRows[0] || null;
+          const isQuizRow = (actObj && String(actObj.tipo_actividad || "").toUpperCase().trim() === "QUIZ") || String(entregaRow.entrega || "").startsWith("QUIZ_ONLINE:");
+
+          if (isQuizRow) {
+            await execute(
+              "UPDATE actividades_entregadas SET nota = ?, comentario = ? WHERE id = ?",
+              [notaNum, comentarioStr, entregaRow.id]
+            );
+          } else {
+            const summary = buildEntregaSummary(entregaRow, actObj);
+            updatedHistorial = applyGradeToHistorial(summary.historial_entregas, entregaRow, notaNum, comentarioStr, false, fechaCalifNow);
+
+            await execute(
+              "UPDATE actividades_entregadas SET nota = ?, comentario = ?, historial_entregas_json = ? WHERE id = ?",
+              [notaNum, comentarioStr, JSON.stringify(updatedHistorial), entregaRow.id]
+            );
+          }
         } else if (idActividadOpt && idEstudianteOpt) {
           finalEntregaId = await getNextId("actividades_entregadas");
-          const fechaEntrega = formatServerDateTime(new Date());
+          const fechaEntrega = fechaCalifNow;
+          updatedHistorial = [{
+            numero_entrega: 1,
+            entrega: "CALIFICADO_DIRECTO",
+            r2_key: "",
+            tipo_entrega: "PRESENCIAL",
+            nombre_archivo: "",
+            fecha_entrega: fechaEntrega,
+            calificado: true,
+            nota: notaNum,
+            fecha_calificacion: fechaCalifNow,
+            comentario: comentarioStr,
+            evaluado_por_ia: false
+          }];
           await execute(
-            "INSERT INTO actividades_entregadas (id, id_actividades_asignadas, id_estudiante, entrega, fecha_entrega, nota, comentario) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [finalEntregaId, idActividadOpt, idEstudianteOpt, "CALIFICADO_DIRECTO", fechaEntrega, notaNum, comentarioStr]
+            "INSERT INTO actividades_entregadas (id, id_actividades_asignadas, id_estudiante, entrega, fecha_entrega, nota, comentario, historial_entregas_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [finalEntregaId, idActividadOpt, idEstudianteOpt, "CALIFICADO_DIRECTO", fechaEntrega, notaNum, comentarioStr, JSON.stringify(updatedHistorial)]
           );
         }
 
@@ -1460,11 +1598,13 @@ module.exports = async function handler(req, res) {
           message: "Nota y observación de entrega guardadas correctamente.",
           nota: notaNum,
           comentario: comentarioStr,
-          id_entrega: finalEntregaId
+          id_entrega: finalEntregaId,
+          historial_entregas: updatedHistorial
         });
       }
 
       case "bulkSaveNotasEntregas": {
+        await ensureSchemaColumns();
         let entregasArray = params.entregas || params.entregasArray || [];
         if (typeof entregasArray === "string") {
           try { entregasArray = JSON.parse(entregasArray); } catch (e) { entregasArray = []; }
@@ -1473,6 +1613,7 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ success: false, message: "No se proporcionaron notas para guardar." });
         }
 
+        const fechaCalifNow = formatServerDateTime(new Date());
         let updatedCount = 0;
         for (const item of entregasArray) {
           const idEntrega = item.id_entrega || item.id;
@@ -1484,10 +1625,32 @@ module.exports = async function handler(req, res) {
           const rows = await query("SELECT * FROM actividades_entregadas WHERE id = ?", [idEntrega]);
           if (rows.length > 0) {
             const ent = rows[0];
-            if (comentario !== null) {
-              await execute("UPDATE actividades_entregadas SET nota = ?, comentario = ? WHERE id = ?", [notaNum, comentario, ent.id]);
+            const actRows = await query("SELECT * FROM actividades_asignadas WHERE id = ?", [ent.id_actividades_asignadas]);
+            const actObj = actRows[0] || null;
+            const isQuizRow = (actObj && String(actObj.tipo_actividad || "").toUpperCase().trim() === "QUIZ") || String(ent.entrega || "").startsWith("QUIZ_ONLINE:");
+
+            if (isQuizRow) {
+              if (comentario !== null) {
+                await execute("UPDATE actividades_entregadas SET nota = ?, comentario = ? WHERE id = ?", [notaNum, comentario, ent.id]);
+              } else {
+                await execute("UPDATE actividades_entregadas SET nota = ? WHERE id = ?", [notaNum, ent.id]);
+              }
             } else {
-              await execute("UPDATE actividades_entregadas SET nota = ? WHERE id = ?", [notaNum, ent.id]);
+              const summary = buildEntregaSummary(ent, actObj);
+              const comFinal = comentario !== null ? comentario : (ent.comentario || "");
+              const updatedHist = applyGradeToHistorial(summary.historial_entregas, ent, notaNum, comFinal, false, fechaCalifNow);
+
+              if (comentario !== null) {
+                await execute(
+                  "UPDATE actividades_entregadas SET nota = ?, comentario = ?, historial_entregas_json = ? WHERE id = ?",
+                  [notaNum, comentario, JSON.stringify(updatedHist), ent.id]
+                );
+              } else {
+                await execute(
+                  "UPDATE actividades_entregadas SET nota = ?, historial_entregas_json = ? WHERE id = ?",
+                  [notaNum, JSON.stringify(updatedHist), ent.id]
+                );
+              }
             }
             await syncNotaToRelacionSql(ent.id_actividades_asignadas, ent.id_estudiante, notaNum);
             updatedCount++;
@@ -1502,6 +1665,7 @@ module.exports = async function handler(req, res) {
 
       // ==================== SUBIDA DE ENTREGAS (CLOUDFLARE R2) ====================
       case "uploadEntregaEstudiante": {
+        await ensureSchemaColumns();
         const idActividad = params.id_actividades_asignadas;
         const idEstudiante = params.id_estudiante;
         const fechaEntrega = formatServerDateTime(new Date());
@@ -1510,16 +1674,25 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ success: false, message: "Datos de actividad o estudiante incompletos." });
         }
 
-        const [actRows, estRows] = await Promise.all([
+        const [actRows, estRows, existingRows] = await Promise.all([
           query("SELECT * FROM actividades_asignadas WHERE id = ?", [idActividad]),
-          query("SELECT id, cedula, nombre_completo FROM estudiantes WHERE id = ?", [idEstudiante])
+          query("SELECT id, cedula, nombre_completo FROM estudiantes WHERE id = ?", [idEstudiante]),
+          query("SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ? ORDER BY id DESC", [idActividad, idEstudiante])
         ]);
 
         const actObj = actRows[0];
         const studentObj = estRows[0];
+        const existingEnt = existingRows[0] || null;
 
         if (!actObj) {
           return res.status(200).json({ success: false, message: "La actividad asignada no existe." });
+        }
+
+        if (String(actObj.tipo_actividad || "ENTREGA").toUpperCase().trim() === "QUIZ") {
+          return res.status(200).json({
+            success: false,
+            message: "Esta actividad es una Evaluación Online (Quiz) y debe presentarse desde su botón correspondiente."
+          });
         }
 
         const lapsoInfo = evaluateLapsoActividad(actObj);
@@ -1531,7 +1704,29 @@ module.exports = async function handler(req, res) {
           });
         }
 
+        if (!params.fileData && !params.entregaUrl) {
+          return res.status(200).json({ success: false, message: "No se proporcionó archivo ni enlace para la entrega." });
+        }
+
+        const summaryPrev = buildEntregaSummary(existingEnt, actObj);
+        const maxEntregas = summaryPrev.max_entregas;
+        const esSustitucionSinCalificar = summaryPrev.tiene_entrega_sin_calificar;
+
+        // Validar límite máximo de entregas evaluadas ANTES de subir archivos a Cloudflare R2
+        if (!esSustitucionSinCalificar && summaryPrev.entregas_evaluadas >= maxEntregas) {
+          return res.status(200).json({
+            success: false,
+            max_entregas_alcanzado: true,
+            max_entregas: maxEntregas,
+            entregas_evaluadas: summaryPrev.entregas_evaluadas,
+            message: `Has alcanzado el límite máximo de ${maxEntregas} entrega(s) evaluada(s) permitida(s) para esta asignación.`
+          });
+        }
+
         let entregaUrl = "";
+        let r2Key = "";
+        let tipoEntrega = "ENLACE";
+        let nombreArchivo = "";
 
         // Si se envió archivo en Base64, subir a Cloudflare R2
         if (params.fileData) {
@@ -1545,6 +1740,9 @@ module.exports = async function handler(req, res) {
 
             const uploadRes = await uploadBase64(folder, finalFileName, params.fileData);
             entregaUrl = uploadRes.publicUrl;
+            r2Key = uploadRes.key || "";
+            tipoEntrega = "ARCHIVO";
+            nombreArchivo = rawName;
           } catch (eUpload) {
             return res.status(200).json({
               success: false,
@@ -1553,31 +1751,94 @@ module.exports = async function handler(req, res) {
           }
         } else if (params.entregaUrl) {
           entregaUrl = params.entregaUrl.toString().trim();
+          r2Key = extractR2KeyFromUrl(entregaUrl) || "";
+          tipoEntrega = r2Key ? "ARCHIVO" : "ENLACE";
         }
 
         if (!entregaUrl) {
           return res.status(200).json({ success: false, message: "No se proporcionó archivo ni enlace para la entrega." });
         }
 
-        // Buscar registro existente
-        const existing = await query(
-          "SELECT id FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?",
-          [idActividad, idEstudiante]
-        );
+        const historial = summaryPrev.historial_entregas.slice();
+        let replacedOldR2Key = null;
+        let numeroEntregaActual = 1;
+        let fueSustitucion = false;
 
+        if (esSustitucionSinCalificar && historial.length > 0) {
+          // Sustitución de una entrega aún NO evaluada: no descuenta oportunidades y elimina el archivo R2 anterior
+          fueSustitucion = true;
+          const lastIdx = historial.length - 1;
+          const oldEntry = historial[lastIdx];
+          const oldUrlOrKey = oldEntry.r2_key || oldEntry.entrega;
+          const candidateOldKey = extractR2KeyFromUrl(oldUrlOrKey);
+          if (candidateOldKey && candidateOldKey !== r2Key) {
+            replacedOldR2Key = candidateOldKey;
+          }
+          numeroEntregaActual = parseInt(oldEntry.numero_entrega, 10) || (lastIdx + 1);
+          historial[lastIdx] = {
+            numero_entrega: numeroEntregaActual,
+            entrega: entregaUrl,
+            r2_key: r2Key,
+            tipo_entrega: tipoEntrega,
+            nombre_archivo: nombreArchivo,
+            fecha_entrega: fechaEntrega,
+            calificado: false,
+            nota: null,
+            fecha_calificacion: null,
+            comentario: "",
+            evaluado_por_ia: false
+          };
+        } else {
+          // Primera entrega o nueva entrega posterior a una entrega ya calificada
+          const maxPrevNum = historial.reduce((m, h) => Math.max(m, parseInt(h.numero_entrega, 10) || 0), 0);
+          numeroEntregaActual = maxPrevNum + 1;
+          historial.push({
+            numero_entrega: numeroEntregaActual,
+            entrega: entregaUrl,
+            r2_key: r2Key,
+            tipo_entrega: tipoEntrega,
+            nombre_archivo: nombreArchivo,
+            fecha_entrega: fechaEntrega,
+            calificado: false,
+            nota: null,
+            fecha_calificacion: null,
+            comentario: "",
+            evaluado_por_ia: false
+          });
+        }
+
+        const historialJsonStr = JSON.stringify(historial);
         let entregaId = null;
-        if (existing.length > 0) {
-          entregaId = existing[0].id;
+
+        if (existingEnt) {
+          entregaId = existingEnt.id;
           await execute(
-            "UPDATE actividades_entregadas SET entrega = ?, fecha_entrega = ?, nota = NULL, comentario = NULL WHERE id = ?",
-            [entregaUrl, fechaEntrega, entregaId]
+            "UPDATE actividades_entregadas SET entrega = ?, fecha_entrega = ?, nota = NULL, comentario = NULL, historial_entregas_json = ? WHERE id = ?",
+            [entregaUrl, fechaEntrega, historialJsonStr, entregaId]
           );
         } else {
           entregaId = await getNextId("actividades_entregadas");
           await execute(
-            "INSERT INTO actividades_entregadas (id, id_actividades_asignadas, id_estudiante, entrega, fecha_entrega, nota, comentario) VALUES (?, ?, ?, ?, ?, NULL, NULL)",
-            [entregaId, idActividad, idEstudiante, entregaUrl, fechaEntrega]
+            "INSERT INTO actividades_entregadas (id, id_actividades_asignadas, id_estudiante, entrega, fecha_entrega, nota, comentario, historial_entregas_json) VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)",
+            [entregaId, idActividad, idEstudiante, entregaUrl, fechaEntrega, historialJsonStr]
           );
+        }
+
+        // Si el estudiante ya tenía una nota previa y envió una nueva entrega para ser re-evaluado,
+        // limpiar temporalmente la nota en relacion_programa_notas hasta que el docente evalúe la nueva entrega.
+        if (!fueSustitucion && summaryPrev.entregas_evaluadas > 0) {
+          await syncNotaToRelacionSql(idActividad, idEstudiante, 0);
+        }
+
+        // Optimización de almacenamiento: eliminar el archivo previo no calificado en Cloudflare R2
+        let archivoAnteriorEliminado = false;
+        if (replacedOldR2Key) {
+          try {
+            const delRes = await deleteObject(replacedOldR2Key);
+            archivoAnteriorEliminado = !!(delRes && delRes.deleted);
+          } catch (eDelR2) {
+            console.warn("No se pudo eliminar archivo R2 anterior al sustituir entrega:", eDelR2.message);
+          }
         }
 
         // Evaluación automática con IA ÚNICAMENTE si está explícitamente habilitada y activa en la actividad
@@ -1586,12 +1847,21 @@ module.exports = async function handler(req, res) {
           try {
             const aiResult = await evaluarEntregaIaLogic(entregaId, idEstudiante, entregaUrl, actObj);
             if (aiResult && aiResult.success && aiResult.nota !== undefined && aiResult.nota !== null && !isNaN(aiResult.nota) && parseFloat(aiResult.nota) > 0) {
+              const postRows = await query("SELECT * FROM actividades_entregadas WHERE id = ?", [entregaId]);
+              const postSummary = buildEntregaSummary(postRows[0], actObj);
               return res.status(200).json({
                 success: true,
                 message: "Entrega registrada y autoevaluada exitosamente por la Inteligencia Artificial (DeepSeek).",
                 entrega: entregaUrl,
                 entregaUrl: entregaUrl,
                 fecha_entrega: fechaEntrega,
+                numero_entrega: numeroEntregaActual,
+                fue_sustitucion: fueSustitucion,
+                archivo_anterior_eliminado: archivoAnteriorEliminado,
+                max_entregas: maxEntregas,
+                entregas_evaluadas: postSummary.entregas_evaluadas,
+                entregas_restantes: postSummary.entregas_restantes,
+                historial_entregas: postSummary.historial_entregas,
                 evaluado_por_ia: true,
                 nota: aiResult.nota,
                 comentario: aiResult.comentario
@@ -1604,12 +1874,24 @@ module.exports = async function handler(req, res) {
           }
         }
 
+        const finalEvaluadas = historial.filter(h => h.calificado === true).length;
+        const finalRestantes = Math.max(0, maxEntregas - finalEvaluadas);
+
         return res.status(200).json({
           success: true,
-          message: "Entrega subida y registrada exitosamente. Queda a la espera de evaluación y asignación de calificación por el docente.",
+          message: fueSustitucion
+            ? "Archivo sustituido correctamente sin descontar tus oportunidades de entrega. Queda a la espera de calificación docente."
+            : "Entrega subida y registrada exitosamente. Queda a la espera de evaluación y asignación de calificación por el docente.",
           entrega: entregaUrl,
           entregaUrl: entregaUrl,
           fecha_entrega: fechaEntrega,
+          numero_entrega: numeroEntregaActual,
+          fue_sustitucion: fueSustitucion,
+          archivo_anterior_eliminado: archivoAnteriorEliminado,
+          max_entregas: maxEntregas,
+          entregas_evaluadas: finalEvaluadas,
+          entregas_restantes: finalRestantes,
+          historial_entregas: historial,
           evaluado_por_ia: false,
           nota: null,
           comentario: null
@@ -3126,25 +3408,188 @@ async function syncNotaToRelacionSql(idActividad, idEstudiante, notaNum) {
   }
 }
 
+function getMaxEntregasActividad(actObj) {
+  const raw = actObj && actObj.max_entregas !== undefined && actObj.max_entregas !== null ? parseInt(actObj.max_entregas, 10) : 2;
+  return (!isNaN(raw) && raw >= 1) ? Math.min(20, raw) : 2;
+}
+
+function isIaFailedNotaEntrega(ent) {
+  if (!ent) return false;
+  const com = String(ent.comentario || "");
+  const isIa = com.includes("Evaluado por IA") || com.includes("DeepSeek");
+  const n = (ent.nota !== undefined && ent.nota !== null && ent.nota !== "") ? parseFloat(ent.nota) : NaN;
+  return isIa && (isNaN(n) || n === 0);
+}
+
+function parseHistorialEntregas(ent, actObj = null) {
+  if (!ent) return [];
+  const tipoAct = actObj ? String(actObj.tipo_actividad || "ENTREGA").toUpperCase().trim() : "";
+  if (tipoAct === "QUIZ" || String(ent.entrega || "").startsWith("QUIZ_ONLINE:") || String(ent.entrega || "").trim() === "EN_CURSO") {
+    return [];
+  }
+
+  let parsed = [];
+  if (ent.historial_entregas_json) {
+    try {
+      const rawArr = typeof ent.historial_entregas_json === "string"
+        ? JSON.parse(ent.historial_entregas_json)
+        : ent.historial_entregas_json;
+      if (Array.isArray(rawArr)) {
+        parsed = rawArr;
+      }
+    } catch (eHist) {}
+  }
+
+  if (parsed.length > 0) {
+    const normalized = parsed.map((item, idx) => {
+      const entregaStr = String(item.entrega || "");
+      const r2k = item.r2_key || extractR2KeyFromUrl(entregaStr) || "";
+      const rawN = (item.nota !== undefined && item.nota !== null && item.nota !== "") ? parseFloat(item.nota) : NaN;
+      const isCal = item.calificado === true && !isNaN(rawN);
+      return {
+        numero_entrega: parseInt(item.numero_entrega, 10) || (idx + 1),
+        entrega: entregaStr,
+        r2_key: r2k,
+        tipo_entrega: item.tipo_entrega || (r2k ? "ARCHIVO" : (entregaStr === "CALIFICADO_DIRECTO" ? "PRESENCIAL" : "ENLACE")),
+        nombre_archivo: item.nombre_archivo || "",
+        fecha_entrega: item.fecha_entrega || "",
+        calificado: isCal,
+        nota: isCal ? Math.min(20, Math.max(0, rawN)) : null,
+        fecha_calificacion: item.fecha_calificacion || null,
+        comentario: item.comentario || "",
+        evaluado_por_ia: !!item.evaluado_por_ia
+      };
+    });
+
+    // Sincronizar si una fila tuvo actualización directa de nota sin pasar por el JSON
+    const last = normalized[normalized.length - 1];
+    const entNotaRaw = (ent.nota !== undefined && ent.nota !== null && ent.nota !== "") ? parseFloat(ent.nota) : NaN;
+    if (last && !last.calificado && !isNaN(entNotaRaw) && entNotaRaw > 0 && !isIaFailedNotaEntrega(ent)) {
+      last.calificado = true;
+      last.nota = Math.min(20, Math.max(0, entNotaRaw));
+      last.comentario = ent.comentario || last.comentario || "";
+    }
+    return normalized;
+  }
+
+  if (ent.entrega) {
+    const entregaStr = String(ent.entrega);
+    const r2k = extractR2KeyFromUrl(entregaStr) || "";
+    const rawNota = (ent.nota !== undefined && ent.nota !== null && ent.nota !== "") ? parseFloat(ent.nota) : NaN;
+    const failedIa = isIaFailedNotaEntrega(ent);
+    const isCalificado = !failedIa && !isNaN(rawNota) && rawNota > 0;
+    return [{
+      numero_entrega: 1,
+      entrega: entregaStr,
+      r2_key: r2k,
+      tipo_entrega: r2k ? "ARCHIVO" : (entregaStr === "CALIFICADO_DIRECTO" ? "PRESENCIAL" : "ENLACE"),
+      nombre_archivo: "",
+      fecha_entrega: ent.fecha_entrega || "",
+      calificado: isCalificado,
+      nota: isCalificado ? Math.min(20, Math.max(0, rawNota)) : null,
+      fecha_calificacion: isCalificado ? (ent.fecha_entrega || "") : null,
+      comentario: failedIa ? "" : (ent.comentario || ""),
+      evaluado_por_ia: !!(ent.comentario && (ent.comentario.includes("Evaluado por IA") || ent.comentario.includes("EVALUACIÓN AUTOMÁTICA CON IA")))
+    }];
+  }
+
+  return [];
+}
+
+function buildEntregaSummary(ent, actObj = null) {
+  const maxEntregas = getMaxEntregasActividad(actObj);
+  const historial = parseHistorialEntregas(ent, actObj);
+  const entregasEvaluadas = historial.filter(h => h.calificado === true).length;
+  const latest = historial.length > 0 ? historial[historial.length - 1] : null;
+  const tieneEntregaSinCalificar = !!(latest && !latest.calificado && latest.entrega);
+  const entregasRestantes = Math.max(0, maxEntregas - entregasEvaluadas);
+  const puedeEntregar = tieneEntregaSinCalificar || (entregasEvaluadas < maxEntregas);
+  const prevItems = historial.slice(0, -1);
+  const prevGradedList = (tieneEntregaSinCalificar ? historial : prevItems).filter(h => h.calificado === true);
+  const previousGraded = prevGradedList.length > 0 ? prevGradedList[prevGradedList.length - 1] : null;
+
+  return {
+    max_entregas: maxEntregas,
+    historial_entregas: historial,
+    entregas_evaluadas: entregasEvaluadas,
+    entregas_totales: historial.length,
+    latest: latest,
+    tiene_entrega_sin_calificar: tieneEntregaSinCalificar,
+    entregas_restantes: entregasRestantes,
+    puede_entregar: puedeEntregar,
+    previous_graded: previousGraded
+  };
+}
+
+function applyGradeToHistorial(historialInput, entRow, notaNum, comentarioStr, isIa = false, fechaCalifStr = null) {
+  const historial = Array.isArray(historialInput) ? historialInput.map(item => ({ ...item })) : [];
+  const fechaFinal = fechaCalifStr || formatServerDateTime(new Date());
+  const cleanNota = Math.min(20, Math.max(0, parseFloat(notaNum) || 0));
+
+  if (historial.length === 0) {
+    const entUrl = entRow && entRow.entrega ? String(entRow.entrega) : "CALIFICADO_DIRECTO";
+    const r2k = extractR2KeyFromUrl(entUrl) || "";
+    historial.push({
+      numero_entrega: 1,
+      entrega: entUrl,
+      r2_key: r2k,
+      tipo_entrega: r2k ? "ARCHIVO" : (entUrl === "CALIFICADO_DIRECTO" ? "PRESENCIAL" : "ENLACE"),
+      nombre_archivo: "",
+      fecha_entrega: (entRow && entRow.fecha_entrega) ? entRow.fecha_entrega : fechaFinal,
+      calificado: true,
+      nota: cleanNota,
+      fecha_calificacion: fechaFinal,
+      comentario: comentarioStr || "",
+      evaluado_por_ia: !!isIa
+    });
+  } else {
+    const lastIdx = historial.length - 1;
+    historial[lastIdx] = {
+      ...historial[lastIdx],
+      calificado: true,
+      nota: cleanNota,
+      fecha_calificacion: fechaFinal,
+      comentario: comentarioStr !== undefined && comentarioStr !== null ? comentarioStr : (historial[lastIdx].comentario || ""),
+      evaluado_por_ia: !!isIa
+    };
+  }
+  return historial;
+}
+
 /**
- * Helper: Sincroniza las notas E1..E5 de relacion_programa_notas hacia actividades_entregadas
+ * Helper: Sincroniza las notas E1..E8 de relacion_programa_notas hacia actividades_entregadas
  */
 async function syncRelacionToEntregasSql(idEstudiante, idUnidadCurricular, evalScores = {}) {
-  const actRows = await query("SELECT id, numero_evaluacion FROM actividades_asignadas WHERE id_unidad_curricular = ?", [idUnidadCurricular]);
+  const actRows = await query("SELECT id, numero_evaluacion, tipo_actividad FROM actividades_asignadas WHERE id_unidad_curricular = ?", [idUnidadCurricular]);
   if (!actRows || actRows.length === 0) return;
 
+  const fechaCalifNow = formatServerDateTime(new Date());
   for (const act of actRows) {
     const evKey = (act.numero_evaluacion || "e1").toString().toLowerCase().trim();
     const score = evalScores[evKey];
     if (score !== undefined && score !== null && score !== "") {
       const cleanScore = Math.min(20, Math.max(0, parseFloat(score) || 0));
       const entRows = await query(
-        "SELECT id, nota FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?",
+        "SELECT * FROM actividades_entregadas WHERE id_actividades_asignadas = ? AND id_estudiante = ?",
         [act.id, idEstudiante]
       );
       for (const ent of entRows) {
-        if (cleanScore > 0 || (ent.nota !== undefined && ent.nota !== null && ent.nota !== "")) {
-          await execute("UPDATE actividades_entregadas SET nota = ? WHERE id = ?", [cleanScore, ent.id]);
+        const isQuizRow = String(act.tipo_actividad || "").toUpperCase().trim() === "QUIZ" || String(ent.entrega || "").startsWith("QUIZ_ONLINE:");
+        const summary = buildEntregaSummary(ent, act);
+        const latest = summary.latest;
+        const alreadyCal = isQuizRow
+          ? (ent.nota !== undefined && ent.nota !== null && ent.nota !== "")
+          : (latest ? !!latest.calificado : (ent.nota !== undefined && ent.nota !== null && ent.nota !== ""));
+        if (cleanScore > 0 || alreadyCal) {
+          if (isQuizRow) {
+            await execute("UPDATE actividades_entregadas SET nota = ? WHERE id = ?", [cleanScore, ent.id]);
+          } else {
+            const updatedHist = applyGradeToHistorial(summary.historial_entregas, ent, cleanScore, latest ? (latest.comentario || ent.comentario || "") : (ent.comentario || ""), false, fechaCalifNow);
+            await execute(
+              "UPDATE actividades_entregadas SET nota = ?, historial_entregas_json = ? WHERE id = ?",
+              [cleanScore, JSON.stringify(updatedHist), ent.id]
+            );
+          }
         }
       }
     }
@@ -3200,7 +3645,14 @@ Responde ESTRICTAMENTE en formato JSON con la siguiente estructura:
         if (parsedNotaNum > 0) {
           const nota = Math.min(20, Math.max(0, parsedNotaNum));
           const comentario = parsed.comentario || parsed.retroalimentacion || "Evaluado por IA.";
-          await execute("UPDATE actividades_entregadas SET nota = ?, comentario = ? WHERE id = ?", [nota, comentario, idEntrega]);
+          const entRows = await query("SELECT * FROM actividades_entregadas WHERE id = ?", [idEntrega]);
+          const entRow = entRows[0] || null;
+          const summary = buildEntregaSummary(entRow, actObj);
+          const updatedHist = applyGradeToHistorial(summary.historial_entregas, entRow, nota, comentario, true, formatServerDateTime(new Date()));
+          await execute(
+            "UPDATE actividades_entregadas SET nota = ?, comentario = ?, historial_entregas_json = ? WHERE id = ?",
+            [nota, comentario, JSON.stringify(updatedHist), idEntrega]
+          );
           await syncNotaToRelacionSql(actObj.id, idEstudiante, nota);
           return {
             success: true,

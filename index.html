@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   
   <!-- Estilos Personalizados (Blanco + Azul) -->
-  <link rel="stylesheet" href="css/style.css?v=1.8">
+  <link rel="stylesheet" href="css/style.css?v=2.0">
 </head>
 <body>
 
@@ -245,7 +245,7 @@
 
   <!-- ==================== MODAL ROSTER PARA VOCEROS ==================== -->
   <div class="modal fade" id="sgnVoceroRosterModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header modal-header-blue">
           <div>
@@ -256,7 +256,7 @@
         </div>
         <div class="modal-body p-4">
           <div class="table-responsive">
-            <table class="sgn-table" id="voceroRosterTable">
+            <table class="sgn-table sgn-mobile-cards" id="voceroRosterTable">
               <thead>
                 <tr>
                   <th>#</th>
@@ -323,13 +323,13 @@
 
   <!-- ==================== MODAL DE ENTREGA DE ACTIVIDAD (ESTUDIANTE) ==================== -->
   <div class="modal fade" id="sgnEntregaModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-fullscreen-sm-down modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header modal-header-blue">
           <h5 class="modal-title fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2"></i> Realizar Entrega de Actividad</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
-        <form id="sgnEntregaForm">
+        <form id="sgnEntregaForm" class="d-flex flex-column flex-grow-1 overflow-hidden" style="min-height: 0;">
           <input type="hidden" id="entregaActividadId">
           <input type="hidden" id="entregaEstudianteId">
           
@@ -339,8 +339,11 @@
               <div id="entregaModalActividadDesc" class="small text-break">Descripción e instrucciones de la actividad.</div>
             </div>
 
+            <!-- Estado de Intentos / Sustitución sin Descuento -->
+            <div id="entregaModalIntentosAlert" class="mb-3" style="display: none;"></div>
+
             <!-- Pestañas de método de entrega: Archivo PDF/Doc vs Enlace (Google Drive / Canva) -->
-            <ul class="nav nav-pills nav-fill bg-light p-1 rounded border mb-3" id="entregaTipoTabs" role="tablist">
+            <ul class="nav nav-pills nav-fill flex-column flex-sm-row gap-1 bg-light p-1 rounded border mb-3" id="entregaTipoTabs" role="tablist">
               <li class="nav-item" role="presentation">
                 <button class="nav-link active fw-bold small" id="tab-tipo-archivo" data-bs-toggle="pill" data-bs-target="#entrega-pane-archivo" type="button" role="tab">
                   <i class="fa-solid fa-file-pdf me-1"></i> Subir Archivo PDF (o DOCX, PPT, ZIP)
@@ -368,7 +371,7 @@
               <!-- Pane 2: Enlace URL -->
               <div class="tab-pane fade" id="entrega-pane-link" role="tabpanel">
                 <div class="mb-3">
-                  <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 mb-2">
                     <label for="entregaUrlInput" class="form-label fw-bold mb-0">Enlace de Entrega (URL) *</label>
                     <div class="d-flex gap-1">
                       <span class="badge bg-danger text-white"><i class="fa-brands fa-google-drive me-1"></i> Google Drive</span>
@@ -378,12 +381,12 @@
                   <div class="input-group">
                     <input type="url" id="entregaUrlInput" class="form-control" placeholder="https://drive.google.com/file/d/... o https://www.canva.com/design/...">
                     <button type="button" class="btn btn-outline-primary" id="btnVerificarLinkDrive" title="Comprobar si el enlace es público">
-                      <i class="fa-solid fa-shield-halved me-1"></i> Validar Enlace
+                      <i class="fa-solid fa-shield-halved me-1"></i> <span class="d-none d-sm-inline">Validar Enlace</span>
                     </button>
                   </div>
                   <div id="driveLinkFeedback" class="small mt-2" style="display: none;"></div>
                   <div class="form-text text-muted mt-1">
-                    <strong>Nota:</strong> Solo se permiten enlaces oficiales de <strong>Google Drive</strong> (`drive.google.com`, `docs.google.com`) o <strong>Canva</strong> (`canva.com`). No se aceptan enlaces de WPS Office, OneDrive u otros servicios.
+                    <strong>Nota:</strong> Solo se permiten enlaces oficiales de <strong>Google Drive</strong> (<code>drive.google.com</code>, <code>docs.google.com</code>) o <strong>Canva</strong> (<code>canva.com</code>). No se aceptan enlaces de WPS Office, OneDrive u otros servicios.
                   </div>
                 </div>
                 <div class="alert alert-warning border-warning d-flex align-items-start gap-2 mb-0 py-2 px-3">
@@ -398,10 +401,13 @@
 
             <div id="entregaActualStatus" class="mt-3 p-2 bg-light border rounded d-flex flex-wrap align-items-center justify-content-between gap-2" style="display: none;">
               <span class="badge bg-success"><i class="fa-solid fa-circle-check"></i> Entrega Previa Guardada</span>
-              <a id="entregaActualLink" href="#" target="_blank" class="btn btn-sm btn-outline-primary fw-bold text-truncate" style="max-width: 250px;">
+              <a id="entregaActualLink" href="#" target="_blank" class="btn btn-sm btn-outline-primary fw-bold text-truncate" style="max-width: 100%;">
                 <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver entrega enviada
               </a>
             </div>
+
+            <!-- Historial resumido de entregas dentro del modal -->
+            <div id="entregaModalHistorialBox" class="mt-3" style="display: none;"></div>
           </div>
 
           <div class="modal-footer bg-light">
@@ -417,7 +423,7 @@
 
   <!-- ==================== MODAL DE EVALUACIÓN ONLINE (QUIZ ESTUDIANTE Y RESULTADOS) ==================== -->
   <div class="modal fade" id="sgnQuizModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header modal-header-blue">
           <div>
@@ -499,10 +505,10 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
   
   <!-- SGN Modulos -->
-  <script src="js/config.js?v=2.2"></script>
-  <script src="js/modals.js?v=2.1"></script>
+  <script src="js/config.js?v=2.3"></script>
+  <script src="js/modals.js?v=2.2"></script>
   <script src="js/auth.js?v=2.1"></script>
-  <script src="js/student.js?v=2.2"></script>
+  <script src="js/student.js?v=2.4"></script>
   
   <script>
     // Evento Formulario Login Optimizado (Ultra Rápido con Turso)

@@ -428,14 +428,14 @@ function renderEstudianteInscripcionesTable() {
 
     $tbody.append(`
       <tr>
-        <td><strong>#${index + 1}</strong></td>
-        <td class="fw-bold text-navy">${item.taller}</td>
-        <td><span class="badge bg-light text-dark border">${item.banco}</span></td>
-        <td class="fw-bold text-success">Bs. ${parseFloat(item.monto || 0).toLocaleString('es-VE', {minimumFractionDigits: 2})}</td>
-        <td><code>${item.numero_transferencia}</code></td>
-        <td><i class="fa-regular fa-calendar-check text-primary me-1"></i> ${item.fecha_transferencia}</td>
-        <td>${certHTML}</td>
-        <td>${captureHTML}</td>
+        <td data-label="#"><strong>#${index + 1}</strong></td>
+        <td class="fw-bold text-navy" data-label="Curso / Taller">${item.taller}</td>
+        <td data-label="Banco"><span class="badge bg-light text-dark border">${item.banco}</span></td>
+        <td class="fw-bold text-success" data-label="Monto">Bs. ${parseFloat(item.monto || 0).toLocaleString('es-VE', {minimumFractionDigits: 2})}</td>
+        <td data-label="Nº Referencia"><code>${item.numero_transferencia}</code></td>
+        <td data-label="Fecha"><i class="fa-regular fa-calendar-check text-primary me-1"></i> ${item.fecha_transferencia}</td>
+        <td class="sgn-td-block" data-label="Estado / Cert.">${certHTML}</td>
+        <td data-label="Comprobante">${captureHTML}</td>
       </tr>
     `);
   });

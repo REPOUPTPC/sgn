@@ -178,75 +178,105 @@ async function getCatalogData(forceRefresh = false) {
 
 // Garantizar que existan las columnas e6, e7, e8 en relacion_programa_notas y la tabla api_keys
 let schemaVerified = false;
+let schemaInitPromise = null;
 async function ensureSchemaColumns() {
   if (schemaVerified) return;
-  try {
-    const info = await query("PRAGMA table_info(relacion_programa_notas)");
-    const colNames = (info || []).map(c => c.name);
-    for (const col of ["e6", "e7", "e8"]) {
-      if (!colNames.includes(col)) {
-        await execute(`ALTER TABLE relacion_programa_notas ADD COLUMN ${col} REAL DEFAULT 0`);
+  if (schemaInitPromise) return schemaInitPromise;
+  schemaInitPromise = (async () => {
+    try {
+      const info = await query("PRAGMA table_info(relacion_programa_notas)");
+      const colNames = (info || []).map(c => c.name);
+      for (const col of ["e6", "e7", "e8"]) {
+        if (!colNames.includes(col)) {
+          try {
+            await execute(`ALTER TABLE relacion_programa_notas ADD COLUMN ${col} REAL DEFAULT 0`);
+          } catch (eAlt) {
+            if (!String(eAlt.message || eAlt).toLowerCase().includes("duplicate column")) throw eAlt;
+          }
+        }
       }
+
+      // Garantizar columna max_entregas en actividades_asignadas (por defecto 2 entregas evaluables)
+      const actCols = (await query("PRAGMA table_info(actividades_asignadas)") || []).map(c => c.name);
+      if (!actCols.includes("max_entregas")) {
+        try {
+          await execute("ALTER TABLE actividades_asignadas ADD COLUMN max_entregas INTEGER DEFAULT 2");
+        } catch (eAlt) {
+          if (!String(eAlt.message || eAlt).toLowerCase().includes("duplicate column")) throw eAlt;
+        }
+      }
+
+      // Garantizar columna historial_entregas_json en actividades_entregadas para registrar todas las entregas y sus notas
+      const entCols = (await query("PRAGMA table_info(actividades_entregadas)") || []).map(c => c.name);
+      if (!entCols.includes("historial_entregas_json")) {
+        try {
+          await execute("ALTER TABLE actividades_entregadas ADD COLUMN historial_entregas_json TEXT DEFAULT ''");
+        } catch (eAlt) {
+          if (!String(eAlt.message || eAlt).toLowerCase().includes("duplicate column")) throw eAlt;
+        }
+      }
+
+      await execute(`
+        CREATE TABLE IF NOT EXISTS api_keys (
+          id INTEGER PRIMARY KEY,
+          nombre TEXT NOT NULL,
+          api_key TEXT NOT NULL UNIQUE,
+          api_secret TEXT NOT NULL,
+          descripcion TEXT,
+          estado TEXT DEFAULT 'ACTIVO',
+          created_at TEXT,
+          last_used_at TEXT
+        )
+      `);
+
+      await execute(`
+        CREATE TABLE IF NOT EXISTS mensajes (
+          id INTEGER PRIMARY KEY,
+          id_profesor INTEGER,
+          nombre_profesor TEXT,
+          id_unidad_curricular INTEGER DEFAULT 0,
+          seccion TEXT,
+          titulo TEXT NOT NULL,
+          mensaje TEXT NOT NULL,
+          tipo TEXT DEFAULT 'warning',
+          fecha_creacion TEXT,
+          activo INTEGER DEFAULT 1
+        )
+      `);
+
+      try {
+        await execute("CREATE INDEX IF NOT EXISTS idx_mensajes_unidad ON mensajes(id_unidad_curricular)");
+        await execute("CREATE INDEX IF NOT EXISTS idx_mensajes_activo ON mensajes(activo)");
+      } catch (eIdx) {}
+
+      // Corregir mensajes existentes que tengan 'Super Administrador' por el nombre del Docente
+      try {
+        await execute(`
+          UPDATE mensajes
+          SET nombre_profesor = 'JOSE HERRERA'
+          WHERE UPPER(TRIM(nombre_profesor)) = 'SUPER ADMINISTRADOR'
+             OR nombre_profesor IS NULL
+             OR TRIM(nombre_profesor) = ''
+        `);
+      } catch (eFixMsg) {}
+
+      // Limpiar entregas que quedaron con nota 0 por fallo o apagado de la IA
+      try {
+        await execute(`
+          UPDATE actividades_entregadas
+          SET nota = NULL, comentario = NULL
+          WHERE (comentario LIKE '%Evaluado por IA%' OR comentario LIKE '%DeepSeek%')
+            AND (nota = 0 OR nota IS NULL)
+        `);
+      } catch (eClean) {}
+
+      schemaVerified = true;
+    } catch (err) {
+      console.error("Error en ensureSchemaColumns:", err);
+      schemaInitPromise = null;
     }
-
-    await execute(`
-      CREATE TABLE IF NOT EXISTS api_keys (
-        id INTEGER PRIMARY KEY,
-        nombre TEXT NOT NULL,
-        api_key TEXT NOT NULL UNIQUE,
-        api_secret TEXT NOT NULL,
-        descripcion TEXT,
-        estado TEXT DEFAULT 'ACTIVO',
-        created_at TEXT,
-        last_used_at TEXT
-      )
-    `);
-
-    await execute(`
-      CREATE TABLE IF NOT EXISTS mensajes (
-        id INTEGER PRIMARY KEY,
-        id_profesor INTEGER,
-        nombre_profesor TEXT,
-        id_unidad_curricular INTEGER DEFAULT 0,
-        seccion TEXT,
-        titulo TEXT NOT NULL,
-        mensaje TEXT NOT NULL,
-        tipo TEXT DEFAULT 'warning',
-        fecha_creacion TEXT,
-        activo INTEGER DEFAULT 1
-      )
-    `);
-
-    try {
-      await execute("CREATE INDEX IF NOT EXISTS idx_mensajes_unidad ON mensajes(id_unidad_curricular)");
-      await execute("CREATE INDEX IF NOT EXISTS idx_mensajes_activo ON mensajes(activo)");
-    } catch (eIdx) {}
-
-    // Corregir mensajes existentes que tengan 'Super Administrador' por el nombre del Docente
-    try {
-      await execute(`
-        UPDATE mensajes
-        SET nombre_profesor = 'JOSE HERRERA'
-        WHERE UPPER(TRIM(nombre_profesor)) = 'SUPER ADMINISTRADOR'
-           OR nombre_profesor IS NULL
-           OR TRIM(nombre_profesor) = ''
-      `);
-    } catch (eFixMsg) {}
-
-    // Limpiar entregas que quedaron con nota 0 por fallo o apagado de la IA
-    try {
-      await execute(`
-        UPDATE actividades_entregadas
-        SET nota = NULL, comentario = NULL
-        WHERE (comentario LIKE '%Evaluado por IA%' OR comentario LIKE '%DeepSeek%')
-          AND (nota = 0 OR nota IS NULL)
-      `);
-    } catch (eClean) {}
-
-    schemaVerified = true;
-  } catch (err) {
-    console.error("Error en ensureSchemaColumns:", err);
-  }
+  })();
+  return schemaInitPromise;
 }
 
 // Pre-calentar conexión TLS y caché en segundo plano al iniciar el módulo

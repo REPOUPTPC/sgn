@@ -88,7 +88,8 @@ async function migrate() {
       quiz_preguntas_json TEXT,
       tiempo_minutos INTEGER DEFAULT 0,
       fecha_limite TEXT,
-      ia_evaluacion TEXT DEFAULT 'NO'
+      ia_evaluacion TEXT DEFAULT 'NO',
+      max_entregas INTEGER DEFAULT 2
     );`,
     `CREATE INDEX IF NOT EXISTS idx_actividades_unidad ON actividades_asignadas(id_unidad_curricular);`,
     `CREATE TABLE IF NOT EXISTS actividades_entregadas (
@@ -101,7 +102,8 @@ async function migrate() {
       quiz_detalle_json TEXT,
       hora_inicio TEXT,
       hora_fin TEXT,
-      comentario TEXT
+      comentario TEXT,
+      historial_entregas_json TEXT DEFAULT ''
     );`,
     `CREATE INDEX IF NOT EXISTS idx_entregas_act ON actividades_entregadas(id_actividades_asignadas);`,
     `CREATE INDEX IF NOT EXISTS idx_entregas_est ON actividades_entregadas(id_estudiante);`,

@@ -106,12 +106,12 @@ $(document).ready(function () {
       const cleanSec = String(est.seccion || '').replace(/^'/, '');
       html += `
         <div class="list-group-item list-group-item-action p-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <div>
-            <strong class="text-navy small d-block">${est.nombre_completo}</strong>
+          <div style="min-width: 0;">
+            <strong class="text-navy small d-block text-break">${est.nombre_completo}</strong>
             <span class="badge bg-navy me-1">${est.cedula}</span>
             <span class="badge bg-secondary">Sec: ${cleanSec}</span>
           </div>
-          <button type="button" class="btn btn-sm btn-primary-sgn fw-bold py-1 px-2" onclick="openModalCalificacionesEstudiante(${est.id}); $('#dropdownResultadosEstudianteActividades').hide();">
+          <button type="button" class="btn btn-sm btn-primary-sgn fw-bold py-1 px-2 flex-shrink-0" onclick="openModalCalificacionesEstudiante(${est.id}); $('#dropdownResultadosEstudianteActividades').hide();">
             <i class="fa-solid fa-graduation-cap me-1"></i> Ver y Calificar
           </button>
         </div>
@@ -181,26 +181,53 @@ $(document).ready(function () {
 });
 
 /**
- * Filtro de Búsqueda en Tiempo Real en Tablas
+ * Filtro de Búsqueda en Tiempo Real en Tablas (100% compatible con vista tabla y tarjetas móviles)
  */
 function filterTable(selector, query) {
   const term = query.toString().toLowerCase().trim();
-  $(selector).each(function () {
-    const text = $(this).text().toLowerCase();
-    if (text.indexOf(term) !== -1) {
-      $(this).show();
-    } else {
-      $(this).hide();
+  const $rows = $(selector).not('.sgn-no-search-results');
+  const $tbody = $rows.first().closest('tbody');
+  if ($tbody.length) {
+    $tbody.find('.sgn-no-search-results').remove();
+  }
+
+  let visibleCount = 0;
+  let realRowsCount = 0;
+  $rows.each(function () {
+    if ($(this).find('td[colspan]').length > 0) {
+      return;
     }
+    realRowsCount++;
+    const text = $(this).text().toLowerCase();
+    const match = (!term || text.indexOf(term) !== -1);
+    this.style.display = '';
+    $(this).toggleClass('d-none', !match);
+    if (match) visibleCount++;
   });
+
+  if (term && realRowsCount > 0 && visibleCount === 0 && $tbody.length) {
+    const colCount = $tbody.closest('table').find('thead th').length || 8;
+    const safeTerm = escapeHtmlDashboard(query.toString().trim());
+    $tbody.append(`
+      <tr class="sgn-no-search-results">
+        <td colspan="${colCount}" class="text-center text-muted py-4">
+          <i class="fa-solid fa-magnifying-glass fa-lg mb-2 d-block text-primary opacity-50"></i>
+          No se encontraron coincidencias para "<strong>${safeTerm}</strong>".
+        </td>
+      </tr>
+    `);
+  }
 }
 
 /**
  * Configurar interfaz de usuario según Rol
  */
 function setupUserInterface() {
+  const roleLabel = currentUser.rol === "SUPER_ADMIN" ? "Super Administrador" : "Docente";
   $('#navUserName').text(currentUser.nombre);
-  $('#navUserRole').text(currentUser.rol === "SUPER_ADMIN" ? "Super Administrador" : "Docente");
+  $('#navUserRole').text(roleLabel);
+  $('#navUserNameMobile').text(currentUser.nombre);
+  $('#navUserRoleMobile').text(currentUser.rol === "SUPER_ADMIN" ? "Admin" : "Docente");
 
   if (!sgnAuth.isSuperAdmin()) {
     // Ocultar pestañas exclusivas de Super Admin (Profesores, Unidades, Programas, Extensión, API)
@@ -325,7 +352,10 @@ function populateDropdownOptions() {
     const actIds = acts.map(a => String(a.id));
     const entregas = (sgnDb.actividadesEntregadas || []).filter(e => actIds.includes(String(e.id_actividades_asignadas)));
     const totalEnt = entregas.length;
-    const calificados = entregas.filter(e => e.nota !== undefined && e.nota !== "" && e.nota !== null).length;
+    const calificados = entregas.filter(e => {
+      const actObj = acts.find(a => String(a.id) === String(e.id_actividades_asignadas));
+      return isEntregaCalificadaValida(e, actObj);
+    }).length;
     const pendientes = totalEnt - calificados;
 
     statsPorUnidad[u.id] = { total: totalEnt, calificados: calificados, pendientes: pendientes, actsCount: acts.length };
@@ -503,18 +533,18 @@ function renderEstudiantesTable() {
 
     $tbody.append(`
       <tr>
-        <td class="fw-bold">${e.id}</td>
-        <td class="fw-bold text-navy">${e.cedula}</td>
-        <td>${e.nombre_completo}</td>
-        <td>${e.correo || "N/A"}<br><small class="text-muted">${e.telefono || ""}</small></td>
-        <td><small class="fw-semibold">${progNombre}</small></td>
-        <td><span class="badge bg-secondary">Sec: ${e.seccion || "170"}</span></td>
-        <td>
+        <td class="fw-bold" data-label="ID">${e.id}</td>
+        <td class="fw-bold text-navy" data-label="Cédula">${e.cedula}</td>
+        <td class="fw-semibold" data-label="Estudiante">${e.nombre_completo}</td>
+        <td data-label="Contacto">${e.correo || "N/A"}<br><small class="text-muted">${e.telefono || ""}</small></td>
+        <td data-label="Programa"><small class="fw-semibold">${progNombre}</small></td>
+        <td data-label="Sección"><span class="badge bg-secondary">Sec: ${e.seccion || "170"}</span></td>
+        <td data-label="Rol">
           <span class="role-badge ${isVocero ? 'role-vocero' : 'role-estudiante'}">
             ${isVocero ? '<i class="fa-solid fa-bullhorn me-1"></i> VOCERO' : 'ESTUDIANTE'}
           </span>
         </td>
-        <td>
+        <td class="sgn-td-block" data-label="Acciones">
           <div class="btn-group btn-group-sm">
             <button class="btn btn-outline-info" onclick="openModalCalificacionesEstudiante(${e.id})" title="Ver Calificaciones y Entregas">
               <i class="fa-solid fa-graduation-cap"></i>
@@ -943,6 +973,139 @@ function openModalCalificacionesEstudiante(idEstudiante) {
   bsModal.show();
 }
 
+function getMaxEntregasDash(actObj) {
+  const raw = actObj && actObj.max_entregas !== undefined && actObj.max_entregas !== null ? parseInt(actObj.max_entregas, 10) : 2;
+  return (!isNaN(raw) && raw >= 1) ? Math.min(20, raw) : 2;
+}
+
+function parseHistorialEntregasDash(ent, actObj = null) {
+  if (!ent) return [];
+  if (Array.isArray(ent.historial_entregas) && ent.historial_entregas.length > 0) {
+    return ent.historial_entregas;
+  }
+  const tipoAct = actObj ? String(actObj.tipo_actividad || 'ENTREGA').toUpperCase().trim() : '';
+  if (tipoAct === 'QUIZ' || String(ent.entrega || '').startsWith('QUIZ_ONLINE:') || String(ent.entrega || '').trim() === 'EN_CURSO') {
+    return [];
+  }
+
+  let parsed = [];
+  if (ent.historial_entregas_json) {
+    try {
+      const rawArr = typeof ent.historial_entregas_json === 'string'
+        ? JSON.parse(ent.historial_entregas_json)
+        : ent.historial_entregas_json;
+      if (Array.isArray(rawArr)) parsed = rawArr;
+    } catch (e) {}
+  }
+
+  if (parsed.length > 0) {
+    return parsed.map((item, idx) => {
+      const rawN = (item.nota !== undefined && item.nota !== null && item.nota !== '') ? parseFloat(item.nota) : NaN;
+      const isCal = item.calificado === true && !isNaN(rawN);
+      return {
+        numero_entrega: parseInt(item.numero_entrega, 10) || (idx + 1),
+        entrega: String(item.entrega || ''),
+        fecha_entrega: item.fecha_entrega || '',
+        calificado: isCal,
+        nota: isCal ? Math.min(20, Math.max(0, rawN)) : null,
+        fecha_calificacion: item.fecha_calificacion || null,
+        comentario: item.comentario || '',
+        evaluado_por_ia: !!item.evaluado_por_ia
+      };
+    });
+  }
+
+  if (ent.entrega) {
+    const rawNota = (ent.nota !== undefined && ent.nota !== null && ent.nota !== '') ? parseFloat(ent.nota) : NaN;
+    const isIaFail = ent.comentario && (ent.comentario.includes('Evaluado por IA') || ent.comentario.includes('DeepSeek')) && (isNaN(rawNota) || rawNota === 0);
+    const isCal = !isIaFail && !isNaN(rawNota) && rawNota > 0;
+    return [{
+      numero_entrega: 1,
+      entrega: String(ent.entrega),
+      fecha_entrega: ent.fecha_entrega || '',
+      calificado: isCal,
+      nota: isCal ? Math.min(20, Math.max(0, rawNota)) : null,
+      fecha_calificacion: isCal ? (ent.fecha_entrega || '') : null,
+      comentario: isIaFail ? '' : (ent.comentario || ''),
+      evaluado_por_ia: false
+    }];
+  }
+  return [];
+}
+
+function buildEntregaSummaryDash(ent, actObj = null) {
+  const maxEntregas = getMaxEntregasDash(actObj);
+  const historial = parseHistorialEntregasDash(ent, actObj);
+  const entregasEvaluadas = historial.filter(h => h.calificado === true).length;
+  const latest = historial.length > 0 ? historial[historial.length - 1] : null;
+  const tieneEntregaSinCalificar = !!(latest && !latest.calificado && latest.entrega);
+  const prevItems = historial.slice(0, -1);
+  const prevGradedList = (tieneEntregaSinCalificar ? historial : prevItems).filter(h => h.calificado === true);
+  const previousGraded = prevGradedList.length > 0 ? prevGradedList[prevGradedList.length - 1] : null;
+  return {
+    max_entregas: maxEntregas,
+    historial_entregas: historial,
+    entregas_evaluadas: entregasEvaluadas,
+    entregas_restantes: Math.max(0, maxEntregas - entregasEvaluadas),
+    latest: latest,
+    tiene_entrega_sin_calificar: tieneEntregaSinCalificar,
+    previous_graded: previousGraded
+  };
+}
+
+function renderHistorialEntregasDashHtml(historial, maxEntregas, compact = false) {
+  if (!Array.isArray(historial) || historial.length === 0) return '';
+  const itemsHtml = historial.map((h, idx) => {
+    const isActual = idx === historial.length - 1;
+    const calBadge = h.calificado
+      ? `<span class="badge bg-success">${parseFloat(h.nota).toFixed(2)} / 20</span>`
+      : `<span class="badge bg-warning text-dark">A la espera</span>`;
+    const linkBtn = (h.entrega && h.entrega !== 'CALIFICADO_DIRECTO')
+      ? `<a href="${h.entrega}" target="_blank" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size: 0.72rem;"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Ver</a>`
+      : `<span class="badge bg-light text-muted border" style="font-size: 0.68rem;">Presencial</span>`;
+    const comHtml = h.comentario
+      ? `<div class="text-muted fst-italic mt-1" style="font-size: 0.72rem;"><i class="fa-solid fa-comment-dots me-1 text-primary"></i>${escapeHtmlDashboard(h.comentario)}</div>`
+      : '';
+    return `
+      <div class="p-2 rounded border bg-white mb-1 ${isActual ? 'border-primary-subtle' : ''}" style="font-size: 0.76rem;">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-1">
+          <div>
+            <span class="badge ${isActual ? 'bg-primary' : 'bg-secondary'} me-1">Entrega #${h.numero_entrega || (idx + 1)}${isActual ? ' (Actual)' : ''}</span>
+            <span class="text-muted">${escapeHtmlDashboard(h.fecha_entrega || '')}</span>
+          </div>
+          <div class="d-flex align-items-center gap-1">
+            ${calBadge}
+            ${linkBtn}
+          </div>
+        </div>
+        ${comHtml}
+      </div>
+    `;
+  }).join('');
+
+  if (compact) {
+    const evaluadas = historial.filter(h => h.calificado).length;
+    return `
+      <details class="mt-2 text-start">
+        <summary class="small fw-bold text-primary" style="cursor: pointer; user-select: none;">
+          <i class="fa-solid fa-clock-rotate-left me-1"></i> Historial (${historial.length} reg. | ${evaluadas}/${maxEntregas} eval.)
+        </summary>
+        <div class="mt-1">${itemsHtml}</div>
+      </details>
+    `;
+  }
+
+  return `
+    <div class="sgn-historial-entregas-box mt-2 mb-3">
+      <div class="small fw-bold text-navy mb-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+        <span><i class="fa-solid fa-clock-rotate-left text-primary me-1"></i> Registro de Entregas y Calificaciones</span>
+        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">Evaluadas: ${historial.filter(h => h.calificado).length} / ${maxEntregas}</span>
+      </div>
+      ${itemsHtml}
+    </div>
+  `;
+}
+
 function renderModalCalificacionesEstudianteContenido() {
   const est = currentEstudianteModalState.estudiante;
   if (!est) return;
@@ -980,7 +1143,8 @@ function renderModalCalificacionesEstudianteContenido() {
     const uSec = String(u.seccion || '170').replace(/^'/, '');
     const uNombre = u.unidad_curricular || u['unidad curricular'] || 'Unidad Curricular';
 
-    // Obtener relación de notas (E1 a E5) y actividades de la materia para unificar siempre la nota de mayor valor
+    // Obtener relación de notas (E1 a E8) y actividades de la materia.
+    // Si la evaluación tiene una actividad con entrega, prevalece el estado/nota real de la entrega actual (permite re-evaluar a mayor o menor nota).
     const rnMatches = (sgnDb.relacionNotas || []).filter(r => String(r.id_unidad_curricular) === String(u.id) && String(r.id_estudiante) === String(est.id));
     const rn = rnMatches[0] || {};
     const cantEval = rnMatches.reduce((maxC, r) => Math.max(maxC, parseInt(r.cantidad_evaluaciones) || 4), 4);
@@ -988,24 +1152,33 @@ function renderModalCalificacionesEstudianteContenido() {
 
     const unifiedEval = { e1: 0, e2: 0, e3: 0, e4: 0, e5: 0, e6: 0, e7: 0, e8: 0 };
     ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'].forEach(evKey => {
-      let maxVal = 0;
+      let rnVal = 0;
       rnMatches.forEach(r => {
         const v = parseFloat(r[evKey]);
-        if (!isNaN(v) && v > maxVal) maxVal = v;
+        if (!isNaN(v) && v > rnVal) rnVal = v;
       });
-      actividades.forEach(act => {
-        if ((act.numero_evaluacion || 'e1').toString().toLowerCase().trim() === evKey) {
-          const matchingEnts = (sgnDb.actividadesEntregadas || []).filter(e =>
-            String(e.id_actividades_asignadas).trim() === String(act.id).trim() &&
-            String(e.id_estudiante).trim() === String(est.id).trim()
-          );
-          matchingEnts.forEach(ent => {
-            const vEnt = parseFloat(ent.nota);
-            if (!isNaN(vEnt) && vEnt > maxVal) maxVal = vEnt;
-          });
+      const actForEv = actividades.find(a => (a.numero_evaluacion || 'e1').toString().toLowerCase().trim() === evKey);
+      let ent = null;
+      if (actForEv) {
+        const matchingEnts = (sgnDb.actividadesEntregadas || []).filter(e =>
+          String(e.id_actividades_asignadas).trim() === String(actForEv.id).trim() &&
+          String(e.id_estudiante).trim() === String(est.id).trim()
+        );
+        ent = matchingEnts.sort((a, b) => (Number(b.id) - Number(a.id)))[0] || null;
+      }
+      if (ent) {
+        const tipoA = String(actForEv.tipo_actividad || 'ENTREGA').toUpperCase().trim();
+        if (tipoA === 'QUIZ') {
+          const isEnC = String(ent.entrega || '').trim() === 'EN_CURSO';
+          const vE = parseFloat(ent.nota);
+          unifiedEval[evKey] = (!isEnC && !isNaN(vE)) ? Math.min(20, Math.max(0, vE)) : 0;
+        } else {
+          const sumEnt = buildEntregaSummaryDash(ent, actForEv);
+          unifiedEval[evKey] = (sumEnt.latest && sumEnt.latest.calificado) ? Math.min(20, Math.max(0, parseFloat(sumEnt.latest.nota) || 0)) : 0;
         }
-      });
-      unifiedEval[evKey] = Math.min(20, Math.max(0, maxVal));
+      } else {
+        unifiedEval[evKey] = Math.min(20, Math.max(0, rnVal));
+      }
     });
 
     const activeScores = [];
@@ -1063,21 +1236,37 @@ function renderModalCalificacionesEstudianteContenido() {
         const tipoAct = String(act.tipo_actividad || 'ENTREGA').toUpperCase();
         const isQuiz = (tipoAct === 'QUIZ');
 
-        // Buscar entrega del estudiante (si hay varias, priorizar la de mayor nota)
+        // Buscar entrega del estudiante (priorizar registro más reciente)
         const matchingEnts = (sgnDb.actividadesEntregadas || []).filter(e =>
           String(e.id_actividades_asignadas).trim() === String(act.id).trim() &&
           String(e.id_estudiante).trim() === String(est.id).trim()
         );
-        const ent = matchingEnts.sort((a, b) => (parseFloat(b.nota) || 0) - (parseFloat(a.nota) || 0) || (Number(b.id) - Number(a.id)))[0];
+        const ent = matchingEnts.sort((a, b) => (Number(b.id) - Number(a.id)))[0];
 
         const hasEntrega = !!ent;
         const isEnCurso = isQuiz && ent && String(ent.entrega || '').trim() === 'EN_CURSO';
-        const hasEntNota = ent && (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
+        const summaryEnt = !isQuiz ? buildEntregaSummaryDash(ent, act) : null;
+        const latestEnt = summaryEnt ? summaryEnt.latest : null;
         const unifiedScore = unifiedEval[evalKeyLower] || 0;
-        const isCalificado = hasEntNota || unifiedScore > 0;
-        const notaVal = isCalificado ? Math.max(hasEntNota ? (parseFloat(ent.nota) || 0) : 0, unifiedScore) : "";
-        const comentarioVal = (ent && ent.comentario) ? ent.comentario : "";
+
+        let isCalificado = false;
+        let notaVal = "";
+        if (isQuiz) {
+          const hasEntNota = ent && (ent.nota !== undefined && ent.nota !== "" && ent.nota !== null);
+          isCalificado = (!isEnCurso && hasEntNota) || (!ent && unifiedScore > 0);
+          notaVal = isCalificado ? (hasEntNota ? (parseFloat(ent.nota) || 0) : unifiedScore) : "";
+        } else if (ent && latestEnt) {
+          isCalificado = !!latestEnt.calificado;
+          notaVal = isCalificado ? latestEnt.nota : "";
+        } else {
+          isCalificado = unifiedScore > 0;
+          notaVal = isCalificado ? unifiedScore : "";
+        }
+
+        const comentarioVal = latestEnt ? (latestEnt.comentario || "") : ((ent && ent.comentario) ? ent.comentario : "");
         const safeEstNameAttr = String(est.nombre_completo || 'Estudiante').replace(/'/g, "\\'").replace(/"/g, "&quot;");
+        const maxEntAct = getMaxEntregasDash(act);
+        const entregaNumActual = latestEnt ? latestEnt.numero_entrega : 1;
 
         let statusBadgeHtml = '';
         if (isCalificado) {
@@ -1085,14 +1274,19 @@ function renderModalCalificacionesEstudianteContenido() {
         } else if (isEnCurso) {
           statusBadgeHtml = `<span class="badge bg-info text-dark"><i class="fa-solid fa-stopwatch me-1"></i> En Curso (Quiz)</span>`;
         } else if (hasEntrega) {
-          statusBadgeHtml = `<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> Entregado (Falta Calificar)</span>`;
+          const prevNoteTxt = (summaryEnt && summaryEnt.previous_graded)
+            ? ` (Previa #${summaryEnt.previous_graded.numero_entrega}: ${summaryEnt.previous_graded.nota} pts)`
+            : '';
+          statusBadgeHtml = `<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i> Entrega #${entregaNumActual} por Calificar${prevNoteTxt}</span>`;
         } else {
           statusBadgeHtml = `<span class="badge bg-secondary"><i class="fa-solid fa-circle-xmark me-1"></i> Sin Entrega Web</span>`;
         }
 
         // Enlace de entrega o detalle de Quiz
         let entregaDetalleHtml = '';
-        if (ent && ent.entrega) {
+        const activeEntregaUrl = latestEnt ? latestEnt.entrega : (ent ? ent.entrega : '');
+        const activeFechaEnt = latestEnt ? latestEnt.fecha_entrega : (ent ? ent.fecha_entrega : '');
+        if (ent && activeEntregaUrl) {
           if (isEnCurso) {
             entregaDetalleHtml = `
               <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1105,11 +1299,11 @@ function renderModalCalificacionesEstudianteContenido() {
                 </button>
               </div>
             `;
-          } else if (String(ent.entrega).startsWith('QUIZ_ONLINE:')) {
+          } else if (String(activeEntregaUrl).startsWith('QUIZ_ONLINE:')) {
             entregaDetalleHtml = `
               <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-1 px-2">
-                  <i class="fa-solid fa-bolt me-1"></i> ${ent.entrega.replace('QUIZ_ONLINE:', 'Evaluación Online:')}
+                  <i class="fa-solid fa-bolt me-1"></i> ${activeEntregaUrl.replace('QUIZ_ONLINE:', 'Evaluación Online:')}
                 </span>
                 <button type="button" class="btn btn-sm btn-primary-sgn py-1 px-3 fw-bold shadow-xs" onclick="openQuizResultadoEstudiante(${act.id}, ${est.id})">
                   <i class="fa-solid fa-list-check me-1"></i> Ver Respuestas (Correctas / Incorrectas)
@@ -1122,16 +1316,21 @@ function renderModalCalificacionesEstudianteContenido() {
           } else {
             entregaDetalleHtml = `
               <div class="mt-1 d-flex align-items-center gap-2 flex-wrap">
-                <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold py-1 px-2">
-                  <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Abrir Entrega del Estudiante
+                <a href="${activeEntregaUrl}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold py-1 px-2">
+                  <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Abrir Entrega #${entregaNumActual}
                 </a>
-                <span class="text-muted small"><i class="fa-regular fa-calendar me-1"></i>Entregado el: ${ent.fecha_entrega || 'N/A'}</span>
+                <span class="text-muted small"><i class="fa-regular fa-calendar me-1"></i>Entregado el: ${activeFechaEnt || 'N/A'}</span>
+                <span class="badge bg-light text-navy border">Evaluadas: ${summaryEnt ? summaryEnt.entregas_evaluadas : 0} / ${maxEntAct}</span>
               </div>
             `;
           }
         } else {
           entregaDetalleHtml = `<div class="text-muted small mt-1"><i class="fa-regular fa-circle-xmark text-danger me-1"></i>El estudiante aún no ha enviado su trabajo por el portal web. Puede calificarlo directamente abajo si realizó la entrega de forma presencial.</div>`;
         }
+
+        const historialHtmlModal = (!isQuiz && summaryEnt && summaryEnt.historial_entregas.length > 0)
+          ? renderHistorialEntregasDashHtml(summaryEnt.historial_entregas, maxEntAct, false)
+          : '';
 
         const idEntregaVal = ent ? ent.id : 0;
 
@@ -1158,6 +1357,7 @@ function renderModalCalificacionesEstudianteContenido() {
               <div class="bg-light p-2 rounded-2 mb-3 border">
                 ${entregaDetalleHtml}
               </div>
+              ${historialHtmlModal}
 
               <!-- Fila de Corrección: Nota + Observación / Felicitación + Botón -->
               <div class="row g-2 align-items-end">
@@ -1353,6 +1553,7 @@ function guardarEntregaEstudianteModal(idActividad, idEstudiante, idEntrega) {
     id_entrega: idEntrega || 0,
     nota: numVal,
     comentario: comVal,
+    id_actividades_asignadas: idActividad,
     id_actividad: idActividad,
     id_estudiante: idEstudiante
   };
@@ -1367,6 +1568,9 @@ function guardarEntregaEstudianteModal(idActividad, idEstudiante, idEntrega) {
       if (target) {
         target.nota = numVal;
         target.comentario = comVal;
+        if (Array.isArray(res.historial_entregas)) {
+          target.historial_entregas_json = JSON.stringify(res.historial_entregas);
+        }
       } else {
         sgnDb.actividadesEntregadas.push({
           id: res.id_entrega || idEntrega || 0,
@@ -1375,7 +1579,8 @@ function guardarEntregaEstudianteModal(idActividad, idEstudiante, idEntrega) {
           entrega: "CALIFICADO_DIRECTO",
           fecha_entrega: new Date().toISOString().split('T')[0],
           nota: numVal,
-          comentario: comVal
+          comentario: comVal,
+          historial_entregas_json: Array.isArray(res.historial_entregas) ? JSON.stringify(res.historial_entregas) : ''
         });
       }
 
@@ -1422,17 +1627,17 @@ function renderProfesoresTable() {
     const isActive = p.activo.toString().toUpperCase() === "TRUE";
     $tbody.append(`
       <tr>
-        <td class="fw-bold">${p.id}</td>
-        <td class="fw-bold text-navy">${p.nombre_profesor}</td>
-        <td>${p.cedula}</td>
-        <td>${p.telefono}</td>
-        <td><span class="role-badge role-docente">${p.rol}</span></td>
-        <td>
+        <td class="fw-bold" data-label="ID">${p.id}</td>
+        <td class="fw-bold text-navy" data-label="Docente">${p.nombre_profesor}</td>
+        <td data-label="Cédula">${p.cedula}</td>
+        <td data-label="Teléfono">${p.telefono}</td>
+        <td data-label="Rol"><span class="role-badge role-docente">${p.rol}</span></td>
+        <td data-label="Estado">
           <span class="badge ${isActive ? 'bg-success' : 'bg-secondary'}">
             ${isActive ? 'ACTIVO' : 'INACTIVO'}
           </span>
         </td>
-        <td>
+        <td class="sgn-td-block" data-label="Acciones">
           <div class="btn-group btn-group-sm">
             <button class="btn btn-outline-primary" onclick="editProfesor(${p.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-outline-danger" onclick="deleteProfesorPrompt(${p.id})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
@@ -1553,14 +1758,16 @@ function renderUnidadesTable() {
 
     $tbody.append(`
       <tr>
-        <td class="fw-bold">${u.id}</td>
-        <td class="fw-bold text-navy">
-          ${u.unidad_curricular || u['unidad curricular']}
-          ${progNombre ? `<div class="small text-muted fw-normal"><i class="fa-solid fa-graduation-cap me-1"></i>${progNombre}</div>` : ''}
+        <td class="fw-bold" data-label="ID">${u.id}</td>
+        <td class="fw-bold text-navy" data-label="Unidad">
+          <div>
+            ${u.unidad_curricular || u['unidad curricular']}
+            ${progNombre ? `<div class="small text-muted fw-normal"><i class="fa-solid fa-graduation-cap me-1"></i>${progNombre}</div>` : ''}
+          </div>
         </td>
-        <td><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
-        <td>Prof. ${profNombre}</td>
-        <td>
+        <td data-label="Sección"><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
+        <td data-label="Docente">Prof. ${profNombre}</td>
+        <td class="sgn-td-block" data-label="Acciones">
           <div class="btn-group btn-group-sm">
             <button class="btn btn-outline-primary" onclick="editUnidad(${u.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
             ${sgnAuth.isSuperAdmin() ? `<button class="btn btn-outline-danger" onclick="deleteUnidadPrompt(${u.id})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>` : ''}
@@ -1645,9 +1852,9 @@ function renderProgramasTable() {
   sgnDb.programas.forEach(p => {
     $tbody.append(`
       <tr>
-        <td class="fw-bold">${p.id}</td>
-        <td class="fw-bold text-navy">${p.programa}</td>
-        <td>
+        <td class="fw-bold" data-label="ID">${p.id}</td>
+        <td class="fw-bold text-navy" data-label="Programa">${p.programa}</td>
+        <td class="sgn-td-block" data-label="Acciones">
           <div class="btn-group btn-group-sm">
             <button class="btn btn-outline-primary" onclick="editPrograma(${p.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
             ${sgnAuth.isSuperAdmin() ? `<button class="btn btn-outline-danger" onclick="deleteProgramaPrompt(${p.id})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>` : ''}
@@ -1781,16 +1988,16 @@ function renderNotasTable(keepSelectedCant = false) {
     for (let i = 1; i <= cantEval; i++) {
       let val = parseFloat(rn['e' + i]) || 0;
       sum += val;
-      rowInputs += `<td><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e${i}" data-eval="${i}" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${val}"></td>`;
+      rowInputs += `<td class="nota-col-eval" data-label="Evaluación ${i} (E${i})"><input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm nota-input e${i}" data-eval="${i}" data-id="${rn.id || ''}" data-estudiante="${est.id}" value="${val}"></td>`;
     }
     let calcTotal = (sum / cantEval).toFixed(2);
 
     $tbody.append(`
       <tr>
-        <td class="fw-bold text-navy">${est.cedula}</td>
-        <td>${est.nombre_completo}</td>
+        <td class="fw-bold text-navy nota-col-cedula" data-label="Cédula">${est.cedula}</td>
+        <td class="fw-semibold nota-col-nombre" data-label="Estudiante">${est.nombre_completo}</td>
         ${rowInputs}
-        <td class="total-cell fw-bold">${getGradeBadgeHTML(calcTotal)}</td>
+        <td class="total-cell fw-bold nota-col-total" data-label="Total">${getGradeBadgeHTML(calcTotal)}</td>
       </tr>
     `);
   });
@@ -2460,6 +2667,11 @@ function setupHashNavigation() {
     } else if (hash) {
       window.location.hash = hash;
     }
+    try {
+      if (e.target && typeof e.target.scrollIntoView === 'function') {
+        e.target.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    } catch (eScroll) {}
   });
 
   restoreTabFromHash();
@@ -2547,7 +2759,7 @@ function renderActividadesTable() {
   const actividadesConEstadisticas = list.map(a => {
     const entregas = (sgnDb.actividadesEntregadas || []).filter(e => String(e.id_actividades_asignadas) === String(a.id));
     const totalEntregas = entregas.length;
-    const calificados = entregas.filter(e => e.nota !== undefined && e.nota !== "" && e.nota !== null).length;
+    const calificados = entregas.filter(e => isEntregaCalificadaValida(e, a)).length;
     const pendientes = totalEntregas - calificados;
 
     if (pendientes > 0) {
@@ -2717,10 +2929,14 @@ function renderActividadesTable() {
         </div>
       `;
     } else {
+      const maxEntAct = getMaxEntregasDash(a);
       tipoBadgeHtml = `
         <div class="mb-1 d-flex flex-wrap gap-1 align-items-center">
           <span class="badge bg-light text-secondary border">
             <i class="fa-solid fa-file-arrow-up me-1"></i> Entrega PDF / Enlace
+          </span>
+          <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle fw-bold" title="Máximo de entregas evaluables permitidas">
+            <i class="fa-solid fa-repeat me-1"></i> Máx. ${maxEntAct} entregas
           </span>
           ${(a.ia_evaluacion === 'SI' || a.ia_evaluacion === true || a.ia_evaluacion == '1') ? `
             <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold" title="Autoevaluación con Inteligencia Artificial DeepSeek activada">
@@ -2776,17 +2992,19 @@ function renderActividadesTable() {
 
     $tbody.append(`
       <tr class="${rowClass}">
-        <td class="fw-bold">${a.id}</td>
-        <td class="fw-bold text-navy">
-          ${ucNombre}
-          ${badgeUcHtml}
+        <td class="fw-bold" data-label="ID">${a.id}</td>
+        <td class="fw-bold text-navy" data-label="Unidad">
+          <div>
+            ${ucNombre}
+            ${badgeUcHtml}
+          </div>
         </td>
-        <td><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
-        <td><span class="badge bg-info text-dark fw-bold">${numEvalUpper}</span></td>
-        <td style="min-width: 215px;">${lapsoBarHtml}</td>
-        <td style="max-width: 360px; min-width: 200px;" class="text-break desc-actividad-box desc-actividad-scroll align-top">${descContentHtml}</td>
-        <td>${estadoEntregasHtml}</td>
-        <td>
+        <td data-label="Sección"><span class="badge bg-primary">Sección: ${cleanSec}</span></td>
+        <td data-label="Evaluación"><span class="badge bg-info text-dark fw-bold">${numEvalUpper}</span></td>
+        <td class="sgn-td-block" data-label="Lapso de Entrega" style="min-width: 215px;">${lapsoBarHtml}</td>
+        <td style="max-width: 360px; min-width: 200px;" class="text-break desc-actividad-box desc-actividad-scroll align-top sgn-td-block" data-label="Descripción">${descContentHtml}</td>
+        <td class="sgn-td-block" data-label="Entregas">${estadoEntregasHtml}</td>
+        <td class="sgn-td-block" data-label="Acciones">
           <div class="btn-group btn-group-sm">
             ${tipoAct === 'QUIZ' ? `<button class="btn btn-outline-warning text-dark fw-bold" onclick="reaplicarQuizDesdeTablaPrompt(${a.id})" title="Aplicar nuevamente el Quiz (a estudiantes afectados o a todos) con nuevo sorteo de preguntas"><i class="fa-solid fa-rotate-right"></i></button>` : ''}
             <button class="btn btn-outline-primary" onclick="editActividad(${a.id})" title="Editar Actividad"><i class="fa-solid fa-pen"></i></button>
@@ -2988,9 +3206,11 @@ function onTipoActividadChange() {
     if (!$('#actividadId').val()) {
       $('#actividadIaEvaluar').prop('checked', true);
     }
+    $('#actividadMaxEntregasGroup').hide();
     $('#quizConfigSection').slideDown(200);
     updateQuizMarkdownPreview();
   } else {
+    $('#actividadMaxEntregasGroup').show();
     $('#quizConfigSection').slideUp(200);
   }
 }
@@ -3335,6 +3555,8 @@ function openModalActividad() {
   $('#actividadDiasLapso').val(7);
   $('#actividadFechaLimite').val(addDaysYMDClient(hoyStr, 7));
   $('#actividadTipo').val('ENTREGA');
+  $('#actividadMaxEntregas').val(2);
+  $('#actividadMaxEntregasGroup').show();
   updateIaEvaluacionUI('ENTREGA');
   $('#quizCantidadMostrar').val(15);
   $('#quizPuntajeMaximo').val(20);
@@ -3387,6 +3609,12 @@ function editActividad(id) {
 
   const tipoAct = String(a.tipo_actividad || "ENTREGA").toUpperCase();
   $('#actividadTipo').val(tipoAct === 'QUIZ' ? 'QUIZ' : 'ENTREGA');
+  $('#actividadMaxEntregas').val(getMaxEntregasDash(a));
+  if (tipoAct === 'QUIZ') {
+    $('#actividadMaxEntregasGroup').hide();
+  } else {
+    $('#actividadMaxEntregasGroup').show();
+  }
   updateIaEvaluacionUI(tipoAct);
 
   if (tipoAct === 'QUIZ') {
@@ -3720,6 +3948,8 @@ function saveActividadSubmit() {
     quizPreguntasJson = JSON.stringify(parsed.questions);
   }
 
+  const maxEntregasVal = Math.max(1, Math.min(20, parseInt($('#actividadMaxEntregas').val(), 10) || 2));
+
   const formData = {
     id: $('#actividadId').val(),
     id_unidad_curricular: uId,
@@ -3728,6 +3958,7 @@ function saveActividadSubmit() {
     fecha_limite: fechaLimite,
     descripcion: desc,
     tipo_actividad: tipoActividad,
+    max_entregas: maxEntregasVal,
     ia_evaluacion: $('#actividadIaEvaluar').is(':checked') ? "SI" : "NO",
     quiz_config_json: quizConfigJson,
     quiz_preguntas_json: quizPreguntasJson,
@@ -3767,13 +3998,23 @@ let currentEntregasState = {
   filtroActual: 'todos'
 };
 
-function isEntregaCalificadaValida(ent) {
+function isEntregaCalificadaValida(ent, actObj = null) {
   if (!ent) return false;
+  const isQuizEnt = String(ent.entrega || '').startsWith('QUIZ_ONLINE:') || !!(ent.quiz_diagnostico && ent.quiz_diagnostico.es_quiz) || (actObj && String(actObj.tipo_actividad || '').toUpperCase().trim() === 'QUIZ');
+  const isEnCurso = String(ent.entrega || '').trim() === 'EN_CURSO';
+
+  if (!isQuizEnt && typeof ent.calificado === 'boolean') {
+    return ent.calificado;
+  }
+
+  if (!isQuizEnt && ent.historial_entregas_json) {
+    const sum = buildEntregaSummaryDash(ent, actObj);
+    if (sum.latest) return !!sum.latest.calificado;
+  }
+
   if (ent.nota === undefined || ent.nota === "" || ent.nota === null) return false;
   const num = parseFloat(ent.nota);
   if (isNaN(num)) return false;
-  const isQuizEnt = String(ent.entrega || '').startsWith('QUIZ_ONLINE:') || !!(ent.quiz_diagnostico && ent.quiz_diagnostico.es_quiz);
-  const isEnCurso = String(ent.entrega || '').trim() === 'EN_CURSO';
   if (isQuizEnt && !isEnCurso) {
     return num >= 0;
   }
@@ -3794,6 +4035,7 @@ function openModalEntregas(idActividad) {
   const ucNombre = uc ? (uc.unidad_curricular || uc['unidad curricular']) : "Materia";
   const numEval = (act.numero_evaluacion || "e1").toUpperCase();
   const isQuizAct = String(act.tipo_actividad || "ENTREGA").toUpperCase().trim() === "QUIZ";
+  const maxEntAct = getMaxEntregasDash(act);
 
   $('#entregasActividadDesc').html(`
     <div class="desc-actividad-box text-break" style="line-height: 1.55;">
@@ -3801,7 +4043,7 @@ function openModalEntregas(idActividad) {
       <div>${sgnFormatTextWithLinks(act.descripcion)}</div>
     </div>
   `);
-  $('#entregasActividadMeta').text(`${ucNombre} | ${numEval} | Fecha de Asignación: ${act.fecha_asignacion}`);
+  $('#entregasActividadMeta').text(`${ucNombre} | ${numEval} | Fecha de Asignación: ${act.fecha_asignacion}${!isQuizAct ? ` | Máx. entregas evaluables: ${maxEntAct}` : ''}`);
 
   // Limpiar campos y filtros previos
   $('#inputNotaMasivaEntregas').val('');
@@ -3950,10 +4192,26 @@ function renderTablaEntregasActividad() {
           </div>
         `;
       } else {
+        const maxEnt = ent.max_entregas || 2;
+        const numEntActual = ent.numero_entrega_actual || 1;
+        const histEnt = Array.isArray(ent.historial_entregas) ? ent.historial_entregas : [];
+        const histCompactHtml = histEnt.length > 1 ? renderHistorialEntregasDashHtml(histEnt, maxEnt, true) : '';
+        const prevGradedBadge = ent.previous_graded
+          ? `<div class="mt-1"><span class="badge bg-secondary-subtle text-dark border" style="font-size: 0.7rem;"><i class="fa-solid fa-history me-1"></i>Entrega #${ent.previous_graded.numero_entrega} previa: ${ent.previous_graded.nota} pts</span></div>`
+          : '';
         linkHtml = `
-          <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" title="Abrir Documento o Enlace">
-            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver Entrega
-          </a>
+          <div>
+            <div class="d-flex flex-wrap align-items-center gap-1">
+              <a href="${ent.entrega}" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" title="Abrir Documento o Enlace">
+                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver Entrega #${numEntActual}
+              </a>
+              <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 0.7rem;" title="Entrega actual vs máximo evaluable">
+                #${numEntActual} (Eval: ${ent.entregas_evaluadas || 0}/${maxEnt})
+              </span>
+            </div>
+            ${prevGradedBadge}
+            ${histCompactHtml}
+          </div>
         `;
       }
     }
@@ -4050,23 +4308,23 @@ function renderTablaEntregasActividad() {
 
     const $row = $(`
       <tr class="${rowClass}" id="rowEntrega_${ent.id}" data-id="${ent.id}" data-calificado="${isCalificado ? 'true' : 'false'}" data-alerta-quiz="${hasAlertQuiz ? 'true' : 'false'}">
-        <td class="fw-bold text-navy">${ent.cedula}</td>
-        <td>
+        <td class="fw-bold text-navy" data-label="Cédula">${ent.cedula}</td>
+        <td data-label="Estudiante">
           <div class="fw-semibold text-dark">${ent.nombre_estudiante}</div>
           ${diag && diag.solicitud_repeticion && diag.solicitud_repeticion.solicitada ? `<div class="small text-danger fw-semibold mt-1"><i class="fa-solid fa-comment-medical me-1"></i>"${escapeHtmlDashboard(diag.solicitud_repeticion.motivo)}"</div>` : ''}
         </td>
-        <td class="text-center" id="colEstado_${ent.id}">
+        <td class="text-center" id="colEstado_${ent.id}" data-label="Estado">
           ${estadoBadgeHtml}
         </td>
-        <td>${tiemposQuizHtml}</td>
-        <td>${linkHtml}</td>
-        <td>
+        <td data-label="Fecha">${tiemposQuizHtml}</td>
+        <td class="sgn-td-block" data-label="Entrega">${linkHtml}</td>
+        <td data-label="Nota (0-20)">
           <input type="number" step="0.1" min="0" max="20" class="form-control form-control-sm input-nota-entrega ${isCalificado ? 'nota-lista' : 'nota-vacia'}" id="notaEntrega_${ent.id}" data-id="${ent.id}" data-original="${notaVal}" value="${notaVal}" placeholder="0-20" oninput="onInputNotaEntregaChange(${ent.id})">
         </td>
-        <td>
+        <td class="sgn-td-block" data-label="Observación">
           <input type="text" class="form-control form-control-sm input-comentario-entrega" id="comentarioEntrega_${ent.id}" data-id="${ent.id}" data-original="${comentarioVal}" value="${comentarioVal}" placeholder="Observación o felicitación..." oninput="onInputComentarioEntregaChange(${ent.id})">
         </td>
-        <td class="text-center">
+        <td class="text-center sgn-td-block" data-label="Acción">
           <div class="d-flex justify-content-center align-items-center gap-1 flex-nowrap">
             <button class="btn btn-sm ${isCalificado ? 'btn-outline-success' : 'btn-success'} fw-bold" id="btnCalificar_${ent.id}" onclick="saveNotaEntregaSubmit(${ent.id})" title="${isCalificado ? 'Actualizar Nota' : 'Guardar Nota Individual'}">
               <i class="fa-solid ${isCalificado ? 'fa-check-double' : 'fa-check'}"></i>
@@ -4146,8 +4404,14 @@ function onInputComentarioEntregaChange(idEntrega) {
 function filterEntregasTable() {
   const tipo = currentEntregasState.filtroActual || 'todos';
   const query = ($('#searchEntregasEstudiante').val() || '').toLowerCase().trim();
+  const $tbody = $('#tablaEntregasActividad tbody');
+  $tbody.find('.sgn-no-search-results').remove();
 
-  $('#tablaEntregasActividad tbody tr').each(function () {
+  let visibles = 0;
+  let realRows = 0;
+  $tbody.find('tr').each(function () {
+    if ($(this).find('td[colspan]').length > 0) return;
+    realRows++;
     const isCalificado = $(this).attr('data-calificado') === 'true';
     const hasAlertaQuiz = $(this).attr('data-alerta-quiz') === 'true';
     let matchTipo = true;
@@ -4157,13 +4421,23 @@ function filterEntregasTable() {
 
     const rowText = $(this).text().toLowerCase();
     const matchSearch = (!query || rowText.indexOf(query) !== -1);
+    const show = matchTipo && matchSearch;
 
-    if (matchTipo && matchSearch) {
-      $(this).show();
-    } else {
-      $(this).hide();
-    }
+    this.style.display = '';
+    $(this).toggleClass('d-none', !show);
+    if (show) visibles++;
   });
+
+  if (realRows > 0 && visibles === 0) {
+    $tbody.append(`
+      <tr class="sgn-no-search-results">
+        <td colspan="8" class="text-center text-muted py-4">
+          <i class="fa-solid fa-magnifying-glass fa-lg mb-2 d-block text-primary opacity-50"></i>
+          No hay entregas que coincidan con el filtro o búsqueda actual.
+        </td>
+      </tr>
+    `);
+  }
 }
 
 function filterEntregas(tipo, btn) {
@@ -4937,6 +5211,14 @@ function guardarTodasNotasEntregasSubmit() {
         if (target) {
           target.nota = item.nota;
           target.comentario = item.comentario;
+          target.calificado = true;
+          if (Array.isArray(target.historial_entregas) && target.historial_entregas.length > 0) {
+            const lastH = target.historial_entregas[target.historial_entregas.length - 1];
+            lastH.nota = item.nota;
+            lastH.calificado = true;
+            lastH.comentario = item.comentario;
+            target.entregas_evaluadas = target.historial_entregas.filter(h => h.calificado).length;
+          }
         }
         const targetDb = (sgnDb.actividadesEntregadas || []).find(e => e.id == item.id_entrega);
         if (targetDb) {
@@ -5028,11 +5310,19 @@ function saveNotaEntregaSubmit(idEntrega) {
       if (ent) {
         ent.nota = numVal;
         ent.comentario = comVal;
+        ent.calificado = true;
+        if (Array.isArray(res.historial_entregas)) {
+          ent.historial_entregas = res.historial_entregas;
+          ent.entregas_evaluadas = res.historial_entregas.filter(h => h.calificado).length;
+        }
       }
       const targetDb = (sgnDb.actividadesEntregadas || []).find(e => e.id == idEntrega);
       if (targetDb) {
         targetDb.nota = numVal;
         targetDb.comentario = comVal;
+        if (Array.isArray(res.historial_entregas)) {
+          targetDb.historial_entregas_json = JSON.stringify(res.historial_entregas);
+        }
       }
 
       renderTablaEntregasActividad();
@@ -5075,6 +5365,7 @@ function autoevaluarEntregaIndividualDocente(idEntrega) {
 
       ent.nota = res.nota;
       ent.comentario = res.comentario;
+      ent.calificado = true;
 
       sgnShowModal({
         title: "¡Autoevaluación con IA Completada!",
@@ -5092,7 +5383,7 @@ function autoevaluarEntregaIndividualDocente(idEntrega) {
         type: "success"
       });
 
-      renderEntregasModalContent();
+      renderTablaEntregasActividad();
       loadDashboardData(true);
     } else {
       sgnShowModal({
@@ -5117,7 +5408,7 @@ function autoevaluarEntregaIndividualDocente(idEntrega) {
  */
 function evaluarPendientesConIAModal() {
   const pendientes = (currentEntregasState.entregas || []).filter(e => {
-    const isCalificado = (e.nota !== undefined && e.nota !== "" && e.nota !== null);
+    const isCalificado = isEntregaCalificadaValida(e);
     const hasEntrega = e.entrega && String(e.entrega).trim() !== '' && String(e.entrega).trim() !== 'EN_CURSO';
     return !isCalificado && hasEntrega;
   });
@@ -5327,18 +5618,18 @@ function renderExtensionTable() {
 
     $tbody.append(`
       <tr>
-        <td><strong>#${p.id}</strong></td>
-        <td><span class="badge bg-light text-dark border fw-bold" style="color: #000 !important;">${p.cedula}</span></td>
-        <td class="fw-bold text-navy">${p.nombre_completo}</td>
-        <td><span class="badge bg-primary-subtle text-primary fw-bold">${p.curso}</span></td>
-        <td>${p.banco}</td>
-        <td class="fw-bold text-success">Bs. ${parseFloat(p.monto || 0).toLocaleString('es-VE', {minimumFractionDigits: 2})}</td>
-        <td><code>${p.numero_transferencia}</code></td>
-        <td><i class="fa-regular fa-calendar-check text-primary me-1"></i> ${p.fecha_transferencia}</td>
-        <td>${captureHTML}</td>
-        <td>${estadoBadge}</td>
-        <td>
-          <div class="d-flex align-items-center gap-1 flex-nowrap">
+        <td data-label="ID"><strong>#${p.id}</strong></td>
+        <td data-label="Cédula"><span class="badge bg-light text-dark border fw-bold" style="color: #000 !important;">${p.cedula}</span></td>
+        <td class="fw-bold text-navy" data-label="Estudiante">${p.nombre_completo}</td>
+        <td data-label="Curso / Taller"><span class="badge bg-primary-subtle text-primary fw-bold">${p.curso}</span></td>
+        <td data-label="Banco">${p.banco}</td>
+        <td class="fw-bold text-success" data-label="Monto">Bs. ${parseFloat(p.monto || 0).toLocaleString('es-VE', {minimumFractionDigits: 2})}</td>
+        <td data-label="Referencia"><code>${p.numero_transferencia}</code></td>
+        <td data-label="Fecha"><i class="fa-regular fa-calendar-check text-primary me-1"></i> ${p.fecha_transferencia}</td>
+        <td data-label="Comprobante">${captureHTML}</td>
+        <td data-label="Estado">${estadoBadge}</td>
+        <td class="sgn-td-block" data-label="Acciones">
+          <div class="d-flex align-items-center gap-1 flex-wrap">
             ${btnToggleAction}
             ${btnCertAction}
             ${btnEditAction}
@@ -5874,29 +6165,29 @@ function loadApiKeysTable() {
 
         $tbody.append(`
           <tr>
-            <td><strong>#${k.id}</strong></td>
-            <td>
+            <td data-label="ID"><strong>#${k.id}</strong></td>
+            <td data-label="Aplicación">
               <span class="fw-bold text-navy">${k.nombre}</span>
             </td>
-            <td>
-              <div class="d-flex align-items-center gap-1">
-                <code class="user-select-all">${k.api_key}</code>
+            <td data-label="API Key">
+              <div class="d-flex align-items-center gap-1 flex-wrap">
+                <code class="user-select-all text-break">${k.api_key}</code>
                 <button class="btn btn-xs btn-outline-secondary p-1" style="font-size: 0.7rem;" onclick="copiarTexto('${k.api_key}', 'API Key copiada')" title="Copiar API Key">
                   <i class="fa-regular fa-copy"></i>
                 </button>
               </div>
             </td>
-            <td>
+            <td data-label="Secreto API">
               <span class="badge bg-light text-muted border font-monospace" title="Por seguridad, el secreto completo solo se muestra al momento de crearlo">
                 ${k.api_secret_masked}
               </span>
             </td>
-            <td><small class="text-muted">${k.descripcion || '<em>Sin notas</em>'}</small></td>
-            <td>${badgeEstado}</td>
-            <td><small><i class="fa-regular fa-calendar text-primary me-1"></i>${k.created_at || 'N/A'}</small></td>
-            <td><small><i class="fa-solid fa-clock-rotate-left text-muted me-1"></i>${k.last_used_at || 'Nunca'}</small></td>
-            <td>
-              <div class="d-flex align-items-center gap-1">
+            <td data-label="Descripción"><small class="text-muted">${k.descripcion || '<em>Sin notas</em>'}</small></td>
+            <td data-label="Estado">${badgeEstado}</td>
+            <td data-label="Creado"><small><i class="fa-regular fa-calendar text-primary me-1"></i>${k.created_at || 'N/A'}</small></td>
+            <td data-label="Último Acceso"><small><i class="fa-solid fa-clock-rotate-left text-muted me-1"></i>${k.last_used_at || 'Nunca'}</small></td>
+            <td class="sgn-td-block" data-label="Acciones">
+              <div class="d-flex align-items-center gap-1 flex-wrap">
                 <button class="btn btn-sm btn-outline-primary" onclick="copiarTexto('${curlCmd}', 'Comando cURL copiado')" title="Copiar snippet cURL de esta API">
                   <i class="fa-solid fa-terminal"></i>
                 </button>
@@ -6245,17 +6536,17 @@ function renderMensajesTable() {
 
     $tbody.append(`
       <tr>
-        <td class="fw-bold text-muted">${m.id}</td>
-        <td>${cursoBadge}</td>
-        <td>
+        <td class="fw-bold text-muted" data-label="ID">${m.id}</td>
+        <td data-label="Destino">${cursoBadge}</td>
+        <td class="sgn-td-block" data-label="Mensaje">
           <div class="fw-bold text-navy">${safeTitulo}</div>
-          <div class="text-muted small text-truncate" style="max-width: 280px;" title="${safeMsgPreview}">${safeMsgPreview}</div>
+          <div class="text-muted small text-truncate" style="max-width: 100%;" title="${safeMsgPreview}">${safeMsgPreview}</div>
         </td>
-        <td>${tipoBadge}</td>
-        <td><small class="text-secondary"><i class="fa-solid fa-user-tie text-primary me-1"></i> ${nombreProfTable}</small></td>
-        <td><small class="text-muted"><i class="fa-regular fa-clock me-1"></i> ${m.fecha_creacion || 'Reciente'}</small></td>
-        <td>${estadoBadge}</td>
-        <td class="text-center">
+        <td data-label="Nivel">${tipoBadge}</td>
+        <td data-label="Docente"><small class="text-secondary"><i class="fa-solid fa-user-tie text-primary me-1"></i> ${nombreProfTable}</small></td>
+        <td data-label="Fecha"><small class="text-muted"><i class="fa-regular fa-clock me-1"></i> ${m.fecha_creacion || 'Reciente'}</small></td>
+        <td data-label="Estado">${estadoBadge}</td>
+        <td class="text-center sgn-td-block" data-label="Acciones">
           <div class="btn-group btn-group-sm">
             <button type="button" class="btn btn-outline-info" onclick="previewMensajeComoEstudiante(${m.id})" title="Ver previsualización exacta del Modal Alert y Div Alert">
               <i class="fa-solid fa-eye"></i>

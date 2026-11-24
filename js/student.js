@@ -438,10 +438,181 @@ function renderBarraLapsoStudentHtml(act) {
 }
 
 /**
+ * Helpers para renderizado intuitivo de múltiples entregas evaluables e historial en el Portal Estudiantil
+ */
+window._studentActivitiesById = window._studentActivitiesById || {};
+
+function escapeStudentHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildEntregaHistorialYEstadoStudentHtml(act) {
+  const maxEntregas = Math.max(1, parseInt(act.max_entregas, 10) || 2);
+  const historial = Array.isArray(act.historial_entregas) ? act.historial_entregas : [];
+  const evaluadas = act.entregas_evaluadas !== undefined ? (parseInt(act.entregas_evaluadas, 10) || 0) : historial.filter(h => h.calificado === true).length;
+  const restantes = act.entregas_restantes !== undefined ? Math.max(0, parseInt(act.entregas_restantes, 10) || 0) : Math.max(0, maxEntregas - evaluadas);
+  const sinCalificar = !!act.tiene_entrega_sin_calificar;
+  const actNotaNum = (act.nota !== undefined && act.nota !== null && act.nota !== '') ? parseFloat(act.nota) : NaN;
+  const ultimaCalificada = (act.ultima_nota_calificada !== undefined && act.ultima_nota_calificada !== null && act.ultima_nota_calificada !== '')
+    ? parseFloat(act.ultima_nota_calificada)
+    : null;
+
+  const intentosBadgeHtml = `
+    <span class="badge ${restantes === 0 && !sinCalificar ? 'bg-secondary' : 'bg-info-subtle text-info-emphasis border border-info-subtle'} me-2 mb-1" title="Número máximo de entregas evaluables configuradas por el docente">
+      <i class="fa-solid fa-repeat me-1"></i> Entregas evaluadas: ${evaluadas} / ${maxEntregas}
+    </span>
+  `;
+
+  let statusExplainHtml = '';
+  if (sinCalificar) {
+    const numAct = historial.length > 0 ? (historial[historial.length - 1].numero_entrega || historial.length) : 1;
+    const prevNotaInfo = (ultimaCalificada !== null && !isNaN(ultimaCalificada))
+      ? `<div class="mt-1 pt-1 border-top border-info-subtle text-navy"><strong>Nota previa registrada (Entrega anterior):</strong> ${ultimaCalificada.toFixed(2)} / 20 pts. Al evaluarse esta Entrega #${numAct}, la nueva calificación (mayor o menor) será la definitiva.</div>`
+      : '';
+    statusExplainHtml = `
+      <div class="alert alert-info border-info-subtle p-2 mt-2 mb-1 rounded-2 small">
+        <i class="fa-solid fa-circle-info text-primary me-1"></i>
+        <strong>Entrega #${numAct} a la espera de calificación:</strong> Como aún no ha sido evaluada, puedes sustituir el archivo o enlace las veces que necesites <strong>sin descontar</strong> tus oportunidades de entrega (el archivo anterior se reemplaza para optimizar espacio).
+        ${prevNotaInfo}
+      </div>
+    `;
+  } else if (act.calificado && !isNaN(actNotaNum) && restantes > 0) {
+    statusExplainHtml = `
+      <div class="alert alert-light border border-primary-subtle p-2 mt-2 mb-1 rounded-2 small">
+        <i class="fa-solid fa-arrows-rotate text-primary me-1"></i>
+        <strong>¿Deseas mejorar o cambiar tu entrega?</strong> Tu entrega actual obtuvo <strong>${actNotaNum.toFixed(2)} / 20 pts</strong>. Aún dispones de <strong>${restantes}</strong> entrega(s) evaluable(s) adicional(es). Si envías una nueva entrega, quedarás nuevamente a la espera de calificación y tu nota final será la de la nueva entrega (puede subir o bajar según lo solicitado).
+      </div>
+    `;
+  } else if (act.calificado && restantes === 0) {
+    statusExplainHtml = `
+      <div class="alert alert-secondary border p-2 mt-2 mb-1 rounded-2 small">
+        <i class="fa-solid fa-flag-checkered me-1"></i>
+        <strong>Límite de entregas evaluadas alcanzado (${evaluadas}/${maxEntregas}):</strong> Todas las oportunidades evaluables permitidas para esta asignación han sido completadas.
+      </div>
+    `;
+  }
+
+  let historialTimelineHtml = '';
+  if (historial.length > 0) {
+    const itemsHtml = historial.map((h, idx) => {
+      const isActual = idx === historial.length - 1;
+      const numEnt = h.numero_entrega || (idx + 1);
+      const notaBadge = h.calificado
+        ? getGradeBadgeHTML(h.nota)
+        : `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"><i class="fa-solid fa-hourglass-half me-1"></i> A la espera de nota</span>`;
+      const linkBtn = (h.entrega && h.entrega !== 'CALIFICADO_DIRECTO')
+        ? `<a href="${h.entrega}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2 fw-bold"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Ver archivo</a>`
+        : `<span class="badge bg-light text-muted border">Calificación directa</span>`;
+      const comHtml = h.comentario
+        ? `<div class="mt-1 pt-1 border-top text-secondary small fst-italic"><i class="fa-solid fa-comment-dots text-primary me-1"></i>${sgnFormatTextWithLinks(h.comentario)}</div>`
+        : '';
+
+      return `
+        <div class="sgn-entrega-intento-item ${isActual ? 'intento-actual' : 'intento-anterior'} mb-2">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <span class="badge ${isActual ? 'bg-primary' : 'bg-secondary'} me-1">Entrega #${numEnt}${isActual ? ' (Actual)' : ' (Anterior)'}</span>
+              ${h.fecha_entrega ? `<small class="text-muted"><i class="fa-regular fa-clock me-1"></i>${escapeStudentHtml(h.fecha_entrega)}</small>` : ''}
+            </div>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+              ${notaBadge}
+              ${linkBtn}
+            </div>
+          </div>
+          ${comHtml}
+        </div>
+      `;
+    }).join('');
+
+    historialTimelineHtml = `
+      <div class="sgn-historial-entregas-box mt-2">
+        <div class="small fw-bold text-navy mb-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+          <span><i class="fa-solid fa-clock-rotate-left text-primary me-1"></i> Historial de Mis Entregas y Calificaciones</span>
+          <span class="badge bg-light text-dark border">${historial.length} entrega(s) registrada(s)</span>
+        </div>
+        ${itemsHtml}
+      </div>
+    `;
+  }
+
+  return {
+    intentosBadgeHtml,
+    statusExplainHtml,
+    historialTimelineHtml,
+    maxEntregas,
+    evaluadas,
+    restantes,
+    sinCalificar
+  };
+}
+
+function buildEntregaActionButtonsStudentHtml(act, student, lapso) {
+  const maxEntregas = Math.max(1, parseInt(act.max_entregas, 10) || 2);
+  const evaluadas = act.entregas_evaluadas !== undefined ? (parseInt(act.entregas_evaluadas, 10) || 0) : 0;
+  const sinCalificar = !!act.tiene_entrega_sin_calificar;
+  const puedeEntregar = (act.puede_entregar !== undefined)
+    ? !!act.puede_entregar
+    : (!lapso.vencida && (sinCalificar || evaluadas < maxEntregas));
+  const hasEntrega = !!act.entrega;
+
+  const linkBtn = hasEntrega ? `
+    <a href="${act.entrega}" target="_blank" class="btn btn-sm btn-outline-primary">
+      <i class="fa-solid fa-external-link me-1"></i> Ver Mi Entrega Actual
+    </a>
+  ` : '';
+
+  if (lapso.vencida) {
+    return `
+      ${linkBtn}
+      <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se permite la recepción de más trabajos.">
+        <i class="fa-solid fa-lock me-1"></i> Recepción de Trabajos Cerrada (Venció: ${lapso.fecha_limite})
+      </button>
+    `;
+  }
+
+  if (!puedeEntregar) {
+    return `
+      ${linkBtn}
+      <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="Has alcanzado el máximo de entregas evaluables permitidas para esta actividad.">
+        <i class="fa-solid fa-ban me-1"></i> Límite de Entregas Alcanzado (${evaluadas}/${maxEntregas})
+      </button>
+    `;
+  }
+
+  let btnClass = 'btn-primary-sgn';
+  let btnIcon = 'fa-upload';
+  let btnText = 'Entregar Actividad';
+
+  if (sinCalificar) {
+    btnClass = 'btn-outline-primary';
+    btnIcon = 'fa-arrows-rotate';
+    btnText = 'Sustituir Entrega (Sin descontar)';
+  } else if (evaluadas > 0) {
+    btnClass = 'btn-primary-sgn';
+    btnIcon = 'fa-upload';
+    btnText = `Enviar Nueva Entrega (${evaluadas + 1} de ${maxEntregas})`;
+  }
+
+  return `
+    ${linkBtn}
+    <button type="button" class="btn btn-sm ${btnClass} fw-bold" onclick="openModalEntregaEstudiante(${act.id}, ${student.id})">
+      <i class="fa-solid ${btnIcon} me-1"></i> ${btnText}
+    </button>
+  `;
+}
+
+/**
  * Renderizar Resumen Académico del Estudiante
  */
 function renderStudentAcademicProfile(res, isFromCache = false) {
   window.currentStudentPortalData = res;
+  window._studentActivitiesById = {};
   const student = res.student;
   const notas = res.notas || [];
   const isTestUser = !!res.is_test_student || String(student.cedula || '').toUpperCase().trim() === 'V-12345';
@@ -504,6 +675,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
   if (todasActividades.length > 0) {
     let itemsHtml = '';
     todasActividades.forEach(act => {
+      window._studentActivitiesById[String(act.id)] = act;
       const evalUpper = (act.numero_evaluacion || 'e1').toUpperCase();
       const isQuiz = String(act.tipo_actividad || 'ENTREGA').toUpperCase() === 'QUIZ';
       const hasEntrega = isQuiz ? !!act.quiz_completado : !!act.entrega;
@@ -529,7 +701,9 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
         }
       } else {
         if (hasEntrega) {
-          estadoBadge = `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Entregado (${act.fecha_entrega || ''})</span>`;
+          const histArr = Array.isArray(act.historial_entregas) ? act.historial_entregas : [];
+          const numActualEnt = histArr.length > 0 ? (histArr[histArr.length - 1].numero_entrega || histArr.length) : 1;
+          estadoBadge = `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Entregado #${numActualEnt} (${act.fecha_entrega || ''})</span>`;
         } else if (lapso.vencida) {
           estadoBadge = `<span class="badge bg-danger"><i class="fa-solid fa-calendar-xmark me-1"></i> Lapso Vencido (Cerrada)</span>`;
         } else {
@@ -539,16 +713,17 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
 
       let notaDisplay = '';
       const actNotaNum = (act.nota !== undefined && act.nota !== "" && act.nota !== null) ? parseFloat(act.nota) : NaN;
-      const isCalificadoValido = act.calificado && !isNaN(actNotaNum) && (isQuiz ? actNotaNum >= 0 : actNotaNum > 0);
+      const isCalificadoValido = act.calificado && !isNaN(actNotaNum) && (isQuiz ? actNotaNum >= 0 : actNotaNum >= 0);
       if (isCalificadoValido) {
-        notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(actNotaNum)}</span>`;
+        notaDisplay = `<span class="fw-bold text-navy d-inline-flex align-items-center gap-1">Nota: ${getGradeBadgeHTML(actNotaNum)}</span>`;
       } else if (hasEntrega) {
-        notaDisplay = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>`;
+        notaDisplay = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>`;
       }
 
       let tipoTagHtml = '';
       let actionButtonsHtml = '';
       let alertaDiagnosticoQuizHtml = '';
+      let entregaMultiHtml = '';
 
       if (isQuiz) {
         const cantP = (act.quiz_config && act.quiz_config.cantidad_mostrar) ? act.quiz_config.cantidad_mostrar : '';
@@ -619,27 +794,13 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
           `;
         }
       } else {
-        const linkBtn = hasEntrega ? `
-          <a href="${act.entrega}" target="_blank" class="btn btn-sm btn-outline-primary me-2">
-            <i class="fa-solid fa-external-link me-1"></i> Ver Mi Entrega
-          </a>
-        ` : '';
-        if (lapso.vencida) {
-          actionButtonsHtml = `
-            ${linkBtn}
-            <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se permite la recepción de más trabajos.">
-              <i class="fa-solid fa-lock me-1"></i> Recepción de Trabajos Cerrada (Venció: ${lapso.fecha_limite})
-            </button>
-          `;
-        } else {
-          const jsonActStr = JSON.stringify(act).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
-          actionButtonsHtml = `
-            ${linkBtn}
-            <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
-              <i class="fa-solid ${hasEntrega ? 'fa-pen' : 'fa-upload'} me-1"></i> ${hasEntrega ? 'Modificar Entrega' : 'Entregar Actividad'}
-            </button>
-          `;
-        }
+        const multiInfo = buildEntregaHistorialYEstadoStudentHtml(act);
+        tipoTagHtml = `
+          <span class="badge bg-light text-secondary border me-2 mb-1"><i class="fa-solid fa-file-arrow-up me-1"></i> Entrega Digital</span>
+          ${multiInfo.intentosBadgeHtml}
+        `;
+        entregaMultiHtml = `${multiInfo.statusExplainHtml}${multiInfo.historialTimelineHtml}`;
+        actionButtonsHtml = buildEntregaActionButtonsStudentHtml(act, student, lapso);
       }
 
       const descFormatted = sgnFormatTextWithLinks(act.descripcion);
@@ -673,6 +834,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
                 <div class="text-muted small mt-2"><i class="fa-solid fa-user-chalkboard me-1"></i> Prof. ${act.profesor}</div>
                 ${barraLapsoHtml}
                 ${alertaDiagnosticoQuizHtml}
+                ${entregaMultiHtml}
                 ${comentarioTopDisplay}
               </div>
               <div class="d-flex align-items-center flex-wrap gap-2">
@@ -680,7 +842,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
                 ${notaDisplay}
               </div>
             </div>
-            <div class="d-flex justify-content-end align-items-center mt-3 pt-2 border-top flex-wrap gap-2">
+            <div class="d-flex justify-content-end align-items-center mt-3 pt-2 border-top flex-wrap gap-2 actividad-action-container">
               ${actionButtonsHtml}
             </div>
           </div>
@@ -722,12 +884,22 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
         let evalBadgeHtml = '';
         const isActQuiz = actDeEval && String(actDeEval.tipo_actividad || '').toUpperCase() === 'QUIZ';
         const hasActEntrega = actDeEval && (!!actDeEval.entrega || !!actDeEval.quiz_completado || actDeEval.estado_calificacion === 'A_LA_ESPERA');
-        const isActCalificado = actDeEval && actDeEval.calificado && actDeEval.nota !== null && actDeEval.nota !== "" && !isNaN(parseFloat(actDeEval.nota)) && (isActQuiz ? parseFloat(actDeEval.nota) >= 0 : parseFloat(actDeEval.nota) > 0);
+        const isActCalificado = actDeEval && actDeEval.calificado && actDeEval.nota !== null && actDeEval.nota !== "" && !isNaN(parseFloat(actDeEval.nota)) && (isActQuiz ? parseFloat(actDeEval.nota) >= 0 : parseFloat(actDeEval.nota) >= 0);
         const valNum = parseFloat(val);
         const hasValScore = !isNaN(valNum) && valNum > 0;
+        let evalExtraHistorialHtml = '';
 
         if (isActCalificado) {
           evalBadgeHtml = getGradeBadgeHTML(actDeEval.nota);
+          if (Array.isArray(actDeEval.historial_entregas) && actDeEval.historial_entregas.length > 1) {
+            const resumenPasos = actDeEval.historial_entregas.map(h => `#${h.numero_entrega}: ${h.calificado ? parseFloat(h.nota).toFixed(2) : 'Esp.'}`).join(' → ');
+            evalExtraHistorialHtml = `<div class="small text-primary mt-1 fw-semibold"><i class="fa-solid fa-clock-rotate-left me-1"></i>Entregas: ${resumenPasos}</div>`;
+          }
+        } else if (actDeEval && actDeEval.estado_calificacion === 'A_LA_ESPERA') {
+          evalBadgeHtml = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-1 px-2 fw-semibold" style="font-size: 0.78rem;" title="Entrega registrada. A la espera de asignación de calificación por el docente."><i class="fa-solid fa-hourglass-half me-1"></i> A la Espera</span>`;
+          if (actDeEval.ultima_nota_calificada !== null && actDeEval.ultima_nota_calificada !== undefined) {
+            evalExtraHistorialHtml = `<div class="small text-muted mt-1"><i class="fa-solid fa-history me-1"></i>Entrega previa: <strong>${parseFloat(actDeEval.ultima_nota_calificada).toFixed(2)} / 20</strong> (en re-evaluación)</div>`;
+          }
         } else if (hasValScore) {
           evalBadgeHtml = getGradeBadgeHTML(valNum);
         } else if (hasActEntrega) {
@@ -755,12 +927,13 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
         evalsHtml += `
           <div class="col-md-6 col-lg-${cant > 6 ? '3' : '4'} mb-3">
             <div class="border rounded-3 p-3 bg-light h-100">
-              <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                 <span class="fw-bold text-navy">Evaluación ${i}</span>
                 ${evalBadgeHtml}
               </div>
               <p class="text-muted small mb-1"><i class="fa-regular fa-calendar-check me-1"></i> ${fechaStr}</p>
               <div class="text-secondary small mb-0 desc-actividad-box text-break"><i class="fa-solid fa-info-circle me-1"></i> ${sgnFormatTextWithLinks(descStr)}</div>
+              ${evalExtraHistorialHtml}
               ${evalComentarioHtml}
             </div>
           </div>
@@ -772,6 +945,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
       if (n.actividades && n.actividades.length > 0) {
         let itemsHtml = '';
         n.actividades.forEach(act => {
+          window._studentActivitiesById[String(act.id)] = act;
           const evalUpper = (act.numero_evaluacion || 'e1').toUpperCase();
           const isQuiz = String(act.tipo_actividad || 'ENTREGA').toUpperCase() === 'QUIZ';
           const hasEntrega = isQuiz ? !!act.quiz_completado : !!act.entrega;
@@ -797,7 +971,9 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
             }
           } else {
             if (hasEntrega) {
-              estadoBadge = `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Entregado (${act.fecha_entrega || ''})</span>`;
+              const histArr = Array.isArray(act.historial_entregas) ? act.historial_entregas : [];
+              const numActualEnt = histArr.length > 0 ? (histArr[histArr.length - 1].numero_entrega || histArr.length) : 1;
+              estadoBadge = `<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i> Entregado #${numActualEnt} (${act.fecha_entrega || ''})</span>`;
             } else if (lapso.vencida) {
               estadoBadge = `<span class="badge bg-danger"><i class="fa-solid fa-calendar-xmark me-1"></i> Lapso Vencido (Cerrada)</span>`;
             } else {
@@ -807,16 +983,17 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
 
           let notaDisplay = '';
           const actNotaNum = (act.nota !== undefined && act.nota !== "" && act.nota !== null) ? parseFloat(act.nota) : NaN;
-          const isCalificadoValido = act.calificado && !isNaN(actNotaNum) && (isQuiz ? actNotaNum >= 0 : actNotaNum > 0);
+          const isCalificadoValido = act.calificado && !isNaN(actNotaNum) && actNotaNum >= 0;
           if (isCalificadoValido) {
-            notaDisplay = `<span class="ms-2 font-weight-bold text-navy">Nota: ${getGradeBadgeHTML(actNotaNum)}</span>`;
+            notaDisplay = `<span class="font-weight-bold text-navy d-inline-flex align-items-center gap-1">Nota: ${getGradeBadgeHTML(actNotaNum)}</span>`;
           } else if (hasEntrega) {
-            notaDisplay = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>`;
+            notaDisplay = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-2 px-3 fw-bold shadow-xs"><i class="fa-solid fa-hourglass-half me-1"></i> A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>`;
           }
 
           let tipoTagHtml = '';
           let actionButtonsHtml = '';
           let alertaDiagnosticoQuizSubHtml = '';
+          let entregaMultiHtml = '';
 
           if (isQuiz) {
             const cantP = (act.quiz_config && act.quiz_config.cantidad_mostrar) ? act.quiz_config.cantidad_mostrar : '';
@@ -887,27 +1064,13 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
               `;
             }
           } else {
-            const linkBtn = hasEntrega ? `
-              <a href="${act.entrega}" target="_blank" class="btn btn-sm btn-outline-primary me-2">
-                <i class="fa-solid fa-external-link me-1"></i> Ver Entrega
-              </a>
-            ` : '';
-            if (lapso.vencida) {
-              actionButtonsHtml = `
-                ${linkBtn}
-                <button type="button" class="btn btn-sm btn-secondary fw-bold" disabled title="El lapso de entrega se ha cumplido. No se permite la recepción de más trabajos.">
-                  <i class="fa-solid fa-lock me-1"></i> Recepción de Trabajos Cerrada (Venció: ${lapso.fecha_limite})
-                </button>
-              `;
-            } else {
-              const jsonActStr = JSON.stringify(act).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
-              actionButtonsHtml = `
-                ${linkBtn}
-                <button type="button" class="btn btn-sm ${hasEntrega ? 'btn-outline-secondary' : 'btn-primary-sgn'} fw-bold" onclick='openModalEntregaEstudiante(${act.id}, ${student.id}, ${jsonActStr})'>
-                  <i class="fa-solid ${hasEntrega ? 'fa-pen' : 'fa-upload'} me-1"></i> ${hasEntrega ? 'Modificar Entrega' : 'Entregar Actividad'}
-                </button>
-              `;
-            }
+            const multiInfo = buildEntregaHistorialYEstadoStudentHtml(act);
+            tipoTagHtml = `
+              <span class="badge bg-light text-secondary border me-2 mb-1"><i class="fa-solid fa-file-arrow-up me-1"></i> Entrega Digital</span>
+              ${multiInfo.intentosBadgeHtml}
+            `;
+            entregaMultiHtml = `${multiInfo.statusExplainHtml}${multiInfo.historialTimelineHtml}`;
+            actionButtonsHtml = buildEntregaActionButtonsStudentHtml(act, student, lapso);
           }
 
           const descFormatted = sgnFormatTextWithLinks(act.descripcion);
@@ -915,7 +1078,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
           let comentarioSubjectDisplay = '';
           const isComentarioIaInvalido = act.comentario && (act.comentario.includes("Evaluado por IA") || act.comentario.includes("DeepSeek")) && (!act.calificado || isNaN(actNotaNum) || actNotaNum === 0);
           if (act.comentario && String(act.comentario).trim() && !isComentarioIaInvalido) {
-            const is20 = (act.nota !== undefined && parseFloat(act.nota) === 20);
+            const is20 = (act.calificado && !isNaN(actNotaNum) && actNotaNum === 20);
             comentarioSubjectDisplay = `
               <div class="alert ${is20 ? 'alert-success border-success-subtle' : 'alert-info border-info-subtle'} p-2 mt-2 mb-1 rounded-2 shadow-xs d-flex align-items-start gap-2">
                 <i class="fa-solid ${is20 ? 'fa-award text-warning' : 'fa-comment-dots text-primary'} fs-5 mt-1 flex-shrink-0"></i>
@@ -938,6 +1101,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
                   <div class="text-dark fs-6 mt-1 desc-actividad-box text-break" style="line-height: 1.55;">${descFormatted}</div>
                   ${barraLapsoHtml}
                   ${alertaDiagnosticoQuizSubHtml}
+                  ${entregaMultiHtml}
                   ${comentarioSubjectDisplay}
                 </div>
                 <div class="d-flex align-items-center flex-wrap gap-2">
@@ -945,7 +1109,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
                   ${notaDisplay}
                 </div>
               </div>
-              <div class="d-flex justify-content-end align-items-center mt-2 pt-2 border-top flex-wrap gap-2">
+              <div class="d-flex justify-content-end align-items-center mt-2 pt-2 border-top flex-wrap gap-2 actividad-action-container">
                 ${actionButtonsHtml}
               </div>
             </div>
@@ -954,7 +1118,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
 
         actividadesHtml = `
           <div class="mt-4 pt-3 border-top">
-            <div class="d-flex align-items-center justify-content-between mb-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
               <h6 class="fw-bold text-navy mb-0 fs-6">
                 <i class="fa-solid fa-tasks text-primary me-2"></i> ACTIVIDADES ASIGNADAS DE ESTA ASIGNATURA
               </h6>
@@ -987,7 +1151,7 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
         const docStr = String(n.profesor || '').replace(/'/g, "\\'");
         const ucIdStr = String(n.id_unidad_curricular || '');
         voceroCardBtns = `
-          <div class="d-flex gap-2 ms-auto">
+          <div class="d-flex flex-wrap gap-2 ms-auto">
             <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="openVoceroRoster('${cleanCed}', '${ucSecClean}', '${cleanProgId}', '${ucIdStr}')">
               <i class="fa-solid fa-users me-1"></i> Roster
             </button>
@@ -1021,12 +1185,12 @@ function renderStudentAcademicProfile(res, isFromCache = false) {
             </div>
             ${voceroCardBtns}
           </div>
-          <div class="card-body p-4">
+          <div class="card-body p-3 p-md-4">
             <div class="row">
               ${evalsHtml}
             </div>
             ${actividadesHtml}
-            <div class="mt-3 pt-3 border-top d-flex justify-content-between align-items-center">
+            <div class="mt-3 pt-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
               <span class="fw-bold text-navy fs-5">Promedio Acumulado Total:</span>
               ${totalBadgeHtml}
             </div>
@@ -1292,16 +1456,16 @@ function openVoceroRoster(cedula, seccion, idPrograma, idUnidadCurricular) {
         roster.forEach((r, idx) => {
           let evalCells = '';
           for (let i = 1; i <= maxCant; i++) {
-            evalCells += `<td>${r['e' + i] !== undefined ? r['e' + i] : 0}</td>`;
+            evalCells += `<td class="nota-col-eval" data-label="E${i}">${r['e' + i] !== undefined ? r['e' + i] : 0}</td>`;
           }
           $tbody.append(`
             <tr>
-              <td>${idx + 1}</td>
-              <td class="fw-bold">${r.cedula}</td>
-              <td>${r.nombre_completo}</td>
-              <td>${r.rol === 'VOCERO' ? '<span class="badge bg-warning text-dark">VOCERO</span>' : 'Estudiante'}</td>
+              <td class="sgn-td-hide-mobile" data-label="#">${idx + 1}</td>
+              <td class="fw-bold nota-col-cedula" data-label="Cédula">${r.cedula}</td>
+              <td class="fw-semibold nota-col-nombre" data-label="Estudiante">${r.nombre_completo}</td>
+              <td class="nota-col-rol" data-label="Rol">${r.rol === 'VOCERO' ? '<span class="badge bg-warning text-dark">VOCERO</span>' : 'Estudiante'}</td>
               ${evalCells}
-              <td>${getGradeBadgeHTML(r.total)}</td>
+              <td class="nota-col-total" data-label="Total Acumulado">${getGradeBadgeHTML(r.total)}</td>
             </tr>
           `);
         });
@@ -1486,8 +1650,19 @@ async function generarPDFNominaVocero(seccion, programa, materia, docente, cedul
  * ==========================================================================
  */
 let currentEntregaActivity = null;
+window._entregaDefaultBtnHtml = '<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega';
 
 function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
+  actData = actData || (window._studentActivitiesById ? window._studentActivitiesById[String(idActividad)] : null);
+  if (!actData) {
+    sgnShowModal({
+      title: "Actividad no disponible",
+      message: "No se pudo cargar la información de la actividad. Recargue su consulta e intente nuevamente.",
+      type: "warning"
+    });
+    return;
+  }
+
   const lapso = calcularLapsoEntregaStudent(actData);
   if (lapso.vencida) {
     sgnShowModal({
@@ -1498,14 +1673,27 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
     return;
   }
 
+  const multiInfo = buildEntregaHistorialYEstadoStudentHtml(actData);
+  const puedeEntregar = (actData.puede_entregar !== undefined)
+    ? !!actData.puede_entregar
+    : (multiInfo.sinCalificar || multiInfo.evaluadas < multiInfo.maxEntregas);
+  if (!puedeEntregar) {
+    sgnShowModal({
+      title: "Límite de Entregas Alcanzado",
+      message: `Ya completaste el máximo de <strong>${multiInfo.maxEntregas}</strong> entrega(s) evaluables configuradas por el docente para esta asignación.`,
+      type: "warning"
+    });
+    return;
+  }
+
   currentEntregaActivity = actData;
-  
+
   $('#entregaActividadId').val(idActividad);
   $('#entregaEstudianteId').val(idEstudiante);
   if ($('#entregaFileInput').length) $('#entregaFileInput').val('');
   $('#entregaUrlInput').val('');
   $('#driveLinkFeedback').hide().empty();
-  
+
   const evalUpper = (actData.numero_evaluacion || 'e1').toUpperCase();
   $('#entregaModalActividadTitulo').html(`<i class="fa-solid fa-list-check me-2"></i> Evaluación ${evalUpper}`);
   $('#entregaModalActividadDesc').html(`
@@ -1513,15 +1701,42 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
     ${renderBarraLapsoStudentHtml(actData)}
   `);
 
+  // Mostrar estado de oportunidades / sustitución sin descuento e historial previo
+  if (multiInfo.statusExplainHtml) {
+    $('#entregaModalIntentosAlert').html(multiInfo.statusExplainHtml).show();
+  } else {
+    $('#entregaModalIntentosAlert').html(`
+      <div class="alert alert-light border p-2 mb-0 small">
+        <i class="fa-solid fa-repeat text-primary me-1"></i>
+        <strong>Entregas permitidas:</strong> Hasta <strong>${multiInfo.maxEntregas}</strong> entrega(s) evaluable(s). Si envías un archivo y necesitas corregirlo antes de que el docente lo califique, podrás sustituirlo <strong>sin descontar</strong> tus oportunidades.
+      </div>
+    `).show();
+  }
+
+  if (multiInfo.historialTimelineHtml) {
+    $('#entregaModalHistorialBox').html(multiInfo.historialTimelineHtml).show();
+  } else {
+    $('#entregaModalHistorialBox').hide().empty();
+  }
+
   if (actData.entrega) {
-    $('#entregaActualStatus').show();
+    $('#entregaActualStatus').removeClass('d-none').show();
     $('#entregaActualLink').attr('href', actData.entrega);
-    if (actData.entrega.startsWith('http')) {
+    if (actData.entrega.startsWith('http') && !actData.entrega.includes('r2.dev')) {
       $('#entregaUrlInput').val(actData.entrega);
     }
   } else {
-    $('#entregaActualStatus').hide();
+    $('#entregaActualStatus').addClass('d-none').hide();
   }
+
+  if (multiInfo.sinCalificar) {
+    window._entregaDefaultBtnHtml = '<i class="fa-solid fa-arrows-rotate me-2"></i> Sustituir Entrega (Sin Descontar)';
+  } else if (multiInfo.evaluadas > 0) {
+    window._entregaDefaultBtnHtml = `<i class="fa-solid fa-paper-plane me-2"></i> Enviar Nueva Entrega (${multiInfo.evaluadas + 1} de ${multiInfo.maxEntregas})`;
+  } else {
+    window._entregaDefaultBtnHtml = '<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega';
+  }
+  $('#btnEnviarEntregaSubmit').prop('disabled', false).html(window._entregaDefaultBtnHtml);
 
   // Activar por defecto la pestaña de Subir Archivo
   if (document.getElementById('tab-tipo-archivo')) {
@@ -1534,31 +1749,53 @@ function openModalEntregaEstudiante(idActividad, idEstudiante, actData) {
 }
 
 function handleEntregaSuccess(res) {
-  if (currentEntregaActivity) {
-    currentEntregaActivity.entrega = res.entrega || currentEntregaActivity.entrega || "";
-    currentEntregaActivity.fecha_entrega = res.fecha_entrega || new Date().toLocaleDateString('es-VE');
+  const applyEntregaUpdate = function (act) {
+    act.entrega = res.entrega || res.entregaUrl || act.entrega || "";
+    act.fecha_entrega = res.fecha_entrega || new Date().toLocaleDateString('es-VE');
+    if (res.max_entregas !== undefined) act.max_entregas = res.max_entregas;
+    if (res.entregas_evaluadas !== undefined) act.entregas_evaluadas = res.entregas_evaluadas;
+    if (res.entregas_restantes !== undefined) act.entregas_restantes = res.entregas_restantes;
+    if (Array.isArray(res.historial_entregas)) act.historial_entregas = res.historial_entregas;
+
     if (res.evaluado_por_ia && res.nota !== undefined) {
-      currentEntregaActivity.nota = res.nota;
-      currentEntregaActivity.comentario = res.comentario || "";
+      act.nota = res.nota;
+      act.comentario = res.comentario || "";
+      act.calificado = true;
+      act.estado_calificacion = "CALIFICADO";
+      act.tiene_entrega_sin_calificar = false;
+    } else {
+      act.nota = "";
+      act.calificado = false;
+      act.estado_calificacion = "A_LA_ESPERA";
+      act.tiene_entrega_sin_calificar = true;
+      act.comentario = "";
     }
+  };
+
+  if (currentEntregaActivity) {
+    applyEntregaUpdate(currentEntregaActivity);
   }
 
-  if (currentStudentResponse && currentStudentResponse.notas) {
-    const actId = $('#entregaActividadId').val();
-    currentStudentResponse.notas.forEach(n => {
-      if (n.actividades) {
-        n.actividades.forEach(act => {
-          if (String(act.id) === String(actId)) {
-            act.entrega = res.entrega || act.entrega || "";
-            act.fecha_entrega = res.fecha_entrega || new Date().toLocaleDateString('es-VE');
-            if (res.evaluado_por_ia && res.nota !== undefined) {
-              act.nota = res.nota;
-              act.comentario = res.comentario || "";
-            }
-          }
-        });
-      }
-    });
+  const actId = $('#entregaActividadId').val();
+  if (window._studentActivitiesById && window._studentActivitiesById[String(actId)]) {
+    applyEntregaUpdate(window._studentActivitiesById[String(actId)]);
+  }
+
+  if (currentStudentResponse) {
+    if (Array.isArray(currentStudentResponse.actividades)) {
+      currentStudentResponse.actividades.forEach(act => {
+        if (String(act.id) === String(actId)) applyEntregaUpdate(act);
+      });
+    }
+    if (Array.isArray(currentStudentResponse.notas)) {
+      currentStudentResponse.notas.forEach(n => {
+        if (n.actividades) {
+          n.actividades.forEach(act => {
+            if (String(act.id) === String(actId)) applyEntregaUpdate(act);
+          });
+        }
+      });
+    }
     renderStudentAcademicProfile(currentStudentResponse);
   }
 
@@ -1629,7 +1866,7 @@ function submitEstudianteEntrega() {
 
     const reader = new FileReader();
     reader.onerror = function () {
-      $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
+      $('#btnEnviarEntregaSubmit').prop('disabled', false).html(window._entregaDefaultBtnHtml || '<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
       sgnShowModal({ title: "Error", message: "No se pudo leer el archivo seleccionado.", type: "danger" });
     };
 
@@ -1664,8 +1901,11 @@ function submitEstudianteEntrega() {
               type: "success"
             });
           } else {
+            const msgExtra = res.fue_sustitucion
+              ? `Tu entrega pendiente #${res.numero_entrega || 1} fue <strong>sustituida sin descontar</strong> oportunidades de evaluación${res.archivo_anterior_eliminado ? ' (y el archivo anterior fue reemplazado en el almacenamiento)' : ''}.`
+              : `Su trabajo (Entrega #${res.numero_entrega || 1}) ha sido subido con éxito. El docente revisará su entrega y asignará la calificación correspondiente.`;
             sgnShowModal({
-              title: "¡Entrega Realizada!",
+              title: res.fue_sustitucion ? "¡Entrega Sustituida (Sin Descuento)!" : "¡Entrega Realizada!",
               message: `
                 <div class="text-center my-3">
                   <div class="d-inline-flex align-items-center gap-2 bg-warning-subtle text-warning-emphasis px-4 py-2 rounded-pill border border-warning-subtle shadow-xs">
@@ -1673,18 +1913,21 @@ function submitEstudianteEntrega() {
                     <span class="fs-6 fw-bold">A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>
                   </div>
                 </div>
-                <p class="text-muted small text-center mb-0 mt-2">Su trabajo ha sido subido con éxito. El docente revisará su entrega y asignará la calificación correspondiente.</p>
+                <p class="text-muted small text-center mb-2">${msgExtra}</p>
+                <div class="text-center small text-navy fw-semibold">
+                  Entregas evaluadas: ${res.entregas_evaluadas || 0} / ${res.max_entregas || 2}
+                </div>
               `,
               type: "success"
             });
           }
         } else {
-          sgnShowModal({ title: "Error en Entrega", message: (res && res.message) || "No se pudo procesar la entrega.", type: "danger" });
+          sgnShowModal({ title: (res && res.max_entregas_alcanzado) ? "Límite de Entregas Alcanzado" : "Error en Entrega", message: (res && res.message) || "No se pudo procesar la entrega.", type: (res && res.max_entregas_alcanzado) ? "warning" : "danger" });
         }
       }).catch(function (err) {
         sgnShowModal({ title: "Error de Conexión", message: "No se pudo completar la subida del archivo. Por favor revise su conexión.", type: "danger" });
       }).always(function () {
-        $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
+        $('#btnEnviarEntregaSubmit').prop('disabled', false).html(window._entregaDefaultBtnHtml || '<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
       });
     };
     reader.readAsDataURL(file);
@@ -1735,8 +1978,11 @@ function submitEstudianteEntrega() {
             type: "success"
           });
         } else {
+          const msgExtra = res.fue_sustitucion
+            ? `Tu entrega pendiente #${res.numero_entrega || 1} fue <strong>sustituida sin descontar</strong> oportunidades de evaluación${res.archivo_anterior_eliminado ? ' (y el archivo anterior fue reemplazado en el almacenamiento)' : ''}.`
+            : `El enlace de su actividad (Entrega #${res.numero_entrega || 1}) ha sido registrado exitosamente. El docente revisará su entrega y asignará la calificación correspondiente.`;
           sgnShowModal({
-            title: "¡Entrega Registrada!",
+            title: res.fue_sustitucion ? "¡Entrega Sustituida (Sin Descuento)!" : "¡Entrega Registrada!",
             message: `
               <div class="text-center my-3">
                 <div class="d-inline-flex align-items-center gap-2 bg-warning-subtle text-warning-emphasis px-4 py-2 rounded-pill border border-warning-subtle shadow-xs">
@@ -1744,18 +1990,21 @@ function submitEstudianteEntrega() {
                   <span class="fs-6 fw-bold">A LA ESPERA DE ASIGNACIÓN DE CALIFICACIÓN</span>
                 </div>
               </div>
-              <p class="text-muted small text-center mb-0 mt-2">El enlace de su actividad ha sido registrado exitosamente. El docente revisará su entrega y asignará la calificación correspondiente.</p>
+              <p class="text-muted small text-center mb-2">${msgExtra}</p>
+              <div class="text-center small text-navy fw-semibold">
+                Entregas evaluadas: ${res.entregas_evaluadas || 0} / ${res.max_entregas || 2}
+              </div>
             `,
             type: "success"
           });
         }
       } else {
-        sgnShowModal({ title: "Verificación de Entrega", message: (res && res.message) || "No se pudo registrar la entrega.", type: "danger" });
+        sgnShowModal({ title: (res && res.max_entregas_alcanzado) ? "Límite de Entregas Alcanzado" : "Verificación de Entrega", message: (res && res.message) || "No se pudo registrar la entrega.", type: (res && res.max_entregas_alcanzado) ? "warning" : "danger" });
       }
     }).catch(function (err) {
       sgnShowModal({ title: "Error de Conexión", message: "No se pudo conectar con el servidor para registrar la entrega.", type: "danger" });
     }).always(function () {
-      $('#btnEnviarEntregaSubmit').prop('disabled', false).html('<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
+      $('#btnEnviarEntregaSubmit').prop('disabled', false).html(window._entregaDefaultBtnHtml || '<i class="fa-solid fa-paper-plane me-2"></i> Enviar Entrega');
     });
   }
 }

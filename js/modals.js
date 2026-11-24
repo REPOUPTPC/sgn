@@ -158,7 +158,7 @@ function sgnShowToast(message, type = 'success') {
   
   const toastEl = document.createElement('div');
   toastEl.className = `toast align-items-center ${bgClass} border-0 shadow-lg show`;
-  toastEl.style.cssText = 'pointer-events:auto;min-width:280px;animation:fadeIn 0.25s ease;';
+  toastEl.style.cssText = 'pointer-events:auto;min-width:260px;max-width:100%;animation:fadeIn 0.25s ease;';
   toastEl.setAttribute('role', 'alert');
   toastEl.setAttribute('aria-live', 'assertive');
   toastEl.setAttribute('aria-atomic', 'true');

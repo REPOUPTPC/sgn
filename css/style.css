@@ -644,17 +644,58 @@ img, video, canvas, svg {
 @media (max-width: 768px) {
   /* Contenedores principales y espacios */
   main.container, main.container-fluid {
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-    padding-top: 1rem !important;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+    padding-top: 0.85rem !important;
   }
 
   .card-body {
-    padding: 1rem !important;
+    padding: 0.9rem !important;
   }
 
   .card-header-blue {
     padding: 0.85rem 1rem !important;
+  }
+
+  /* Badges y etiquetas: permitir wrap para evitar desbordamiento horizontal en móviles */
+  .badge, .grade-badge, .role-badge, .badge-status-entrega {
+    white-space: normal !important;
+    text-align: left;
+    line-height: 1.35;
+    max-width: 100%;
+    word-break: break-word;
+  }
+
+  .grade-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.88rem;
+    padding: 0.35rem 0.75rem;
+  }
+
+  /* Buscadores e inputs táctiles (evita zoom automático en iOS) */
+  .search-box-group {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .search-box-input {
+    font-size: 16px !important;
+    min-height: 44px;
+    padding-left: 2.75rem !important;
+  }
+
+  .search-box-group > i {
+    left: 1rem;
+  }
+
+  .nota-input,
+  .input-nota-entrega,
+  .input-est-eval,
+  .form-select {
+    font-size: 16px !important;
   }
 
   /* Pestañas de navegación con scroll horizontal táctil (Swipeable Pills) */
@@ -663,8 +704,9 @@ img, video, canvas, svg {
     flex-wrap: nowrap !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
     gap: 0.4rem !important;
-    padding: 0.4rem 0.5rem !important;
+    padding: 0.45rem 0.5rem !important;
     white-space: nowrap !important;
     border-radius: var(--radius-md) !important;
     scrollbar-width: none; /* Firefox */
@@ -676,17 +718,19 @@ img, video, canvas, svg {
 
   .sgn-nav-link {
     flex: 0 0 auto !important;
-    font-size: 0.82rem !important;
-    padding: 0.45rem 0.8rem !important;
+    scroll-snap-align: center;
+    font-size: 0.84rem !important;
+    padding: 0.5rem 0.85rem !important;
+    min-height: 38px;
   }
 
   /* Header y Logo institucional */
   .brand-logo-img {
-    height: 40px;
+    height: 38px;
   }
 
   .sgn-brand-title {
-    font-size: 1.15rem !important;
+    font-size: 1.12rem !important;
   }
 
   .sgn-brand-subtitle {
@@ -709,7 +753,7 @@ img, video, canvas, svg {
   .sgn-header-actions > .btn {
     flex: 1 1 auto;
     font-size: 0.78rem !important;
-    padding: 0.35rem 0.55rem !important;
+    padding: 0.4rem 0.55rem !important;
     white-space: nowrap;
     text-align: center;
   }
@@ -719,34 +763,55 @@ img, video, canvas, svg {
     display: flex !important;
     flex-wrap: wrap !important;
     width: 100% !important;
+    gap: 0.3rem;
   }
 
   .btn-group:not(.btn-group-dropdown):not(.dropdown):not(.btn-group-vertical) > .btn {
-    flex: 1 1 auto !important;
+    flex: 1 1 calc(50% - 0.3rem) !important;
     border-radius: var(--radius-md) !important;
-    margin: 2px !important;
+    margin: 0 !important;
     font-size: 0.78rem !important;
-    padding: 0.4rem 0.6rem !important;
+    padding: 0.45rem 0.6rem !important;
     white-space: normal !important;
     text-align: center !important;
   }
 
-  /* Modales en teléfonos: pantalla completa fluida */
+  /* Dropdown de búsqueda rápida de estudiante en Actividades */
+  #dropdownResultadosEstudianteActividades {
+    position: static !important;
+    margin-top: 0.5rem !important;
+    max-height: 50vh !important;
+  }
+
+  /* Modales en teléfonos: altura flexible sin recortar header/footer */
   .modal-dialog {
     margin: 0.5rem auto !important;
     width: calc(100% - 1rem) !important;
     max-width: calc(100% - 1rem) !important;
+    max-height: calc(100dvh - 1rem);
+    display: flex;
+    align-items: center;
+  }
+
+  .modal-content {
+    max-height: calc(100dvh - 1rem);
+    display: flex;
+    flex-direction: column;
+    width: 100%;
   }
 
   .modal-header {
     padding: 0.75rem 1rem !important;
+    flex-shrink: 0;
   }
 
   .modal-body {
-    padding: 1rem !important;
-    max-height: calc(100vh - 130px);
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0.9rem !important;
     overflow-y: auto;
     overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
     word-break: break-word;
   }
 
@@ -755,6 +820,7 @@ img, video, canvas, svg {
     flex-direction: column-reverse !important;
     align-items: stretch !important;
     gap: 0.5rem !important;
+    flex-shrink: 0;
   }
 
   .modal-footer > * {
@@ -790,7 +856,176 @@ img, video, canvas, svg {
     margin-top: 0.25rem;
   }
 
-  /* Tablas responsivas en móvil */
+  /* Tablas responsivas en móvil (tarjetas verticales) */
+  .table-responsive {
+    overflow-x: visible;
+    margin-bottom: 0.75rem;
+  }
+
+  .sgn-table.sgn-mobile-cards,
+  .sgn-table.sgn-mobile-cards tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .sgn-table.sgn-mobile-cards thead {
+    display: none;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr {
+    display: block;
+    width: 100%;
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.85rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    margin-bottom: 0.85rem;
+    padding: 0.4rem 0.75rem;
+    overflow: hidden;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr.d-none {
+    display: none !important;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr.row-actividad-pendiente {
+    border-left: 5px solid #f59e0b !important;
+    background-color: #fffdf5 !important;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr.entrega-row-calificada {
+    border-left: 5px solid #16a34a !important;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr.entrega-row-pendiente {
+    border-left: 5px solid #f59e0b !important;
+    background-color: #fffdf5 !important;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr.entrega-row-modificada {
+    border-left: 5px solid #2563eb !important;
+    background-color: #eff6ff !important;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding: 0.55rem 0.2rem;
+    border-bottom: 1px solid #f1f5f9;
+    background-color: transparent !important;
+    text-align: left !important;
+    font-size: 0.88rem;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td:last-child {
+    border-bottom: none;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+    color: var(--navy-blue);
+    flex: 0 0 auto;
+    min-width: 92px;
+    padding-top: 0.15rem;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td[data-label=""]::before,
+  .sgn-table.sgn-mobile-cards tbody tr td:not([data-label])::before {
+    display: none;
+    content: none;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td[colspan] {
+    display: block;
+    text-align: center !important;
+    padding: 1.5rem 0.5rem !important;
+    border-bottom: none;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td[colspan]::before {
+    display: none;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td.sgn-td-block {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td.sgn-td-block::before {
+    min-width: 0;
+    margin-bottom: 0.1rem;
+  }
+
+  .sgn-table.sgn-mobile-cards tbody tr td.sgn-td-block .desc-actividad-scroll {
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
+  }
+
+  /* Layout en cuadrícula 2 columnas para Calificaciones (#tablaNotas) y Roster en móvil */
+  #tablaNotas.sgn-mobile-cards tbody tr,
+  #voceroRosterTable.sgn-mobile-cards tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 0.65rem 0.75rem;
+    gap: 0.35rem 0.5rem;
+  }
+
+  #tablaNotas.sgn-mobile-cards tbody tr.d-none,
+  #voceroRosterTable.sgn-mobile-cards tbody tr.d-none {
+    display: none !important;
+  }
+
+  #tablaNotas.sgn-mobile-cards tbody tr td.nota-col-cedula,
+  #tablaNotas.sgn-mobile-cards tbody tr td.nota-col-nombre,
+  #tablaNotas.sgn-mobile-cards tbody tr td.nota-col-total,
+  #tablaNotas.sgn-mobile-cards tbody tr td[colspan],
+  #voceroRosterTable.sgn-mobile-cards tbody tr td.nota-col-cedula,
+  #voceroRosterTable.sgn-mobile-cards tbody tr td.nota-col-nombre,
+  #voceroRosterTable.sgn-mobile-cards tbody tr td.nota-col-rol,
+  #voceroRosterTable.sgn-mobile-cards tbody tr td.nota-col-total,
+  #voceroRosterTable.sgn-mobile-cards tbody tr td[colspan] {
+    flex: 1 1 100%;
+    width: 100% !important;
+  }
+
+  #tablaNotas.sgn-mobile-cards tbody tr td.nota-col-eval,
+  #voceroRosterTable.sgn-mobile-cards tbody tr td.nota-col-eval {
+    flex: 1 1 calc(50% - 0.5rem);
+    width: calc(50% - 0.5rem) !important;
+    flex-direction: column;
+    align-items: stretch;
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.6rem;
+    padding: 0.45rem 0.55rem;
+    gap: 0.2rem;
+  }
+
+  #tablaNotas.sgn-mobile-cards tbody tr td.nota-col-eval::before,
+  #voceroRosterTable.sgn-mobile-cards tbody tr td.nota-col-eval::before {
+    min-width: 0;
+    font-size: 0.76rem;
+    color: var(--primary-blue);
+  }
+
+  #tablaNotas.sgn-mobile-cards tbody tr td.nota-col-eval .nota-input {
+    width: 100%;
+    min-height: 40px;
+    text-align: center;
+    font-weight: 700;
+  }
+
   .sgn-table th {
     font-size: 0.75rem;
     padding: 0.65rem 0.5rem;
@@ -803,14 +1038,30 @@ img, video, canvas, svg {
   }
 
   .input-nota-entrega {
-    font-size: 0.9rem !important;
-    padding: 0.25rem 0.4rem !important;
-    min-width: 65px;
+    font-size: 16px !important;
+    padding: 0.35rem 0.5rem !important;
+    min-width: 80px;
+    width: 100%;
+    min-height: 40px;
   }
 
   .input-comentario-entrega {
-    min-width: 140px;
-    font-size: 0.8rem !important;
+    min-width: 0;
+    width: 100%;
+    font-size: 0.88rem !important;
+  }
+
+  /* Contenedor de Toasts centrado y adaptable en móvil */
+  #sgnToastContainer {
+    top: 12px !important;
+    right: 12px !important;
+    left: 12px !important;
+    align-items: stretch !important;
+  }
+
+  #sgnToastContainer .toast {
+    min-width: 0 !important;
+    width: 100% !important;
   }
 }
 
@@ -1060,5 +1311,50 @@ img, video, canvas, svg {
 .sgn-pulse-badge {
   display: inline-block;
   animation: pulseGlow 2s infinite ease-in-out;
+}
+
+/* ==========================================================================
+   HISTORIAL DE ENTREGAS Y MÚLTIPLES INTENTOS EVALUABLES
+   ========================================================================== */
+.sgn-historial-entregas-box {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+}
+
+.sgn-entrega-intento-item {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.55rem;
+  padding: 0.6rem 0.75rem;
+  transition: border-color 0.15s ease;
+}
+
+.sgn-entrega-intento-item.intento-actual {
+  border-left: 4px solid var(--primary-blue);
+}
+
+.sgn-entrega-intento-item.intento-anterior {
+  border-left: 4px solid #94a3b8;
+  background-color: #fcfdfe;
+}
+
+@media (max-width: 768px) {
+  #modalDiagnosticoQuizDocente .modal-content {
+    max-height: 100dvh;
+    height: 100%;
+  }
+}
+
+/* Utilidades de ancho responsivo (Bootstrap 5 no incluye w-*-auto nativamente) */
+@media (min-width: 576px) {
+  .w-sm-auto { width: auto !important; }
+}
+@media (min-width: 768px) {
+  .w-md-auto { width: auto !important; }
+}
+@media (min-width: 992px) {
+  .w-lg-auto { width: auto !important; }
 }
 
