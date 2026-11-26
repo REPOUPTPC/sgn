@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   
   <!-- Estilos Personalizados (Blanco + Azul) -->
-  <link rel="stylesheet" href="css/style.css?v=2.0">
+  <link rel="stylesheet" href="css/style.css?v=2.1">
 </head>
 <body>
 
@@ -1585,7 +1585,7 @@ if (!empty($data['success'])) {
 
   <!-- Modal Revisar y Calificar Entregas de Estudiantes -->
   <div class="modal fade" id="modalEntregasActividad" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered">
+    <div class="modal-dialog modal-xl sgn-modal-wide modal-fullscreen-md-down modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content shadow-lg border-0">
         <div class="modal-header modal-header-blue py-3">
           <h5 class="modal-title fw-bold" id="modalEntregasTitle">
@@ -1593,7 +1593,7 @@ if (!empty($data['success'])) {
           </h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
-        <div class="modal-body p-4">
+        <div class="modal-body p-3 p-lg-4">
           <!-- Información de la Actividad y Estadísticas -->
           <div class="alert alert-info d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
             <div class="d-flex align-items-start text-break desc-actividad-box flex-grow-1" style="min-width: 0; flex: 1 1 250px;">
@@ -1716,14 +1716,14 @@ if (!empty($data['success'])) {
             <table class="sgn-table sgn-mobile-cards align-middle" id="tablaEntregasActividad">
               <thead>
                 <tr>
-                  <th width="110px">Cédula</th>
-                  <th width="180px">Estudiante</th>
-                  <th width="115px" class="text-center">Estado</th>
-                  <th width="125px">Fecha</th>
-                  <th width="135px">Entrega</th>
-                  <th width="110px">Nota (0-20)</th>
-                  <th>Observación / Felicitación</th>
-                  <th width="110px" class="text-center">Acción</th>
+                  <th style="width: 105px;">Cédula</th>
+                  <th style="min-width: 185px;">Estudiante</th>
+                  <th style="width: 120px;" class="text-center">Estado</th>
+                  <th style="width: 140px;">Fecha</th>
+                  <th style="min-width: 215px;">Entrega</th>
+                  <th style="width: 115px;">Nota (0-20)</th>
+                  <th style="min-width: 230px;">Observación / Felicitación</th>
+                  <th style="width: 110px;" class="text-center">Acción</th>
                 </tr>
               </thead>
               <tbody>

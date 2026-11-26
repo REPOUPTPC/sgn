@@ -288,6 +288,24 @@ body {
   filter: brightness(0) invert(1);
 }
 
+/* Modal amplio para revisión cómoda de entregas en escritorio */
+@media (min-width: 769px) {
+  .modal-dialog.sgn-modal-wide {
+    width: min(96vw, 1540px);
+    max-width: min(96vw, 1540px);
+    margin: 0.9rem auto;
+  }
+
+  .modal-dialog.sgn-modal-wide.modal-dialog-scrollable {
+    height: calc(100vh - 1.8rem);
+    max-height: calc(100dvh - 1.8rem);
+  }
+
+  #tablaEntregasActividad .input-comentario-entrega {
+    min-width: 220px;
+  }
+}
+
 /* ==================== BOTONES ==================== */
 .btn-primary-sgn {
   background-color: var(--primary-blue);

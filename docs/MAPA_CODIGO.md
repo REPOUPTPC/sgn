@@ -102,7 +102,7 @@ Cuando modifiques CSS o JS, actualiza el parámetro de versión correspondiente 
 
 | Archivo incluido | `index.html` | `dashboard.html` | `extension.html` |
 | :--- | :--- | :--- | :--- |
-| `css/style.css` | `?v=2.0` | `?v=2.0` | `?v=2.0` |
+| `css/style.css` | `?v=2.1` | `?v=2.1` | `?v=2.1` |
 | `js/config.js` | `?v=2.3` | `?v=2.3` | `?v=2.3` |
 | `js/modals.js` | `?v=2.2` | `?v=2.2` | `?v=2.2` |
 | `js/auth.js` | `?v=2.1` | `?v=2.1` | `?v=2.1` |
